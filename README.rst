@@ -37,8 +37,9 @@ MacroStat
     A Package providing multiple tools for the statistical analysis and treatment of macroeconomic simulation models, with a particular focus on Agent-based and Stock-Flow Consistent Models
 
 
-A longer description of your project goes here...
+The purpose of this project is to provide a statistical toolbox for the analysis of Agent-based Models. The toolbox is developed in `python` and aims to provide a simple interface for researchers to attach their model, such that simulations can be steered from within the toolbox and the relevant analysis can be run (such as sensitivities, confidence intervals, and simulation studies). Only the analysis itself requires `python`, while the models can be written in any language. 
 
+The code was developed using Python 3.10. Backwards compatibility is not guaranteed
 
 .. _pyscaffold-notes:
 
@@ -59,6 +60,13 @@ It is a good idea to update the hooks to the latest version::
 Don't forget to tell your contributors to also install and use pre-commit.
 
 .. _pre-commit: https://pre-commit.com/
+
+Contact
+=======
+
+Karl Naumann-Woleske - karlnaumann.com
+
+Project Link: [https://github.com/KarlNaumann/MacroStat](https://github.com/KarlNaumann/MacroStat)
 
 Note
 ====
