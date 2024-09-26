@@ -16,8 +16,6 @@ import pickle
 
 logger = logging.getLogger(__name__)
 
-
-
 class Model:
     """A class representing a macroeconomic model.
 
@@ -65,18 +63,8 @@ class Model:
             dictionary of the named parameters of the model
         hyper_parameters : dict
             dictionary of hyper-parameters related to the model
-        initial_conditions : dict
-            dictionary of the models initial values
         name : str (default 'model')
             name of the model (for use in filenaming)
-        sql : bool (default True)
-            whether to use a sqlite3 database to store output or not
-        db_path : str (default output/)
-            directory where the database is stored
-        db_name : str (default None)
-            filename of the database
-        debug : bool (default False)
-            enable to get stepwise printed output
         """
         # Essential attributes
         self.parameters = parameters
