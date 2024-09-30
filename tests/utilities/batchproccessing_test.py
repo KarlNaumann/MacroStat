@@ -14,7 +14,7 @@ from concurrent.futures import ProcessPoolExecutor
 from tqdm import tqdm
 import time
 
-from macrostat.utilities.batchprocessing import BatchProcessing, timeseries_worker
+from macrostat.utilities.batchprocessing import parallel_processor, timeseries_worker
 
 # Mock Model class for testing
 class MockModel:
@@ -25,11 +25,6 @@ class MockModel:
         # Simulate some computation
         return self.output
 
-# Mock BatchProcessing class with tasks and cpu_count attributes
-class MockBatchProcessing(BatchProcessing):
-    def __init__(self, tasks, cpu_count=2):
-        self.tasks = tasks
-        self.cpu_count = cpu_count
 
 # Test for timeseries_worker function
 def test_timeseries_worker():
@@ -44,8 +39,15 @@ def test_timeseries_worker():
     assert scenario_id == "scenario_1"
     assert output == {"result": 42}
 
-# Test for parallel_processor using pytest
-def test_parallel_processor():
+
+# Test for parallel_processor when no tasks are provided
+def test_parallel_processor_no_tasks():
+    with pytest.raises(ValueError, match="No tasks to process."):
+        parallel_processor(tasks=[], cpu_count=2, tqdm_info="Processing")
+
+
+# Test for parallel_processor with mocked ProcessPoolExecutor
+def test_parallel_processor_with_tasks():
     # Mock models with different outputs
     mock_model_1 = MockModel(output={"result": 42})
     mock_model_2 = MockModel(output={"result": 24})
@@ -55,10 +57,7 @@ def test_parallel_processor():
         (mock_model_2, "simulation_2", "scenario_2"),
     ]
 
-    # Create instance of the mocked BatchProcessing class
-    batch_processor = MockBatchProcessing(tasks=tasks, cpu_count=2)
-
-    # Patch the ProcessPoolExecutor to simulate the parallel processing
+    # Mock the ProcessPoolExecutor to simulate the parallel processing
     with patch('concurrent.futures.ProcessPoolExecutor') as mock_executor:
         # Mock the map function to simulate parallel execution
         mock_executor.return_value.__enter__.return_value.map = MagicMock(
@@ -69,31 +68,40 @@ def test_parallel_processor():
         )
 
         # Call parallel_processor and capture the result
-        result = batch_processor.parallel_processor(tqdm_info="Processing")
+        result = parallel_processor(tasks=tasks, cpu_count=2, tqdm_info="Processing")
 
         # Assert that the results are as expected
         assert len(result) == 2
         assert result[0] == ("simulation_1", "scenario_1", {"result": 42})
         assert result[1] == ("simulation_2", "scenario_2", {"result": 24})
 
-# Test if the parallel processing executes all tasks
-def test_parallel_processor_full_execution():
-    # Mock models with output
-    mock_model_1 = MockModel(output={"result": 42})
-    mock_model_2 = MockModel(output={"result": 24})
+
+# Test parallel_processor with multiple CPU utilization
+def test_parallel_processor_cpu_count():
+    # Mock models
+    mock_model = MockModel(output={"result": 42})
 
     tasks = [
-        (mock_model_1, "simulation_1", "scenario_1"),
-        (mock_model_2, "simulation_2", "scenario_2"),
+        (mock_model, "simulation_1", "scenario_1"),
+        (mock_model, "simulation_2", "scenario_2"),
+        (mock_model, "simulation_3", "scenario_3"),
     ]
 
-    # Create instance of the mocked BatchProcessing class
-    batch_processor = MockBatchProcessing(tasks=tasks, cpu_count=2)
+    # Patch the ProcessPoolExecutor to simulate parallel processing
+    with patch('concurrent.futures.ProcessPoolExecutor') as mock_executor:
+        mock_executor.return_value.__enter__.return_value.map = MagicMock(
+            return_value=[
+                ("simulation_1", "scenario_1", {"result": 42}),
+                ("simulation_2", "scenario_2", {"result": 42}),
+                ("simulation_3", "scenario_3", {"result": 42}),
+            ]
+        )
 
-    # Capture output using the real ProcessPoolExecutor
-    result = batch_processor.parallel_processor(tqdm_info="Processing")
+        # Call parallel_processor and capture the result
+        result = parallel_processor(tasks=tasks, cpu_count=3, tqdm_info="Processing")
 
-    # Assert that the results are as expected
-    assert len(result) == 2
-    assert result[0] == ("simulation_1", "scenario_1", {"result": 42})
-    assert result[1] == ("simulation_2", "scenario_2", {"result": 24})
+        # Assert that the results are as expected
+        assert len(result) == 3
+        assert result[0] == ("simulation_1", "scenario_1", {"result": 42})
+        assert result[1] == ("simulation_2", "scenario_2", {"result": 42})
+        assert result[2] == ("simulation_3", "scenario_3", {"result": 42})

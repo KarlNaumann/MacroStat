@@ -32,30 +32,38 @@ def timeseries_worker(task: tuple):
     return (*task[1:], model.output)
 
 
-class BatchProcessing:
-    def parallel_processor(
-        self, worker: callable = timeseries_worker, tqdm_info: str = ""
-    ):
-        """Run all of the tasks in parallel using the
-        ProcessPoolExecutor.
+def parallel_processor(
+    tasks: list = [], worker: callable = timeseries_worker, 
+    cpu_count:int=1, tqdm_info: str = ""
+):
+    """Run all of the tasks in parallel using the
+    ProcessPoolExecutor.
 
-        Parameters
-        ----------
-        worker : callable
-            Worker function to be used for the parallel processing.
-            Default is timeseries_worker.
-        tqdm_info : str
-            Information to be displayed in the tqdm progress bar.
+    Parameters
+    ----------
+    tasks : list[tuple]
+        List of tasks to be processed in parallel. 
+        Each task should be a tuple
+    worker : callable
+        Worker function to be used for the parallel processing.
+        Each task will be passed to the worker function as a tuple
+    cpu_count : int (default=1)
+        Number of CPUs to be used for the parallel processing.
+    tqdm_info : str (default="")
+        Information to be displayed in the tqdm progress bar.
 
-        Returns
-        -------
-        list
-            List of tuple results from the worker function
-        """
-        results = []
-        process_count = min(self.cpu_count, len(self.tasks))
-        tqdmargs = dict(total=len(self.tasks), desc=tqdm_info)
-        with ProcessPoolExecutor(max_workers=process_count) as executor:
-            for i in tqdm(executor.map(worker, self.tasks), **tqdmargs):
-                results.append(i)
-        return results
+    Returns
+    -------
+    list
+        List of tuple results from the worker function
+    """
+    if len(tasks) == 0:
+        raise ValueError("No tasks to process.")
+
+    results = []
+    process_count = min(cpu_count, len(tasks))
+    tqdmargs = dict(total=len(tasks), desc=tqdm_info)
+    with ProcessPoolExecutor(max_workers=process_count) as executor:
+        for i in tqdm(executor.map(worker, tasks), **tqdmargs):
+            results.append(i)
+    return results
