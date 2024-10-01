@@ -27,14 +27,14 @@ from tqdm import tqdm
 
 # Custom imports
 import macrostat.models.model as msmodel
-import macrostat.utilities.batchprocessing as batchprocessing
+import macrostat.util.batchprocessing as msbatchprocessing
 
 
 class Sampler():
     def __init__(
         self,
         model: msmodel.Model,
-        workerfunction: callable = batchprocessing.timeseries_worker,
+        workerfunction: callable = msbatchprocessing.timeseries_worker,
         output_folder: str = "samples",
         cpu_count: int = 1,
         batchsize: int = None,
@@ -117,7 +117,7 @@ class Sampler():
                 batch * self.batchsize : min([(batch + 1) * self.batchsize, len(self.tasks)])
             ]
             # Execute those tasks
-            raw_outputs = batchprocessing.parallel_processor(
+            raw_outputs = msbatchprocessing.parallel_processor(
                 tasks=batch_tasks,
                 worker=self.workerfunction, 
                 cpu_count=self.cpu_count,

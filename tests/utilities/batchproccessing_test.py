@@ -14,7 +14,7 @@ from concurrent.futures import ProcessPoolExecutor
 from tqdm import tqdm
 import time
 
-from macrostat.utilities.batchprocessing import parallel_processor, timeseries_worker
+from macrostat.util.batchprocessing import parallel_processor, timeseries_worker
 
 # Mock Model class for testing
 class MockModel:

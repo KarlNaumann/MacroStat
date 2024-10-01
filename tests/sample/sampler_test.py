@@ -8,7 +8,7 @@ import os
 import pickle
 
 from macrostat.sample.sampler import Sampler  # Replace with your actual module path
-import macrostat.utilities.batchprocessing as batchprocessing
+import macrostat.util.batchprocessing as batchprocessing
 
 # Mock model class for testing
 class MockModel:
@@ -46,7 +46,7 @@ def test_sampler_generate_tasks():
 
 
 # Test the sample method (mocking underlying functions)
-@patch('macrostat.utilities.batchprocessing.parallel_processor')
+@patch('macrostat.util.batchprocessing.parallel_processor')
 @patch('pandas.DataFrame.to_csv')
 @patch('os.makedirs')
 def test_sampler_sample(mock_makedirs, mock_to_csv, mock_parallel_processor):
