@@ -74,15 +74,14 @@ class Sampler():
         self.output_folder = Path(output_folder)
         os.makedirs(output_folder, exist_ok=True)
 
-    def generate_tasks(self, *args, **kwargs):
+    def generate_tasks(self, *args, **kwargs) -> list[tuple]:
         """Generate tasks for the parallel processor. 
 
-        This method should set the self.tasks attribute to a list of tuples
-        that will be passed to the worker function. By default, the first
-        item in the tuple is the model object, and all remaining items are
-        the arguments that will be passed to the model.simulate() function.
+        This method should return a list of tuples that will be passed to 
+        the worker function. By default, the first item in the tuple is 
+        the model object, and all remaining items are the arguments that 
+        will be passed to the model.simulate() function.
         """
-        self.tasks = []
         raise NotImplementedError("This method should be implemented in a subclass")
 
     def sample(self, tqdm_info: str = "Sampling"):        
@@ -95,7 +94,7 @@ class Sampler():
             Information to be displayed in the tqdm progress bar
         """
         # Generate the tasks to run
-        self.generate_tasks()
+        self.tasks = self.generate_tasks()
 
         # Save the parameters
         parameters = {i: v[0].parameters for i, v in enumerate(self.tasks)}

@@ -55,7 +55,7 @@ def test_sampler_sample(mock_makedirs, mock_to_csv, mock_parallel_processor):
 
     # Mock tasks and outputs for sampling
     sampler.generate_tasks = MagicMock()
-    sampler.tasks = [(model, "task_1"), (model, "task_2")]
+    sampler.generate_tasks.return_value = [(model, "task_1"), (model, "task_2")]
     
     # Mock the parallel processing results
     mock_parallel_processor.return_value = [(model, pd.DataFrame({"A": [1, 2], "B": [3, 4]}))] * 2
