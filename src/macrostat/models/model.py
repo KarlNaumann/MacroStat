@@ -17,7 +17,6 @@ import pickle
 logger = logging.getLogger(__name__)
 
 
-
 class Model:
     """A class representing a macroeconomic model.
 
@@ -65,18 +64,8 @@ class Model:
             dictionary of the named parameters of the model
         hyper_parameters : dict
             dictionary of hyper-parameters related to the model
-        initial_conditions : dict
-            dictionary of the models initial values
         name : str (default 'model')
             name of the model (for use in filenaming)
-        sql : bool (default True)
-            whether to use a sqlite3 database to store output or not
-        db_path : str (default output/)
-            directory where the database is stored
-        db_name : str (default None)
-            filename of the database
-        debug : bool (default False)
-            enable to get stepwise printed output
         """
         # Essential attributes
         self.parameters = parameters
@@ -90,7 +79,7 @@ class Model:
     def simulate(self, *args, **kwargs) -> pd.DataFrame:
         """Simulate a model run using the stored parameters
 
-        This function is designed to be overwritten by the user's 
+        This function is designed to be overwritten by the user's
         specific implementation of their model. Note that it is
         expected for the user to set the ''self.output'' attribute
         to the output generated.
@@ -105,7 +94,7 @@ class Model:
 
     def save(self, path=None):
         """Save the model object as a pickled file
-        
+
         Parameters
         ----------
         path, optional
@@ -125,7 +114,7 @@ class Model:
 
     @classmethod
     def load(cls, path=None):
-        """Class method to load a model instance from a pickled file. 
+        """Class method to load a model instance from a pickled file.
 
         Parameters
         ----------
@@ -140,27 +129,31 @@ class Model:
         with open(path, "rb") as f:
             model = pickle.load(f)
         return model
-    
-    def __eq__(self, other): 
-        """ Check if two models are equivalent in their core attributes """
+
+    def __eq__(self, other):
+        """Check if two models are equivalent in their core attributes"""
 
         if self.parameters.keys() != other.parameters.keys():
             return False
         else:
             parameter_equivalence = [
-                np.allclose(v,other.parameters[k]) for k,v in self.parameters.items()
+                np.allclose(v, other.parameters[k]) for k, v in self.parameters.items()
             ]
-        
+
         if self.hyper_parameters.keys() != other.hyper_parameters.keys():
             return False
         else:
             hyper_parameter_equivalence = []
-            for k,v in self.hyper_parameters.items():
+            for k, v in self.hyper_parameters.items():
                 try:
                     if np.issubdtype(np.array(v).dtype, np.number):
-                        hyper_parameter_equivalence.append(np.allclose(v,other.hyper_parameters[k]))
+                        hyper_parameter_equivalence.append(
+                            np.allclose(v, other.hyper_parameters[k])
+                        )
                     else:
-                        hyper_parameter_equivalence.append(v == other.hyper_parameters[k])
+                        hyper_parameter_equivalence.append(
+                            v == other.hyper_parameters[k]
+                        )
                 except Exception:
                     hyper_parameter_equivalence.append(False)
 
@@ -173,17 +166,17 @@ class Model:
             all(parameter_equivalence),
             all(hyper_parameter_equivalence),
             self.name == other.name,
-            output_equivalence
+            output_equivalence,
         ]
 
         return all(conditions)
 
     def _validate_parameters(self):
-        """ Validate whether all of the parameters are numeric.
+        """Validate whether all of the parameters are numeric.
 
         We assume that the parameter dictionary may contain numeric
         values, whether these are float/int or arrays. We verify this
-        by checking whether the cast to array of a given 
+        by checking whether the cast to array of a given
         """
         condition = {}
         for k, v in self.parameters.items():
