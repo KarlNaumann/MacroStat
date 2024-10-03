@@ -1,5 +1,5 @@
 """
-pytest code for the torchmodel.py class
+pytest code for the TorchModel class
 """
 
 __author__ = ["Karl Naumann-Woleske"]

@@ -20,16 +20,20 @@ def timeseries_worker(task: tuple):
     Parameters
     ----------
     task : tuple
-        Tuple of model, name (simulation_id), and scenarioID
+        Tuple of (name, model, *args) where name is the name of the
+        simulation, model is the model to be simulated and *args are
+        the arguments to be passed to the model's simulate method.
 
     Returns
     -------
     tuple
-        Tuple of simulation_id, scenarioID and output from the simulation.
+        Tuple of (name, *args, output) where name is the name of the
+        simulation, *args are the arguments passed to the model's
+        simulate method and output is the output of the simulation.
     """
-    model = task[0]
-    _ = model.simulate(*task[1:])
-    return (*task[1:], model.output)
+    model = task[1]
+    _ = model.simulate(*task[2:])
+    return (task[0], *task[2:], model.output)
 
 
 def parallel_processor(

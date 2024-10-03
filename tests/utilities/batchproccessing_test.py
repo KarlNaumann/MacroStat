@@ -1,5 +1,5 @@
 """
-pytest code for the batchprocessing.py class
+pytest code for the batchprocessing module
 """
 
 __author__ = ["Karl Naumann-Woleske"]
@@ -29,7 +29,7 @@ class MockModel:
 # Test for timeseries_worker function
 def test_timeseries_worker():
     model = MockModel(output={"result": 42})
-    task = (model, "simulation_1", "scenario_1")
+    task = ("simulation_1", model, "scenario_1")
 
     # Execute the worker
     simulation_id, scenario_id, output = timeseries_worker(task)
@@ -53,8 +53,8 @@ def test_parallel_processor_with_tasks():
     mock_model_2 = MockModel(output={"result": 24})
 
     tasks = [
-        (mock_model_1, "simulation_1", "scenario_1"),
-        (mock_model_2, "simulation_2", "scenario_2"),
+        ("simulation_1", mock_model_1, "scenario_1"),
+        ("simulation_2", mock_model_2, "scenario_2"),
     ]
 
     # Mock the ProcessPoolExecutor to simulate the parallel processing
@@ -82,9 +82,9 @@ def test_parallel_processor_cpu_count():
     mock_model = MockModel(output={"result": 42})
 
     tasks = [
-        (mock_model, "simulation_1", "scenario_1"),
-        (mock_model, "simulation_2", "scenario_2"),
-        (mock_model, "simulation_3", "scenario_3"),
+        ("simulation_1", mock_model, "scenario_1"),
+        ("simulation_2", mock_model, "scenario_2"),
+        ("simulation_3", mock_model, "scenario_3"),
     ]
 
     # Patch the ProcessPoolExecutor to simulate parallel processing

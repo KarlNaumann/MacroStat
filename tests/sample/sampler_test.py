@@ -1,3 +1,13 @@
+"""
+pytest code for the Sampler class
+"""
+
+__author__ = ["Karl Naumann-Woleske"]
+__credits__ = ["Karl Naumann-Woleske"]
+__license__ = "MIT"
+__version__ = "0.1.0"
+__maintainer__ = ["Karl Naumann-Woleske"]
+
 from pathlib import Path
 import pytest
 from unittest.mock import MagicMock, patch, call
@@ -55,7 +65,7 @@ def test_sampler_sample(mock_makedirs, mock_to_csv, mock_parallel_processor):
 
     # Mock tasks and outputs for sampling
     sampler.generate_tasks = MagicMock()
-    sampler.generate_tasks.return_value = [(model, "task_1"), (model, "task_2")]
+    sampler.generate_tasks.return_value = [("task_1", model), ("task_2", model)]
     
     # Mock the parallel processing results
     mock_parallel_processor.return_value = [(model, pd.DataFrame({"A": [1, 2], "B": [3, 4]}))] * 2
@@ -67,7 +77,7 @@ def test_sampler_sample(mock_makedirs, mock_to_csv, mock_parallel_processor):
     sampler.generate_tasks.assert_called_once()
     mock_parallel_processor.assert_called_with(
         tasks=sampler.tasks[:2],
-        worker=sampler.workerfunction,
+        worker=sampler.worker_function,
         cpu_count=sampler.cpu_count,
         tqdm_info="Sampling"
     )

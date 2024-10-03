@@ -1,5 +1,5 @@
 """
-pytest code for the model.py class
+pytest code for the Model class
 """
 
 __author__ = ["Karl Naumann-Woleske"]
