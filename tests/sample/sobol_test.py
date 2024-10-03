@@ -83,7 +83,7 @@ def test_verify_bounds_valid():
     model = MockModel()
     bounds = {"param1": (0.1, 1.0), "param2": (0.5, 2.0)}
     sampler = SobolSampler(model=model, bounds=bounds, sample_power=3)
-    sampler._verify_bounds()
+    sampler._verify_bounds(bounds)
 
 
 def test_verify_bounds_invalid_parameter():
@@ -92,7 +92,7 @@ def test_verify_bounds_invalid_parameter():
 
     with pytest.raises(ValueError, match=r"not in the model's parameters"):
         sampler = SobolSampler(model=model, bounds=bounds, sample_power=3)
-        sampler._verify_bounds()
+        sampler._verify_bounds(bounds)
 
 
 def test_verify_bounds_invalid_length():
@@ -101,7 +101,7 @@ def test_verify_bounds_invalid_length():
 
     with pytest.raises(ValueError, match=r"Bounds should be a list-like of length 2"):
         sampler = SobolSampler(model=model, bounds=bounds, sample_power=3)
-        sampler._verify_bounds()
+        sampler._verify_bounds(bounds)
 
 
 def test_verify_bounds_invalid_order():
@@ -112,7 +112,7 @@ def test_verify_bounds_invalid_order():
         ValueError, match="Lower bound should be smaller than the upper bound"
     ):
         sampler = SobolSampler(model=model, bounds=bounds, sample_power=3)
-        sampler._verify_bounds()
+        sampler._verify_bounds(bounds)
 
 
 def test_verify_bounds_invalid_logspace():
@@ -125,7 +125,7 @@ def test_verify_bounds_invalid_logspace():
         sampler = SobolSampler(
             model=model, bounds=bounds, sample_power=3, logspace=True
         )
-        sampler._verify_bounds()
+        sampler._verify_bounds(bounds)
 
 
 def test_verify_bounds_zero_logspace():
@@ -136,7 +136,7 @@ def test_verify_bounds_zero_logspace():
         sampler = SobolSampler(
             model=model, bounds=bounds, sample_power=3, logspace=True
         )
-        sampler._verify_bounds()
+        sampler._verify_bounds(bounds)
 
 
 def test_generate_tasks():

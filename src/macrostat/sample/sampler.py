@@ -115,7 +115,7 @@ class Sampler:
 
         for batch in range(batchcount):
             # Set tasks to run now
-            start = (batch * self.batchsize,)
+            start = batch * self.batchsize
             end = min([(batch + 1) * self.batchsize, len(self.tasks)])
             batch_tasks = self.tasks[start:end]
             # Execute those tasks
