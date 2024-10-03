@@ -12,7 +12,7 @@
         :target: https://twitter.com/MacroStat
 
 
-.. image:: https://api.cirrus-ci.com/github/KarlNaumann/MacroStat.svg?branch=main
+.. image:: https://api.cirrus-ci.com/github/KarlNaumann/MacroStat.svg?branch=master
      :alt: Built Status
      :target: https://cirrus-ci.com/github/KarlNaumann/MacroStat
 .. image:: https://img.shields.io/pypi/v/MacroStat.svg
@@ -41,6 +41,17 @@ The purpose of this project is to provide a statistical toolbox for the analysis
 The code was developed using Python 3.10. Backwards compatibility is not guaranteed
 
 .. _pyscaffold-notes:
+
+Roadmap
+=======
+Some features that are currently under development:
+
+1. **diff**: Implementation of numerical differentiation using parallel processing and a wrapper for PyTorch to compute Jacobians and Hessians
+2. **sample**: Implementation of further common samplers (e.g. MC, MCMC)
+3. **analysis**: Implementation of basic statistical tests following Vandin et al. `"Automated and distributed statistical analysis of economic agent-based models" <https://www.sciencedirect.com/science/article/pii/S0165188922001634>`_
+4. **models**: Starting a library of basic macroeconomic models such as the basic models from https://macrosimulation.org/, the SFC models of Godley & Lavoie, and agent-based models such as `Mark-0 <https://github.com/KarlNaumann/Mark0>`_
+5. **explore**: Implementation of parameter-space analysis approaches such as the alogirthm of `Naumann-Woleske et al. (2024) <https://arxiv.org/abs/2111.08654>`_
+
 
 Installation
 ============
