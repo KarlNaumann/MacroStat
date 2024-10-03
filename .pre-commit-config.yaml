@@ -57,8 +57,7 @@ repos:
   rev: 7.1.1
   hooks:
   - id: flake8
-  ## You can add flake8 plugins via `additional_dependencies`:
-  #  additional_dependencies: [flake8-bugbear]
+    args: ['--extend-ignore=E501']
 
 ## Check for misspells in documentation files:
 # - repo: https://github.com/codespell-project/codespell
