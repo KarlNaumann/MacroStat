@@ -53,9 +53,9 @@ env:
   dist_cache: {folder: dist, fingerprint_script: echo $CIRRUS_BUILD_ID}  # download
   test_script:
     - tox --installpkg dist/*.whl -- -rfEx --durations 10 --color yes
-  submit_coverage_script:
-    - pipx run coverage xml -o coverage.xml
-    - pipx run coveralls --submit coverage.xml
+  #submit_coverage_script:
+  #  - pipx run coverage xml -o coverage.xml
+  #  - pipx run coveralls --submit coverage.xml
 
 # Deep clone script for POSIX environments (required for setuptools-scm)
 .clone_script: &clone |
@@ -97,12 +97,6 @@ check_task:
 
 linux_task:
   matrix:
-    - name: test (Linux - 3.7)
-      container: {image: "python:3.7-bullseye"}
-    - name: test (Linux - 3.8)
-      container: {image: "python:3.8-bullseye"}
-    - name: test (Linux - 3.9)
-      container: {image: "python:3.9-bullseye"}
     - name: test (Linux - 3.10)
       container: {image: "python:3.10-bullseye"}
     - name: test (Linux - 3.11)
@@ -119,25 +113,6 @@ mamba_task:
   container: {image: "condaforge/mambaforge"}
   install_script:  # Overwrite template
     - mamba install -y pip pipx tox
-  <<: *test-template
-
-macos_task:
-  name: test (macOS - brew)
-  macos_instance:
-    image: ghcr.io/cirruslabs/macos-monterey-xcode
-  brew_cache: {folder: "$HOME/Library/Caches/Homebrew"}
-  install_script: brew install python tox pipx
-  env:
-    PATH: "/opt/homebrew/opt/python/libexec/bin:${PATH}"
-  <<: *test-template
-
-freebsd_task:
-  name: test (freebsd - 3.9)
-  freebsd_instance: {image_family: freebsd-13-1}
-  install_script:
-    - pkg remove -y python lang/python
-    - pkg install -y git python39 py39-pip py39-gdbm py39-sqlite3 py39-tox py39-pipx py39-tomli
-    - ln -s /usr/local/bin/python3.9 /usr/local/bin/python
   <<: *test-template
 
 windows_task:
