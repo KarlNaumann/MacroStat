@@ -34,7 +34,7 @@ class Sampler():
     def __init__(
         self,
         model: msmodel.Model,
-        workerfunction: callable = msbatchprocessing.timeseries_worker,
+        worker_function: callable = msbatchprocessing.timeseries_worker,
         output_folder: str = "samples",
         cpu_count: int = 1,
         batchsize: int = None,
@@ -46,7 +46,7 @@ class Sampler():
         ----------
         model: msmodel.Model
             Model to be sampled
-        workerfunction: callable (default batchprocessing.timeseries_worker)
+        worker_function: callable (default batchprocessing.timeseries_worker)
             Function to be used for the parallel processing
         output_folder: str (default "samples")
             Folder to save the output files
@@ -65,10 +65,11 @@ class Sampler():
         initargs = [
             i for i in inspect.signature(model.__init__).parameters if i != "self"
         ]
-        self.model_kwargs = {a: getattr(self.model, a) for a in initargs}
+        self.model_kwargs = {a: getattr(self.model, a) for a in initargs if a!="parameters"}
+
 
         # Computation parameters
-        self.workerfunction = workerfunction
+        self.worker_function = worker_function
         self.cpu_count = min([mp.cpu_count(), cpu_count])
         self.batchsize = batchsize
         self.output_folder = Path(output_folder)
@@ -97,7 +98,7 @@ class Sampler():
         self.tasks = self.generate_tasks()
 
         # Save the parameters
-        parameters = {i: v[0].parameters for i, v in enumerate(self.tasks)}
+        parameters = {v[0]: v[1].parameters for v in self.tasks}
         parameters = pd.DataFrame(parameters).T.to_csv(
             self.output_folder / "parameters.csv", index_label="id"
         )
@@ -106,6 +107,7 @@ class Sampler():
         # This will write results to disk, clear memory, and proceed
         if self.batchsize is None:
             self.batchsize = len(self.tasks)
+        
         batchcount = int(len(self.tasks) / self.batchsize) + (
             len(self.tasks) % self.batchsize > 0
         )
@@ -118,7 +120,7 @@ class Sampler():
             # Execute those tasks
             raw_outputs = msbatchprocessing.parallel_processor(
                 tasks=batch_tasks,
-                worker=self.workerfunction, 
+                worker=self.worker_function, 
                 cpu_count=self.cpu_count,
                 tqdm_info=tqdm_info
                 )
@@ -146,10 +148,9 @@ class Sampler():
             the batchsize is constant.
         """
         # Concatenate the outputs
-        start = batch * self.batchsize
         index_names = list(raw_outputs[0][-1].index.names)
-        data = {start+i: v[-1] for i, v in enumerate(raw_outputs)}
-        data = pd.concat(data.values(), keys=data.keys(), names=["batch"]+index_names, axis=0)
+        data = {v[0]: v[-1] for v in raw_outputs}
+        data = pd.concat(data.values(), keys=data.keys(), names=["ID"]+index_names, axis=0)
 
         self.index_count = data.index.nlevels
         self.header_count = data.columns.nlevels
