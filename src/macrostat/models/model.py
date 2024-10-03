@@ -10,9 +10,10 @@ __version__ = "0.1.0"
 __maintainer__ = ["Karl Naumann-Woleske"]
 
 import logging
+import pickle
+
 import numpy as np
 import pandas as pd
-import pickle
 
 logger = logging.getLogger(__name__)
 

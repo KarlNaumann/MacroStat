@@ -8,13 +8,12 @@ __license__ = "MIT"
 __version__ = "0.1.0"
 __maintainer__ = ["Karl Naumann-Woleske"]
 
-import pytest
 from unittest.mock import MagicMock, patch
-from concurrent.futures import ProcessPoolExecutor
-from tqdm import tqdm
-import time
+
+import pytest
 
 from macrostat.util.batchprocessing import parallel_processor, timeseries_worker
+
 
 # Mock Model class for testing
 class MockModel:
@@ -58,7 +57,7 @@ def test_parallel_processor_with_tasks():
     ]
 
     # Mock the ProcessPoolExecutor to simulate the parallel processing
-    with patch('concurrent.futures.ProcessPoolExecutor') as mock_executor:
+    with patch("concurrent.futures.ProcessPoolExecutor") as mock_executor:
         # Mock the map function to simulate parallel execution
         mock_executor.return_value.__enter__.return_value.map = MagicMock(
             return_value=[
@@ -88,7 +87,7 @@ def test_parallel_processor_cpu_count():
     ]
 
     # Patch the ProcessPoolExecutor to simulate parallel processing
-    with patch('concurrent.futures.ProcessPoolExecutor') as mock_executor:
+    with patch("concurrent.futures.ProcessPoolExecutor") as mock_executor:
         mock_executor.return_value.__enter__.return_value.map = MagicMock(
             return_value=[
                 ("simulation_1", "scenario_1", {"result": 42}),

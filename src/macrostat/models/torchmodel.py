@@ -11,14 +11,12 @@ __maintainer__ = ["Karl Naumann-Woleske"]
 
 import logging
 
-logger = logging.getLogger(__name__)
-
-import numpy as np
 import pandas as pd
 import torch
-import torch.nn.functional as torchfunc
 
 import macrostat.models.model as model
+
+logger = logging.getLogger(__name__)
 
 
 class TorchModel(model.Model, torch.nn.Module):
@@ -164,7 +162,7 @@ class TorchModel(model.Model, torch.nn.Module):
             "max_constant": 10,
         }
 
-    ### Some Differentiable PyTorch Alternatives
+    # Some Differentiable PyTorch Alternatives
 
     def diffwhere(self, condition, x1, x2):
         """Where condition that is differentiable with respect to the condition.

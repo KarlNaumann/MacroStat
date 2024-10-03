@@ -11,25 +11,19 @@ __maintainer__ = ["Karl Naumann-Woleske"]
 
 # Default libraries
 import copy
-import inspect
 import logging
-import multiprocessing as mp
-import os
-from pathlib import Path
-import pickle
-
-logger = logging.getLogger(__name__)
 
 # Third-party libraries
 import numpy as np
 import pandas as pd
 import scipy.stats as stats
-from tqdm import tqdm
 
 # Custom imports
 import macrostat.models.model as msmodel
 import macrostat.sample.sampler as mssampler
 import macrostat.util.batchprocessing as msbatchprocessing
+
+logger = logging.getLogger(__name__)
 
 
 class SobolSampler(mssampler.Sampler):
@@ -46,7 +40,7 @@ class SobolSampler(mssampler.Sampler):
         cpu_count: int = 1,
         batchsize: int = None,
     ):
-        """Generalized class to facilitate the sampling of the model's 
+        """Generalized class to facilitate the sampling of the model's
         parameterspace using python's multiprocessing library.
 
         Parameters
@@ -56,7 +50,7 @@ class SobolSampler(mssampler.Sampler):
         bounds: dict[str, tuple]
             Dictionary containing the bounds for each parameter to be sampled
         sample_power: int (default 10)
-            A power of 2 to determine the number of samples to be generated, 
+            A power of 2 to determine the number of samples to be generated,
             i.e. 2**sample_power samples will be generated
         seed: int (default 0)
             Seed for the random number generator
@@ -65,7 +59,7 @@ class SobolSampler(mssampler.Sampler):
         worker_function: callable (default batchprocessing.timeseries_worker)
             Function to be used for the parallel processing
         simulation_args: tuple (default ())
-            Arguments to be passed to the model's simulate method irrespective 
+            Arguments to be passed to the model's simulate method irrespective
             of the parameters
         output_folder: str (default "samples")
             Folder to save the output files
@@ -99,7 +93,7 @@ class SobolSampler(mssampler.Sampler):
 
         Here the scipy.stats.qmc.Sobol class is used to generate the Sobol sequence,
         specifically the random_base2 method is used to generate the samples, as it
-        is has slightly better space filling properties than with a custom 
+        is has slightly better space filling properties than with a custom
         number of samples.
 
         Returns
@@ -123,13 +117,13 @@ class SobolSampler(mssampler.Sampler):
 
         return tasks
 
-    def _verify_bounds(self, bounds:dict) -> None:
-        """ Verify that the bounds are correctly set, in particular
+    def _verify_bounds(self, bounds: dict) -> None:
+        """Verify that the bounds are correctly set, in particular
         0. Check that the parameters are in the model
         1. That there is a lower and upper bound for each parameter
         2. That the lower bound is smaller than the upper bound
         3. That the bounds are in the correct order
-        4. If the bounds are in logspace, that the bounds are either 
+        4. If the bounds are in logspace, that the bounds are either
         both positive or both negative
         5. If the bounds are in logspace, that either bound is not zero
 
@@ -154,21 +148,27 @@ class SobolSampler(mssampler.Sampler):
             if param not in self.model.parameters:
                 raise ValueError(f"Parameter {param} not in the model's parameters")
             if len(bound) != 2:
-                raise ValueError(f"Bounds should be a list-like of length 2. {param}: {bound}")
+                raise ValueError(
+                    f"Bounds should be a list-like of length 2. {param}: {bound}"
+                )
             if self.logspace and (bound[0] < 0) != (bound[1] < 0):
-                raise ValueError(f"Bounds should be either both positive or both negative. {param}: {bound}")
+                msg = "Bounds should be either both positive or both negative"
+                raise ValueError(f"{msg}. {param}: {bound}")
             if self.logspace and (bound[0] == 0 or bound[1] == 0):
-                raise ValueError(f"Bounds cannot be zero when using logspace. {param}: {bound}")
+                raise ValueError(
+                    f"Bounds cannot be zero when using logspace. {param}: {bound}"
+                )
             if bound[0] >= bound[1]:
-                raise ValueError(f"Lower bound should be smaller than the upper bound. {param}: {bound}")
+                msg = "Lower bound should be smaller than the upper bound"
+                raise ValueError(f"{msg}. {param}: {bound}")
 
     def _generate_sobol_points(self):
-        """Generate points in the parameterspace for the parallel processor 
+        """Generate points in the parameterspace for the parallel processor
         based on a Sobol sequence.
 
         Here the scipy.stats.qmc.Sobol class is used to generate the Sobol sequence,
         specifically the random_base2 method is used to generate the samples, as it
-        is has slightly better space filling properties than with a custom 
+        is has slightly better space filling properties than with a custom
         number of samples.
 
         Returns
@@ -181,7 +181,7 @@ class SobolSampler(mssampler.Sampler):
         bounds_array = np.array(list(self.bounds.values()))
 
         if self.logspace:
-            # Take the sign and then log the bounds. 
+            # Take the sign and then log the bounds.
             bounds_sign = np.sign(bounds_array)
             bounds_array = np.log(np.abs(bounds_array))
 

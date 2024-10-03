@@ -58,7 +58,7 @@ class TestModel:
         kwargs = copy.deepcopy(self.kwargs)
         kwargs["parameters"]["badType"] = "badType"
         with pytest.raises(ValueError):
-            model = Model(**kwargs)
+            model = Model(**kwargs)  # noqa: F841
 
     def test_simulate_notimplemented(self):
         """Test raising of notimplementederror for base class"""

@@ -15,10 +15,8 @@ import inspect
 import logging
 import multiprocessing as mp
 import os
-from pathlib import Path
 import pickle
-
-logger = logging.getLogger(__name__)
+from pathlib import Path
 
 # Third-party libraries
 import numpy as np
@@ -29,8 +27,10 @@ from tqdm import tqdm
 import macrostat.models.model as msmodel
 import macrostat.util.batchprocessing as msbatchprocessing
 
+logger = logging.getLogger(__name__)
 
-class Sampler():
+
+class Sampler:
     def __init__(
         self,
         model: msmodel.Model,
@@ -39,7 +39,7 @@ class Sampler():
         cpu_count: int = 1,
         batchsize: int = None,
     ):
-        """Generalized class to facilitate the sampling of the model's 
+        """Generalized class to facilitate the sampling of the model's
         parameterspace using python's multiprocessing library.
 
         Parameters
@@ -65,8 +65,9 @@ class Sampler():
         initargs = [
             i for i in inspect.signature(model.__init__).parameters if i != "self"
         ]
-        self.model_kwargs = {a: getattr(self.model, a) for a in initargs if a!="parameters"}
-
+        self.model_kwargs = {
+            a: getattr(self.model, a) for a in initargs if a != "parameters"
+        }
 
         # Computation parameters
         self.worker_function = worker_function
@@ -76,16 +77,16 @@ class Sampler():
         os.makedirs(output_folder, exist_ok=True)
 
     def generate_tasks(self, *args, **kwargs) -> list[tuple]:
-        """Generate tasks for the parallel processor. 
+        """Generate tasks for the parallel processor.
 
-        This method should return a list of tuples that will be passed to 
-        the worker function. By default, the first item in the tuple is 
-        the model object, and all remaining items are the arguments that 
+        This method should return a list of tuples that will be passed to
+        the worker function. By default, the first item in the tuple is
+        the model object, and all remaining items are the arguments that
         will be passed to the model.simulate() function.
         """
         raise NotImplementedError("This method should be implemented in a subclass")
 
-    def sample(self, tqdm_info: str = "Sampling"):        
+    def sample(self, tqdm_info: str = "Sampling"):
         """Run in parallel the sampling of the model's parameterspace
         by generating a set of tasks and executing them in parallel
 
@@ -107,33 +108,33 @@ class Sampler():
         # This will write results to disk, clear memory, and proceed
         if self.batchsize is None:
             self.batchsize = len(self.tasks)
-        
+
         batchcount = int(len(self.tasks) / self.batchsize) + (
             len(self.tasks) % self.batchsize > 0
         )
 
         for batch in range(batchcount):
             # Set tasks to run now
-            batch_tasks = self.tasks[
-                batch * self.batchsize : min([(batch + 1) * self.batchsize, len(self.tasks)])
-            ]
+            start = (batch * self.batchsize,)
+            end = min([(batch + 1) * self.batchsize, len(self.tasks)])
+            batch_tasks = self.tasks[start:end]
             # Execute those tasks
             raw_outputs = msbatchprocessing.parallel_processor(
                 tasks=batch_tasks,
-                worker=self.worker_function, 
+                worker=self.worker_function,
                 cpu_count=self.cpu_count,
-                tqdm_info=tqdm_info
-                )
+                tqdm_info=tqdm_info,
+            )
 
             # Save the outputs to disk
             self.save_outputs(raw_outputs, batch=batch)
 
     def save_outputs(self, raw_outputs: list, batch: int):
-        """ Save the raw outputs to disk. 
+        """Save the raw outputs to disk.
 
         The model's outputs are in the form of a pandas DataFrame.
         This method should save the outputs to disk in a format that
-        can be easily read back in later. Generically, it writes a 
+        can be easily read back in later. Generically, it writes a
         CSV file with the outputs in a MultiIndex format. However,
         this can be overwritten to save in a different format.
 
@@ -150,7 +151,9 @@ class Sampler():
         # Concatenate the outputs
         index_names = list(raw_outputs[0][-1].index.names)
         data = {v[0]: v[-1] for v in raw_outputs}
-        data = pd.concat(data.values(), keys=data.keys(), names=["ID"]+index_names, axis=0)
+        data = pd.concat(
+            data.values(), keys=data.keys(), names=["ID"] + index_names, axis=0
+        )
 
         self.index_count = data.index.nlevels
         self.header_count = data.columns.nlevels
@@ -162,12 +165,14 @@ class Sampler():
         else:
             data.to_csv(outputfile, mode="a", header=False)
 
-    def extract(self, columns: list = None, indices: list = None, chunksize: int = 100000):
+    def extract(
+        self, columns: list = None, indices: list = None, chunksize: int = 100000
+    ):
         """Extract the results from the output file.
-        
+
         The function uses a pandas chunkreader to extract the data from the
         output file. It is possible to extract only a subset of the columns,
-        parameter IDs, or indices. This reduces the memory footprint when 
+        parameter IDs, or indices. This reduces the memory footprint when
         dealing with a large number of parameterizations.
 
         Parameters
@@ -192,8 +197,7 @@ class Sampler():
             index_count = len(indices[0])
 
         csv_kwargs = dict(
-            header=np.arange(header_count), 
-            index_col=np.arange(index_count+1)
+            header=np.arange(header_count), index_col=np.arange(index_count + 1)
         )
 
         # Get the columns to extract from the file
@@ -209,7 +213,10 @@ class Sampler():
 
         # Read in chunks
         reader = pd.read_csv(
-            self.output_folder / filename, chunksize=chunksize, iterator=True, **csv_kwargs
+            self.output_folder / filename,
+            chunksize=chunksize,
+            iterator=True,
+            **csv_kwargs,
         )
 
         # Extract the data
@@ -226,9 +233,11 @@ class Sampler():
                 if index_count == 1:
                     chunk = chunk.loc[chunk.index.isin(index_targets)]
                 else:
-                    masks = [True*np.ones(chunk.shape[0])]
+                    masks = [True * np.ones(chunk.shape[0])]
                     for i in np.arange(index_count):
-                        masks.append(chunk.index.isin([j[i] for j in index_targets], level=i))
+                        masks.append(
+                            chunk.index.isin([j[i] for j in index_targets], level=i)
+                        )
                     chunk = chunk.loc[np.all(masks, axis=0), :]
 
             output.append(chunk)

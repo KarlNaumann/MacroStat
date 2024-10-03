@@ -9,20 +9,20 @@ __version__ = "0.1.0"
 __maintainer__ = ["Karl Naumann-Woleske"]
 
 
-import pytest
 import numpy as np
 import pandas as pd
-from scipy.stats import qmc
+import pytest
 
-from macrostat.sample.sobol import SobolSampler
 import macrostat.models.model as msmodel
-import macrostat.util.batchprocessing as msbatchprocessing
+from macrostat.sample.sobol import SobolSampler
 
 
 # Mock the Model class and simulate method for testing purposes
 class MockModel(msmodel.Model):
     def __init__(self, parameters=None, hyper_parameters={}):
-        self.parameters = parameters if parameters is not None else {"param1": 0.5, "param2": 1.0}
+        self.parameters = (
+            parameters if parameters is not None else {"param1": 0.5, "param2": 1.0}
+        )
         super().__init__(parameters=self.parameters, hyper_parameters={})
 
     def simulate(self, *args, **kwargs):
@@ -83,46 +83,61 @@ def test_verify_bounds_valid():
     model = MockModel()
     bounds = {"param1": (0.1, 1.0), "param2": (0.5, 2.0)}
     sampler = SobolSampler(model=model, bounds=bounds, sample_power=3)
+    sampler._verify_bounds()
 
 
 def test_verify_bounds_invalid_parameter():
     model = MockModel()
     bounds = {"param1": (0.1, 1.0), "invalid_param": (0.5, 2.0)}
 
-    with pytest.raises(ValueError, match = r"not in the model's parameters"):
+    with pytest.raises(ValueError, match=r"not in the model's parameters"):
         sampler = SobolSampler(model=model, bounds=bounds, sample_power=3)
+        sampler._verify_bounds()
 
 
 def test_verify_bounds_invalid_length():
     model = MockModel()
     bounds = {"param1": (0.1,), "param2": (0.5, 2.0)}
 
-    with pytest.raises(ValueError, match=r'Bounds should be a list-like of length 2'):
+    with pytest.raises(ValueError, match=r"Bounds should be a list-like of length 2"):
         sampler = SobolSampler(model=model, bounds=bounds, sample_power=3)
+        sampler._verify_bounds()
 
 
 def test_verify_bounds_invalid_order():
     model = MockModel()
     bounds = {"param1": (1.0, 0.1), "param2": (0.5, 2.0)}
 
-    with pytest.raises(ValueError, match="Lower bound should be smaller than the upper bound"):
+    with pytest.raises(
+        ValueError, match="Lower bound should be smaller than the upper bound"
+    ):
         sampler = SobolSampler(model=model, bounds=bounds, sample_power=3)
+        sampler._verify_bounds()
 
 
 def test_verify_bounds_invalid_logspace():
     model = MockModel()
     bounds = {"param1": (-1.0, 1.0), "param2": (0.5, 2.0)}
-    
-    with pytest.raises(ValueError, match=r'Bounds should be either both positive or both negative'):
-        sampler = SobolSampler(model=model, bounds=bounds, sample_power=3, logspace=True)
+
+    with pytest.raises(
+        ValueError, match=r"Bounds should be either both positive or both negative"
+    ):
+        sampler = SobolSampler(
+            model=model, bounds=bounds, sample_power=3, logspace=True
+        )
+        sampler._verify_bounds()
 
 
 def test_verify_bounds_zero_logspace():
     model = MockModel()
     bounds = {"param1": (0.0, 1.0), "param2": (0.5, 2.0)}
-    
-    with pytest.raises(ValueError, match=r'Bounds cannot be zero when using logspace'):
-        sampler = SobolSampler(model=model, bounds=bounds, sample_power=3, logspace=True)
+
+    with pytest.raises(ValueError, match=r"Bounds cannot be zero when using logspace"):
+        sampler = SobolSampler(
+            model=model, bounds=bounds, sample_power=3, logspace=True
+        )
+        sampler._verify_bounds()
+
 
 def test_generate_tasks():
     model = MockModel()
@@ -153,7 +168,7 @@ def test_save_and_load_sampler(tmp_path):
     sampler.save(name=str(save_path))
 
     # Load the sampler object
-    loaded_sampler = SobolSampler.load(str(tmp_path / save_path)+".pkl")
+    loaded_sampler = SobolSampler.load(str(tmp_path / save_path) + ".pkl")
 
     assert isinstance(loaded_sampler, SobolSampler)
     assert loaded_sampler.bounds == sampler.bounds

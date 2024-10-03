@@ -37,8 +37,10 @@ def timeseries_worker(task: tuple):
 
 
 def parallel_processor(
-    tasks: list = [], worker: callable = timeseries_worker, 
-    cpu_count:int=1, tqdm_info: str = ""
+    tasks: list = [],
+    worker: callable = timeseries_worker,
+    cpu_count: int = 1,
+    tqdm_info: str = "",
 ):
     """Run all of the tasks in parallel using the
     ProcessPoolExecutor.
@@ -46,7 +48,7 @@ def parallel_processor(
     Parameters
     ----------
     tasks : list[tuple]
-        List of tasks to be processed in parallel. 
+        List of tasks to be processed in parallel.
         Each task should be a tuple
     worker : callable
         Worker function to be used for the parallel processing.

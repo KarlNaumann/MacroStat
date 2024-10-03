@@ -8,9 +8,6 @@ __license__ = "MIT"
 __version__ = "0.1.0"
 __maintainer__ = ["Karl Naumann-Woleske"]
 
-import copy
-import os
-
 import numpy as np
 import pandas as pd
 import pytest

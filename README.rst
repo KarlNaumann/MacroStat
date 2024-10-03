@@ -36,7 +36,7 @@ MacroStat
     A Package providing multiple tools for the statistical analysis and treatment of macroeconomic simulation models, with a particular focus on Agent-based and Stock-Flow Consistent Models
 
 
-The purpose of this project is to provide a statistical toolbox for the analysis of Agent-based Models. The toolbox is developed in `python` and aims to provide a simple interface for researchers to attach their model, such that simulations can be steered from within the toolbox and the relevant analysis can be run (such as sensitivities, confidence intervals, and simulation studies). Only the analysis itself requires `python`, while the models can be written in any language. 
+The purpose of this project is to provide a statistical toolbox for the analysis of Agent-based Models. The toolbox is developed in `python` and aims to provide a simple interface for researchers to attach their model, such that simulations can be steered from within the toolbox and the relevant analysis can be run (such as sensitivities, confidence intervals, and simulation studies). Only the analysis itself requires `python`, while the models can be written in any language.
 
 The code was developed using Python 3.10. Backwards compatibility is not guaranteed
 
