@@ -1,18 +1,6 @@
 .. These are examples of badges you might want to add to your README:
    please update the URLs accordingly
 
-    .. image:: https://api.cirrus-ci.com/github/<USER>/MacroStat.svg?branch=main
-        :alt: Built Status
-        :target: https://cirrus-ci.com/github/<USER>/MacroStat
-    .. image:: https://readthedocs.org/projects/MacroStat/badge/?version=latest
-        :alt: ReadTheDocs
-        :target: https://MacroStat.readthedocs.io/en/stable/
-    .. image:: https://img.shields.io/coveralls/github/<USER>/MacroStat/main.svg
-        :alt: Coveralls
-        :target: https://coveralls.io/r/<USER>/MacroStat
-    .. image:: https://img.shields.io/pypi/v/MacroStat.svg
-        :alt: PyPI-Server
-        :target: https://pypi.org/project/MacroStat/
     .. image:: https://img.shields.io/conda/vn/conda-forge/MacroStat.svg
         :alt: Conda-Forge
         :target: https://anaconda.org/conda-forge/MacroStat
@@ -23,11 +11,22 @@
         :alt: Twitter
         :target: https://twitter.com/MacroStat
 
+
+.. image:: https://api.cirrus-ci.com/github/KarlNaumann/MacroStat.svg?branch=main
+     :alt: Built Status
+     :target: https://cirrus-ci.com/github/KarlNaumann/MacroStat
+.. image:: https://img.shields.io/pypi/v/MacroStat.svg
+  :alt: PyPI-Server
+  :target: https://pypi.org/project/MacroStat/
+.. image:: https://readthedocs.org/projects/macrostat/badge/?version=stable
+    :target: https://macrostat.readthedocs.io/en/stable/?badge=stable
+    :alt: Documentation Status
+.. image:: https://img.shields.io/coveralls/github/KarlNaumann/MacroStat/main.svg
+     :alt: Coveralls
+     :target: https://coveralls.io/r/KarlNaumann/MacroStat
 .. image:: https://img.shields.io/badge/-PyScaffold-005CA0?logo=pyscaffold
     :alt: Project generated with PyScaffold
     :target: https://pyscaffold.org/
-
-|
 
 =========
 MacroStat
@@ -42,6 +41,21 @@ The purpose of this project is to provide a statistical toolbox for the analysis
 The code was developed using Python 3.10. Backwards compatibility is not guaranteed
 
 .. _pyscaffold-notes:
+
+Installation
+============
+
+This project requires Python v3.10 or later.
+
+To install the latest version of the package from PyPI::
+
+    pip install macrostat
+
+Or, directly from GitHub::
+
+   pip install git+https://github.com/KarlNaumann/MacroStat.git#egg=macrostat
+
+If you'd like to contribute to the package, please read the CONTRIBUTING.md guide.
 
 Making Changes & Contributing
 =============================
