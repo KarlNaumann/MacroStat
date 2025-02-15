@@ -2,4 +2,4 @@
 Contributors
 ============
 
-* Karl Naumann-Woleske <karl.naumann@icloud.com>
+* Karl Naumann-Woleske <karlnaumann.com>
