@@ -35,16 +35,17 @@ class Behavior(torch.nn.Module):
 
         Parameters
         ----------
-        parameters: Parameters
+        parameters: macrostat.core.parameters.Parameters
             The parameters of the model.
-        scenarios: Scenarios
+        scenarios: macrostat.core.scenarios.Scenarios
             The scenarios of the model.
-        variables: Variables
+        variables: macrostat.core.variables.Variables
             The variables of the model.
         record: bool
-            Whether to record the model output.
+            Whether to record the model output as a whole timeseries, or just
+            the state variables (less memory-intensive).
         scenario: int
-            The scenario to use for the model.
+            The scenario to use for the model run.
         debug: bool
             Whether to print debug information.
         """
@@ -71,6 +72,10 @@ class Behavior(torch.nn.Module):
         """Forward pass of the behavior.
 
         This should include the model's main loop, and is implemented as a placeholder.
+        The idea is for users to implement an initialize() and step() function,
+        which will be called by the forward() function.
+
+        If there are additional steps necessary, users may wish to overwrite this function.
         """
 
         # Set the seed

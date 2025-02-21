@@ -34,12 +34,6 @@ def test_model_initialization_with_dict():
     assert model.parameters["test_param"] == 1.0
 
 
-def test_forward_pass(test_model):
-    """Test model forward pass"""
-    with pytest.raises(NotImplementedError):
-        test_model.forward()
-
-
 def test_simulate(test_model):
     """Test model simulation"""
     with pytest.raises(NotImplementedError):
@@ -69,7 +63,11 @@ def test_from_json(tmp_path):
     print(model.parameters.hyper)
     model.to_json(tmp_path)
 
-    model2 = Model.from_json(f"{tmp_path}_params.json", f"{tmp_path}_scenarios.json")
+    model2 = Model.from_json(
+        f"{tmp_path}_params.json",
+        f"{tmp_path}_scenarios.json",
+        f"{tmp_path}_variables.json",
+    )
     assert isinstance(model2, Model)
     assert model2.parameters["test_param"] == 1.0
 
@@ -84,5 +82,5 @@ def test_custom_behavior():
     params = Parameters({"test_param": 1.0}, hyperparameters={"T": 10})
     model = Model(parameters=params, behavior=CustomBehavior)
 
-    output = model.forward()
+    output = model.simulate()
     assert torch.equal(output, torch.tensor([1.0]))

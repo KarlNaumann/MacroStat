@@ -31,23 +31,11 @@ class Model:
     the user is expected to adapt the model.simulate() function to their needs,
     respecting only that the return of that function is a pandas dataframe.
 
-    Attributes
-    ----------
-    name: str
-        Name of the model, such as "model". Used for file and database names
-    parameters : dict
-        Dictionary of all parameters
-    hyper_parameters : dict
-        Dictionary of all hyperparameters
-    output : pd.DataFrame
-        None, or the latest simulation run for given parameters
-
-
     Example
     -------
     A general workflow for a model might look like
 
-    >>> model = Model(parameters, hyper_parameters)
+    >>> model = Model(parameters, hyperparameters)
     >>> output = model.simulate()
     >>> model.save()
 
@@ -69,14 +57,24 @@ class Model:
 
         Parameters
         ----------
-        parameters: Parameters | dict
+        parameters: macrostat.core.parameters.Parameters | dict
             The parameters of the model.
-        scenarios: Scenarios | dict
+        hyperparameters: dict (optional)
+            The hyperparameters of the model.
+        scenarios: macrostat.core.scenarios.Scenarios | dict (optional)
             The scenarios of the model.
-        variables: Variables | dict
+        variables: macrostat.core.variables.Variables | dict (optional)
             The variables of the model.
-        debug: bool
-            Whether to print debug information.
+        behavior: macrostat.core.behavior.Behavior (optional)
+            The behavior of the model.
+        name: str (optional)
+            The name of the model.
+        log_level: int (optional)
+            The log level, defaults to logging.INFO but can be set to logging.DEBUG
+            for more verbose output.
+        log_file: str (optional)
+            The log file, defaults to "macrostat_model.log" in the current working
+            directory.
         """
         # Essential attributes
         if not isinstance(parameters, Parameters):
@@ -101,32 +99,29 @@ class Model:
 
         logging.basicConfig(level=log_level, filename=log_file)
 
-    def forward(self, scenario: int = 0, *args, **kwargs):
-        """Forward pass of the model."""
-        behavior = self.behavior(
-            self.parameters,
-            self.scenarios,
-            self.variables,
-            record=False,
-            scenario=scenario,
-        )
-        return behavior.forward(*args, **kwargs)
-
     @classmethod
-    def from_json(cls, parameter_file: str, scenario_file: str, *args, **kwargs):
+    def from_json(
+        cls,
+        parameter_file: str,
+        scenario_file: str,
+        variable_file: str,
+        *args,
+        **kwargs,
+    ):
         """Initialize the model from a JSON file."""
         parameters = Parameters.from_json(parameter_file)
         scenarios = Scenarios.from_json(scenario_file, parameters=parameters)
-        return cls(parameters, scenarios)
+        variables = Variables.from_json(variable_file, parameters=parameters)
+        return cls(parameters, scenarios, variables)
 
     @classmethod
-    def load(cls, path=None):
+    def load(cls, path: os.PathLike):
         """Class method to load a model instance from a pickled file.
 
         Parameters
         ----------
-        path, optional
-            path to the targeted Sampler
+        path: os.PathLike
+            path to the targeted file containing the model.
 
         Notes
         -----
@@ -155,7 +150,14 @@ class Model:
             pickle.dump(self, f)
 
     def simulate(self, scenario: int = 0, *args, **kwargs):
-        """Simulate the model."""
+        """Simulate the model.
+
+        Parameters
+        ----------
+        scenario: int (optional)
+            The scenario to use for the model run, defaults to 0, which
+            represents the default scenario (no shocks).
+        """
         logging.info(f"Starting simulation. Scenario: {scenario}")
         behavior = self.behavior(
             self.parameters,
@@ -168,6 +170,14 @@ class Model:
             return behavior.forward(*args, **kwargs)
 
     def to_json(self, file_path: os.PathLike, *args, **kwargs):
-        """Convert the model to a JSON file."""
+        """Convert the model to a JSON file split into parameters, scenarios,
+        and variables.
+
+        Parameters
+        ----------
+        file_path: os.PathLike
+            The path to the file to save the model to.
+        """
         self.parameters.to_json(f"{file_path}_params.json")
         self.scenarios.to_json(f"{file_path}_scenarios.json")
+        self.variables.to_json(f"{file_path}_variables.json")
