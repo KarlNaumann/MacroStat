@@ -57,7 +57,7 @@ repos:
   rev: 7.1.1
   hooks:
   - id: flake8
-    args: ['--extend-ignore=E501']
+    args: ['--extend-ignore=E501,E203']
 
 ## Check for misspells in documentation files:
 # - repo: https://github.com/codespell-project/codespell
