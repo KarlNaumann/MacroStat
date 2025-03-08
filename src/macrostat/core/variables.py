@@ -10,7 +10,9 @@ __maintainer__ = ["Karl Naumann-Woleske"]
 import json
 import logging
 import os
+from typing import Self
 
+import pandas as pd
 import torch
 
 from macrostat.core.parameters import Parameters
@@ -61,34 +63,29 @@ class Variables:
 
         self.timeseries = timeseries
 
-    def initialize_tensors(self, t: int, **kwargs):
-        """Initialize the output tensors, creating two different dictionaries.
-        First, a dictionary for the state variables (i.e. those that require
-        only t-1 information, but no history) and second a dictionary for the
-        history variables (i.e. those that require information from further
-        previous periods). This distinction is important for PyTorch based
-        simulations to reduce memory usage.
+    def compare(self, other: Self | pd.DataFrame):
+        """Compare the variables to another Variables object or DataFrame.
 
         Parameters
         ----------
-        t: int
-            The number of periods to initialize the tensors for.
+        other: pd.DataFrame
+            The DataFrame to compare the variables to.
         """
-        # State variables (only t-1 information)
-        state_vars = self.new_state(**kwargs)
+        if isinstance(other, Variables):
+            other = other.to_pandas()
 
-        # History variables (v["history"] rows)
-        self.history = {}
-        for k, v in self.info.items():
-            if "history" in v and v["history"] > 0:
-                self.history[k] = []
+        df = self.to_pandas()
 
-        # Initialize the timeseries
-        self.timeseries = {
-            k: torch.zeros(t, len(v["sectors"])) for k, v in self.info.items()
-        }
+        # Compare columns and indices
+        logger.info(f"Columns that don't match: {set(df.columns) - set(other.columns)}")
+        logger.info(f"Indices that don't match: {set(df.index) - set(other.index)}")
 
-        return state_vars, self.history
+        # Compare values
+        diff = df.sub(other)
+        rel_diff = df.sub(other).div(other).mul(100)
+        rel_diff = rel_diff[other != 0]
+
+        return diff, rel_diff
 
     @classmethod
     def from_excel(cls, file_path: os.PathLike, *args, **kwargs):
@@ -123,10 +120,60 @@ class Variables:
         model class, and it should return a dictionary with the variable names
         as keys and the variable information as values. The variable information
         should contain at least the following keys:
-        - "history": int
-            The number of periods that the variable requires information from.
+        - "history": int - The number of periods that the variable requires information from.
+        - "sectors": list - The sectors that the variable is associated with.
+        - "unit": str - The unit of the variable.
+        - "notation": str - The notation of the variable.
         """
         return {}
+
+    def info_to_csv(self, file_path: str, sphinx_math: bool = False):
+        """Convert the variables information to a CSV file.
+
+        Parameters
+        ----------
+        file_path: str
+            The path to the CSV file to save the variables information to.
+        sphinx_math: bool
+            Whether to add a ":math:" marker to the notation column, e.g. for
+            usage in the documentation
+        """
+        df = pd.DataFrame.from_dict(self.info, orient="index")
+        df["sectors"] = df["sectors"].apply(lambda x: ", ".join(x))
+        df["history"] = df["history"].astype(int)
+        if sphinx_math:
+            df["notation"] = df["notation"].apply(lambda x: r":math:`" + x + r"`")
+        df.columns = [i.title() for i in df.columns]
+        df.to_csv(file_path)
+
+    def initialize_tensors(self, t: int, **kwargs):
+        """Initialize the output tensors, creating two different dictionaries.
+        First, a dictionary for the state variables (i.e. those that require
+        only t-1 information, but no history) and second a dictionary for the
+        history variables (i.e. those that require information from further
+        previous periods). This distinction is important for PyTorch based
+        simulations to reduce memory usage.
+
+        Parameters
+        ----------
+        t: int
+            The number of periods to initialize the tensors for.
+        """
+        # State variables (only t-1 information)
+        state_vars = self.new_state(**kwargs)
+
+        # History variables (v["history"] rows)
+        self.history = {}
+        for k, v in self.info.items():
+            if "history" in v and v["history"] > 0:
+                self.history[k] = []
+
+        # Initialize the timeseries
+        self.timeseries = {
+            k: torch.zeros(t, len(v["sectors"])) for k, v in self.info.items()
+        }
+
+        return state_vars, self.history
 
     def new_state(self, **kwargs):
         """Initialize the state variables for the given period."""
@@ -216,6 +263,11 @@ class Variables:
         dicts = {k: v.tolist() for k, v in self.timeseries.items()}
         with open(file_path, "w") as file:
             json.dump(dicts, file)
+
+    def to_pandas(self):
+        """Convert the variables to a pandas DataFrame."""
+        df = pd.concat({k: pd.DataFrame(v) for k, v in self.timeseries.items()}, axis=1)
+        return df
 
 
 if __name__ == "__main__":
