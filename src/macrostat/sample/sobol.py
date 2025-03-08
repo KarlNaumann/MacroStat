@@ -19,7 +19,7 @@ import pandas as pd
 import scipy.stats as stats
 
 # Custom imports
-import macrostat.models.model as msmodel
+import macrostat.core.model as msmodel
 import macrostat.sample.sampler as mssampler
 import macrostat.util.batchprocessing as msbatchprocessing
 

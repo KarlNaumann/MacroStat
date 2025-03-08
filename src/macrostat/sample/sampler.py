@@ -23,9 +23,10 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
-# Custom imports
-import macrostat.models.model as msmodel
 import macrostat.util.batchprocessing as msbatchprocessing
+
+# Custom imports
+from macrostat.core import Model
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +34,7 @@ logger = logging.getLogger(__name__)
 class Sampler:
     def __init__(
         self,
-        model: msmodel.Model,
+        model: Model,
         worker_function: callable = msbatchprocessing.timeseries_worker,
         output_folder: str = "samples",
         cpu_count: int = 1,
@@ -44,7 +45,7 @@ class Sampler:
 
         Parameters
         ----------
-        model: msmodel.Model
+        model: Model
             Model to be sampled
         worker_function: callable (default batchprocessing.timeseries_worker)
             Function to be used for the parallel processing
@@ -222,7 +223,6 @@ class Sampler:
         # Extract the data
         output = []
         for i, chunk in tqdm(enumerate(reader), desc="Chunk Reading"):
-
             # Match the columns
             if column_targets is not None:
                 ix = chunk.columns.isin(column_targets)
