@@ -13,6 +13,7 @@ import logging
 import os
 
 # Third-party libraries
+import pandas as pd
 import torch
 
 logger = logging.getLogger(__name__)
@@ -74,7 +75,7 @@ class Parameters:
         Parameters
         ----------
         key: str
-            The key to check for.
+            The name of the parameter or hyperparameter to check for.
         """
         return key in self.values or key in self.hyper
 
@@ -84,7 +85,7 @@ class Parameters:
         Parameters
         ----------
         key: str
-            The key to get the item for.
+            The name of the parameter or hyperparameter to get the item for.
         """
         return self.values[key] if key in self.values else self.hyper[key]
 
@@ -94,12 +95,12 @@ class Parameters:
         Parameters
         ----------
         key: str
-            The key to set the item for.
+            The name of the parameter or hyperparameter to set.
         value: float
             The value to set for the item.
         """
         if key in self.values:
-            self.values[key] = value
+            self.values[key]["value"] = value
         elif key in self.hyper:
             try:
                 self.hyper[key] = int(value)
@@ -126,8 +127,10 @@ class Parameters:
 
         # Add the parameters
         output += "\nParameters:\n"
-        for key, value in self.values.items():
-            output += f"  {key:.<{max_key_length}} {value:.5g}\n"
+        for key, info in self.values.items():
+            output += (
+                f"  {key:.<{max_key_length}} {info['value']:.5g} ({info['unit']})\n"
+            )
 
         return output
 
@@ -143,14 +146,9 @@ class Parameters:
         with open(file_path, "r") as file:
             data = json.load(file)
 
-        # Convert bounds to tuple
-        for key, value in data["Bounds"].items():
-            data["Bounds"][key] = tuple(value)
-
         return cls(
-            parameters=data["Parameters"],
-            hyperparameters=data["HyperParameters"],
-            bounds=data["Bounds"],
+            parameter_history=data["Parameters"],
+            hyperparameter_history=data["HyperParameters"],
         )
 
     @classmethod
@@ -164,21 +162,18 @@ class Parameters:
         """
         raise NotImplementedError("Not implemented")
 
-    def get_default_bounds(self):
-        """Return the default bounds."""
-        return {}
-
     def get_default_hyperparameters(self):
         """Return the default hyperparameters.
 
         The hyperparameters are the parameters that are not directly used in
-        the model, but rather for the simulation and calibration. They:
-        1. Must include the number of timesteps to simulate
-        2. Must include the scenario trigger, i.e. the timestep at which the
-           scenario starts
-        3. Must include the seed for the random number generator
-        4. Must include the device to use for the simulation
+        the model, but rather for the simulation and calibration. They must
+        include:
+        1. The number of timesteps to simulate
+        2. The scenario trigger, i.e. the timestep at which the scenario starts
+        3. The seed for the random number generator
+        4. The device to use for the simulation
         5. May include other parameters, such as flags for the model
+
         """
 
         return {
@@ -191,19 +186,17 @@ class Parameters:
         }
 
     def get_default_parameters(self):
-        """Return the default parameters."""
-        return {}
+        """Return the default parameters.
 
-    def set_bounds(self, bounds: dict):
-        """Set the bounds for the parameters.
-
-        Parameters
-        ----------
-        bounds: dict
-            The bounds to set for the parameters.
+        Should return a dictionary with the keys being the parameter names,
+        and a subdictionary with the keys including:
+        - "Value": The value of the parameter.
+        - "Lower": The lower bound of the parameter.
+        - "Upper": The upper bound of the parameter.
+        - "Unit": The unit of the parameter.
+        - "Notation": The notation of the parameter.
         """
-        self.bounds.update(bounds)
-        self.verify_bounds()
+        return {}
 
     def set_bound(self, key: str, value: tuple):
         """Set the bounds for a single parameter
@@ -215,8 +208,35 @@ class Parameters:
         value: tuple
             The bounds to set for the parameter.
         """
-        self.bounds[key] = value
+        self.values[key]["Lower Bound"] = value[0]
+        self.values[key]["Upper Bound"] = value[1]
         self.verify_bounds()
+
+    def set_notation(self, key: str, value: str):
+        """Set the notation for a single parameter."""
+        self.values[key]["notation"] = value
+
+    def set_unit(self, key: str, value: str):
+        """Set the unit for a single parameter."""
+        self.values[key]["unit"] = value
+
+    def to_csv(self, file_path: os.PathLike, sphinx_math: bool = False):
+        """Convert the parameters to a CSV file.
+
+        Parameters
+        ----------
+        file_path: os.PathLike
+            The path to the CSV file to save the parameters to.
+        sphinx_math: bool
+            Whether to use Sphinx math notation in the CSV file.
+        """
+        df = pd.DataFrame.from_dict(self.values, orient="index").sort_index()
+        df = df[["notation", "unit", "value", "lower bound", "upper bound"]]
+        df.columns = ["Notation", "Unit", "Value", "Lower Bound", "Upper Bound"]
+        df.index.name = "Parameter"
+        if sphinx_math:
+            df["Notation"] = df["Notation"].apply(lambda x: r":math:`" + x + r"`")
+        df.to_csv(file_path)
 
     def to_excel(self, file_path: os.PathLike, *args, **kwargs):
         """Convert the parameters to an Excel file.
@@ -239,9 +259,8 @@ class Parameters:
         with open(file_path, "w") as file:
             json.dump(
                 {
-                    "Parameters": self.values,
-                    "HyperParameters": self.hyper,
-                    "Bounds": self.bounds,
+                    "Parameters": self.parameter_history,
+                    "HyperParameters": self.hyperparameter_history,
                 },
                 file,
             )
@@ -261,25 +280,37 @@ class Parameters:
         parameters have bounds, and then that the bounds are valid.
         """
         # Check that all parameters have bounds
-        needed_bounds = set(self.get_default_bounds().keys())
-        found_bounds = set(self.bounds.keys())
+        needed_bounds = set(self.get_default_parameters().keys())
+        found_bounds = {}
+        for key, info in self.values.items():
+            conditions = [
+                "lower bound" in info and info["lower bound"] is not None,
+                "upper bound" in info and info["upper bound"] is not None,
+            ]
+            if all(conditions):
+                found_bounds[key] = (info["lower bound"], info["upper bound"])
+
         if needed_bounds.difference(found_bounds):
             raise BoundaryError(
                 f"Missing bounds for parameters: {needed_bounds - found_bounds}"
             )
 
         # Check that the bounds are valid
-        for param, bounds in self.bounds.items():
+        for param, bounds in found_bounds.items():
             if bounds[0] > bounds[1]:
                 raise BoundaryError(f"Parameter {param} has invalid bounds: {bounds}")
 
     def verify_parameters(self):
         """Verify that the parameters are within the bounds."""
-        for param, bounds in self.bounds.items():
-            value = self.values[param]
-            if value < bounds[0] or value > bounds[1]:
-                msg = f"Parameter {param} has invalid value: {value}"
-                raise BoundaryError(f"{msg} (bounds: {self.bounds[param]})")
+        for param, info in self.values.items():
+            if (
+                info["value"] < info["lower bound"]
+                or info["value"] > info["upper bound"]
+            ):
+                msg = f"Parameter {param} has invalid value: {info['value']}"
+                raise BoundaryError(
+                    f"{msg} (bounds: {info['lower bound']}, {info['upper bound']})"
+                )
 
 
 if __name__ == "__main__":
