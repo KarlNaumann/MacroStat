@@ -77,19 +77,19 @@ class Model:
             directory.
         """
         # Essential attributes
-        if not isinstance(parameters, Parameters):
+        if isinstance(parameters, dict):
             self.parameters = Parameters(
                 parameters=parameters, hyperparameters=hyperparameters
             )
         else:
             self.parameters = parameters
 
-        if not isinstance(scenarios, Scenarios):
+        if isinstance(scenarios, dict):
             self.scenarios = Scenarios(parameters=self.parameters, scenarios=scenarios)
         else:
             self.scenarios = scenarios
 
-        if not isinstance(variables, Variables):
+        if isinstance(variables, dict):
             self.variables = Variables(parameters=self.parameters, variables=variables)
         else:
             self.variables = variables
@@ -163,8 +163,9 @@ class Model:
             self.parameters,
             self.scenarios,
             self.variables,
-            record=True,
             scenario=scenario,
+            *args,
+            **kwargs,
         )
         with torch.no_grad():
             return behavior.forward(*args, **kwargs)

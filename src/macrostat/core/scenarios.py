@@ -187,7 +187,7 @@ class Scenarios:
 
         vectorized = {}
         for k, v in default_values.items():
-            vectorized[k] = v * torch.ones(self.parameters.hyper["T"], 1)
+            vectorized[k] = v * torch.ones(self.parameters.hyper["timesteps"], 1)
 
         return vectorized
 

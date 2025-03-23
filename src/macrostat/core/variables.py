@@ -169,9 +169,12 @@ class Variables:
                 self.history[k] = []
 
         # Initialize the timeseries
-        self.timeseries = {
-            k: torch.zeros(t, len(v["sectors"])) for k, v in self.info.items()
-        }
+        self.timeseries = {}
+        for k, v in self.info.items():
+            if "sectors" in v and len(v["sectors"]) > 0:
+                self.timeseries[k] = torch.zeros(t, len(v["sectors"]))
+            else:
+                self.timeseries[k] = torch.zeros(t, 1)
 
         return state_vars, self.history
 
@@ -180,7 +183,10 @@ class Variables:
 
         state = {}
         for k, v in self.info.items():
-            state[k] = torch.zeros(len(v["sectors"]), **kwargs)
+            if "sectors" in v and len(v["sectors"]) > 0:
+                state[k] = torch.zeros(len(v["sectors"]), **kwargs)
+            else:
+                state[k] = torch.zeros(1, **kwargs)
 
         return state
 

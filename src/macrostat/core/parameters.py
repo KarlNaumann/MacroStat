@@ -33,7 +33,6 @@ class Parameters:
         self,
         parameters: dict | None = None,
         hyperparameters: dict | None = None,
-        bounds: dict | None = None,
         *args,
         **kwargs,
     ):
@@ -61,10 +60,6 @@ class Parameters:
         self.hyper = self.get_default_hyperparameters()
         if hyperparameters is not None:
             self.hyper.update(hyperparameters)
-
-        self.bounds = self.get_default_bounds()
-        if bounds is not None:
-            self.bounds.update(bounds)
 
         self.verify_bounds()
         self.verify_parameters()
@@ -183,6 +178,7 @@ class Parameters:
             "seed": 42,
             "device": "cpu",
             "requires_grad": False,
+            "sectors": [],
         }
 
     def get_default_parameters(self):
@@ -272,8 +268,12 @@ class Parameters:
 
     def vectorize_parameters(self):
         """Vectorize the parameters."""
-        self.values_vectorized = self.values
-        return self.values_vectorized
+        pvectors = {}
+        for key, info in self.values.items():
+            pvectors[key.replace(".", "_")] = torch.tensor(
+                info["value"], device=self.hyper["device"], dtype=torch.float
+            )
+        return pvectors
 
     def verify_bounds(self):
         """Verify that the bounds are valid. By testing first that all
