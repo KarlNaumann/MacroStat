@@ -10,4 +10,4 @@ Contents
 .. toctree::
    :maxdepth: 3
 
-   Godley & Lavoie (2006) <godley_lavoie_2006/index>
+   Godley & Lavoie (2006) <GL06/index>
