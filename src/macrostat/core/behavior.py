@@ -89,7 +89,7 @@ class Behavior(torch.nn.Module):
         }
 
         self.state, self.history = self.variables.initialize_tensors(
-            t=self.hyper["T"], **kwargs
+            t=self.hyper["timesteps"], **kwargs
         )
 
         # Initialize the model
@@ -117,7 +117,7 @@ class Behavior(torch.nn.Module):
         ):
             # Get scenario series for this point in time
             idx = torch.where(
-                torch.arange(self.hyper["T"]) == t,
+                torch.arange(self.hyper["timesteps"]) == t,
                 torch.ones(1),
                 torch.zeros(1),
             )
@@ -125,8 +125,7 @@ class Behavior(torch.nn.Module):
 
             self.step(t, scenario)
 
-            if self.record:
-                self.variables.record_state(t, self.state)
+            self.variables.record_state(t, self.state)
 
             self.history = self.variables.update_history(self.state)
             self.prior = self.state
