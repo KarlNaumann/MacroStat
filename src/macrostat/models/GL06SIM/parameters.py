@@ -14,7 +14,7 @@ from macrostat.core.parameters import Parameters
 logger = logging.getLogger(__name__)
 
 
-class ParametersSIM(Parameters):
+class ParametersGL06SIM(Parameters):
     """Parameters class for the Godley-Lavoie 2006 SIM model."""
 
     version = "SIM"
@@ -46,20 +46,28 @@ class ParametersSIM(Parameters):
             **kwargs,
         )
 
-    def get_default_hyperparameters(self):
-        """Return the default hyperparameters."""
-        return {
-            "seed": 0,
-        }
-
     def get_default_parameters(self):
         """Return the default parameter values."""
         return {
-            "P1": {
+            "TaxRate": {
                 "lower bound": 0.0,
-                "upper bound": 100.0,
-                "notation": "",
-                "unit": "",
-                "value": 0.0,
+                "upper bound": 1.0,
+                "notation": "\theta",
+                "unit": "% per period",
+                "value": 0.2,
+            },
+            "PropensityToConsumeIncome": {
+                "lower bound": 0.0,
+                "upper bound": 1.0,
+                "notation": "\alpha_1",
+                "unit": ".",
+                "value": 0.6,
+            },
+            "PropensityToConsumeSavings": {
+                "lower bound": 0.0,
+                "upper bound": 1.0,
+                "notation": "\alpha_2",
+                "unit": ".",
+                "value": 0.4,
             },
         }

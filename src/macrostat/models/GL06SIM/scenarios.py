@@ -10,27 +10,27 @@ __maintainer__ = ["Karl Naumann-Woleske"]
 import logging
 
 from macrostat.core.scenarios import Scenarios
-from macrostat.models.godleylavoie2006_SIM.parameters import ParametersSIM
+from macrostat.models.GL06SIM.parameters import ParametersGL06SIM
 
 logger = logging.getLogger(__name__)
 
 
-class ScenariosSIM(Scenarios):
+class ScenariosGL06SIM(Scenarios):
     """Scenarios class for the Godley-Lavoie 2006 SIM model."""
 
-    version = "SIM"
+    version = "GL06SIM"
 
     def __init__(
         self,
         scenario_info: dict | None = None,
-        parameters: ParametersSIM | None = None,
+        parameters: ParametersGL06SIM | None = None,
         *args,
         **kwargs,
     ):
         """Initialize the scenarios of the Godley-Lavoie 2006 SIM model."""
 
         if parameters is None:
-            parameters = ParametersSIM()
+            parameters = ParametersGL06SIM()
 
         super().__init__(
             scenario_info=scenario_info,
@@ -42,5 +42,6 @@ class ScenariosSIM(Scenarios):
     def get_default_scenario_values(self):
         """Return the default scenario values."""
         return {
-            "V1": 0,
+            "GovernmentDemand": 20,
+            "WageRate": 1,
         }
