@@ -8,8 +8,8 @@
 # serve to show the default.
 
 import os
-import sys
 import shutil
+import sys
 
 # -- Path setup --------------------------------------------------------------
 
@@ -72,7 +72,9 @@ extensions = [
     "sphinx.ext.ifconfig",
     "sphinx.ext.mathjax",
     "sphinx.ext.napoleon",
-    "nbsphinx",
+    # "nbsphinx",
+    "sphinxcontrib.bibtex",
+    "myst_nb",
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -148,6 +150,23 @@ pygments_style = "sphinx"
 
 # If this is True, todo emits a warning for each TODO entries. The default is False.
 todo_emit_warnings = True
+
+# Bibliography
+bibtex_bibfiles = ["references.bib"]
+bibtex_default_style = "plain"
+bibtex_reference_style = "author_year"
+
+# Notebooks
+myst_enable_extensions = [
+    "amsmath",
+    "colon_fence",
+    "deflist",
+    "dollarmath",
+    "html_image",
+]
+
+# Autodoc sections (Napoleon)
+napoleon_custom_sections = ["Equations", "Dependency", "Sets"]
 
 
 # -- Options for HTML output -------------------------------------------------
