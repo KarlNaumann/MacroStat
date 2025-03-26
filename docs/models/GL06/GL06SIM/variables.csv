@@ -1,0 +1,14 @@
+,Notation,Unit,History,Sectors
+ConsumptionDemand,:math:`C_d`,USD,0,Household
+ConsumptionSupply,:math:`C_s`,USD,0,Household
+GovernmentDemand,:math:`G_d`,USD,0,Government
+GovernmentSupply,:math:`G_s`,USD,0,Government
+TaxSupply,:math:`T_s`,USD,0,Household
+TaxDemand,:math:`T_d`,USD,0,Government
+LabourSupply,:math:`N_s`,USD,0,Household
+LabourDemand,:math:`N_d`,USD,0,Household
+DisposableIncome,:math:`YD`,USD,0,Household
+Wages,:math:`W`,USD,0,Household
+GovernmentMoneyStock,:math:`H_s`,USD,0,Government
+HouseholdMoneyStock,:math:`H_h`,USD,0,Household
+NationalIncome,:math:`Y`,USD,0,Macroeconomy
