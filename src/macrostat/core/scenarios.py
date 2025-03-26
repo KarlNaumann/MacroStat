@@ -92,6 +92,27 @@ class Scenarios:
 
         self.current_scenario = 0
 
+    def __getitem__(self, item: tuple[int | str, str]) -> torch.Tensor:
+        """Get a scenario timeseries from the model.
+
+        Parameters
+        ----------
+        item: tuple[int, str] | int
+            The index or name of the scenario.
+        """
+        try:
+            scenario, variable = item
+        except Exception as e:
+            logger.error(
+                f"Error getting scenario: {item} should be a tuple of (name, variable) or (index, variable)"
+            )
+            raise e
+
+        if isinstance(scenario, str):
+            scenario = self.get_scenario_index(scenario)
+
+        return self.timeseries[scenario][variable]
+
     def add_scenario(self, name: str, timeseries: dict, colour: str = None):
         """Add a scenario to the model.
 
@@ -114,7 +135,7 @@ class Scenarios:
         self.info[scID] = {
             "Name": name,
             "Colour": colour,
-            "Index": np.arange(self.parameters["T"]),
+            "Index": np.arange(self.parameters["timesteps"]),
         }
 
         # Copy default scenario as a starting point
@@ -133,10 +154,10 @@ class Scenarios:
                 self.timeseries[scID][k][trigger:] = v
             # If the timeseries is a vector, assume it starts at the trigger
             elif isinstance(v, torch.Tensor):
-                t = min(len(v), self.parameters["T"] - trigger)
+                t = min(len(v), self.parameters["timesteps"] - trigger)
                 self.timeseries[scID][k][trigger : trigger + t, 0] = v.squeeze()[:t]
             else:
-                t = min(len(v), self.parameters["T"] - trigger)
+                t = min(len(v), self.parameters["timesteps"] - trigger)
                 self.timeseries[scID][k][trigger : trigger + t, 0] = torch.tensor(v[:t])
 
             if isinstance(v, (pd.Series, pd.DataFrame)):
@@ -198,6 +219,25 @@ class Scenarios:
         default values.
         """
         return {}
+
+    def get_scenario_index(self, scenario: str) -> int:
+        """Get the index of a scenario by name.
+
+        Parameters
+        ----------
+        scenario: str
+            The name of the scenario.
+
+        Returns
+        -------
+        int
+            The index of the scenario.
+        """
+        for scenario_id, info in self.info.items():
+            if info["Name"] == scenario:
+                return scenario_id
+
+        raise ValueError(f"Scenario {scenario} not found")
 
     def to_excel(self, excel_path: str):
         """Save the scenarios to an Excel file.

@@ -149,7 +149,7 @@ class Model:
         with open(path, "wb") as f:
             pickle.dump(self, f)
 
-    def simulate(self, scenario: int = 0, *args, **kwargs):
+    def simulate(self, scenario: int | str = 0, *args, **kwargs):
         """Simulate the model.
 
         Parameters
@@ -158,6 +158,9 @@ class Model:
             The scenario to use for the model run, defaults to 0, which
             represents the default scenario (no shocks).
         """
+        if isinstance(scenario, str):
+            scenario = self.scenarios.get_scenario_index(scenario)
+
         logging.info(f"Starting simulation. Scenario: {scenario}")
         behavior = self.behavior(
             self.parameters,
