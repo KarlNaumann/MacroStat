@@ -82,7 +82,7 @@ class Parameters:
         key: str
             The name of the parameter or hyperparameter to get the item for.
         """
-        return self.values[key] if key in self.values else self.hyper[key]
+        return self.values[key]["value"] if key in self.values else self.hyper[key]
 
     def __setitem__(self, key: str, value: float):
         """Set an item in the parameters or hyperparameters.
