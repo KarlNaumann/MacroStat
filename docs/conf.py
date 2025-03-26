@@ -54,6 +54,12 @@ try:
 except Exception as e:
     print("Running `sphinx-apidoc` failed!\n{}".format(e))
 
+# -- Preprocessing -----------------------------------------------------------
+# This creates the csv files with the tables of parameters and variables for
+# all of the implemented models
+print("Preprocessing ...")
+os.system(f"python {__location__}/docs_preprocessing.py --docdir {__location__}")
+
 # -- General configuration ---------------------------------------------------
 
 # If your documentation needs a minimal Sphinx version, state it here.
