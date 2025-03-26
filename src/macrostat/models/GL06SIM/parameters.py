@@ -71,3 +71,10 @@ class ParametersGL06SIM(Parameters):
                 "value": 0.4,
             },
         }
+
+    def get_default_hyperparameters(self):
+        """Return the default hyperparameter values."""
+        hyperparameters = super().get_default_hyperparameters()
+        hyperparameters["timesteps"] = 100
+        hyperparameters["timesteps_initialization"] = 1
+        return hyperparameters
