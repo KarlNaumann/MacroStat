@@ -14,3 +14,5 @@ Contents
    :maxdepth: 3
 
    SIM <GL06SIM>
+   SIMEX <GL06SIMEX>
+   PC <GL06PC>

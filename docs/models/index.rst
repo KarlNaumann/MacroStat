@@ -10,4 +10,4 @@ Contents
 .. toctree::
    :maxdepth: 3
 
-   Godley & Lavoie (2006) <GL06SIM>
+   Godley & Lavoie (2006) <GL06/index>
