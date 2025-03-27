@@ -10,7 +10,10 @@ __maintainer__ = ["Karl Naumann-Woleske"]
 import json
 import logging
 import os
+import re
+from typing import Self
 
+import pandas as pd
 import torch
 
 from macrostat.core.parameters import Parameters
@@ -61,34 +64,212 @@ class Variables:
 
         self.timeseries = timeseries
 
-    def initialize_tensors(self, t: int, **kwargs):
-        """Initialize the output tensors, creating two different dictionaries.
-        First, a dictionary for the state variables (i.e. those that require
-        only t-1 information, but no history) and second a dictionary for the
-        history variables (i.e. those that require information from further
-        previous periods). This distinction is important for PyTorch based
-        simulations to reduce memory usage.
+    def balance_sheet_theoretical(
+        self,
+        time_notation: bool = False,
+        mathfmt: str = "sphinx",
+        non_camel_case: bool = False,
+    ):
+        """Calculate the theoretical balance sheet of the model based on the
+        information in the info dictionary.
 
         Parameters
         ----------
-        t: int
-            The number of periods to initialize the tensors for.
+        time_notation: bool
+            Whether to add a time index to the balance sheet.
+        mathfmt: str
+            The format to use for the math. Can be "sphinx", "myst", or "latex".
+        non_camel_case: bool
+            Whether to convert variable names to non-camel case.
+
+        Returns
+        -------
+        pd.DataFrame
+            A DataFrame containing the theoretical balance sheet of the model.
         """
-        # State variables (only t-1 information)
-        state_vars = self.new_state(**kwargs)
+        if not self.verify_sfc_info():
+            raise ValueError("SFC information is not complete")
 
-        # History variables (v["history"] rows)
-        self.history = {}
-        for k, v in self.info.items():
-            if "history" in v and v["history"] > 0:
-                self.history[k] = []
-
-        # Initialize the timeseries
-        self.timeseries = {
-            k: torch.zeros(t, len(v["sectors"])) for k, v in self.info.items()
+        sfc = {
+            k: v["sfc"]
+            for k, v in self.info.items()
+            if v["sfc"][0][0].lower() in ["asset", "liability"]
         }
 
-        return state_vars, self.history
+        bs = {}
+        for k, v in sfc.items():
+            for kind, sector in v:
+                if non_camel_case:
+                    item = re.sub(r"([A-Z])", r" \1", k.replace(sector, ""))
+                else:
+                    item = k.replace(sector, "")
+
+                if item not in bs:
+                    bs[item] = {}
+
+                if kind.lower() == "asset":
+                    bs[item][sector] = f"+{self.info[k]['notation']}"
+                elif kind.lower() == "liability":
+                    bs[item][sector] = f"-{self.info[k]['notation']}"
+
+        bs = pd.DataFrame.from_dict(bs, orient="index")
+
+        # Add columns for any other sectors that are not in the sfc
+        for sector in self.parameters.hyper["sectors"]:
+            if sector not in bs.columns:
+                bs[sector] = 0
+
+        # Sort the columns by the order of the sectors
+        bs = bs[self.parameters.hyper["sectors"]]
+
+        # Add the total column to the end
+        bs["Total"] = 0
+
+        if time_notation:
+            bs = bs.map(lambda x: f"{x}(t)" if x != 0 else x)
+
+        if mathfmt == "sphinx":
+            bs = bs.map(lambda x: r":math:`" + str(x) + r"`")
+        elif mathfmt in ["myst", "latex"]:
+            bs = bs.map(lambda x: r"$" + str(x) + r"$")
+        else:
+            raise ValueError(f"Invalid math format: {mathfmt}")
+
+        return bs
+
+    def balance_sheet_actual(self):
+        """Calculate the actual balance sheet of the model."""
+        raise NotImplementedError("Not implemented yet")
+
+    def transaction_matrix_theoretical(
+        self,
+        time_notation: bool = False,
+        mathfmt: str = "sphinx",
+        non_camel_case: bool = False,
+    ):
+        """Calculate the theoretical transaction matrix of the model based on the
+        information in the info dictionary.
+
+        Parameters
+        ----------
+        time_notation: bool
+            Whether to add a time index to the transaction matrix.
+        sphinx_math: bool
+            The format to use for the math. Can be "sphinx", "myst", or "latex".
+        non_camel_case: bool
+            Whether to convert variable names to non-camel case.
+
+        Returns
+        -------
+        pd.DataFrame
+            A DataFrame containing the theoretical balance sheet of the model.
+        """
+        if not self.verify_sfc_info():
+            raise ValueError("SFC information is not complete")
+
+        # Get all the flows
+        flows = {
+            k: v["sfc"]
+            for k, v in self.info.items()
+            if v["sfc"][0][0].lower() in ["inflow", "outflow"]
+        }
+
+        # Get all the stocks
+        stocks = {
+            k: v["sfc"]
+            for k, v in self.info.items()
+            if v["sfc"][0][0].lower() in ["asset", "liability"]
+        }
+
+        tm = {}
+        # Capture the flows
+        for k, v in flows.items():
+            for kind, sector in v:
+                if non_camel_case:
+                    item = re.sub(r"([A-Z])", r" \1", k)
+                else:
+                    item = k
+
+                if item not in tm:
+                    tm[item] = {}
+
+                if kind.lower() == "inflow":
+                    tm[item][sector] = f"+{self.info[k]['notation']}"
+                elif kind.lower() == "outflow":
+                    tm[item][sector] = f"-{self.info[k]['notation']}"
+
+        # Capture the change in stocks
+        for k, v in stocks.items():
+            for kind, sector in v:
+                if non_camel_case:
+                    item = re.sub(r"([A-Z])", r" \1", k.replace(sector, ""))
+                    item = f"Change in {item}"
+                else:
+                    item = f"Change in {k.replace(sector, '')}"
+
+                if item not in tm:
+                    tm[item] = {}
+
+                if kind.lower() == "asset":
+                    tm[item][sector] = r"-\Delta " + self.info[k]["notation"]
+                elif kind.lower() == "liability":
+                    tm[item][sector] = r"+\Delta " + self.info[k]["notation"]
+
+        tm = pd.DataFrame.from_dict(tm, orient="index").fillna(0)
+
+        # Add columns for any other sectors that are not in the sfc
+        for sector in self.parameters.hyper["sectors"]:
+            if sector not in tm.columns:
+                tm[sector] = 0
+
+        # Sort the columns by the order of the sectors
+        tm = tm[self.parameters.hyper["sectors"]]
+
+        # Add the total column to the end
+        tm["Total"] = 0
+
+        # Add total row
+        tm.loc["Total"] = 0
+
+        if time_notation:
+            tm = tm.map(lambda x: f"{x}(t)" if x != 0 else x)
+
+        if mathfmt == "sphinx":
+            tm = tm.map(lambda x: r":math:`" + str(x) + r"`")
+        elif mathfmt in ["myst", "latex"]:
+            tm = tm.map(lambda x: r"$" + str(x) + r"$")
+        else:
+            raise ValueError(f"Invalid math format: {mathfmt}")
+
+        return tm
+
+    def transaction_matrix_actual(self):
+        """Calculate the actual transaction matrix of the model."""
+        raise NotImplementedError("Not implemented yet")
+
+    def compare(self, other: Self | pd.DataFrame):
+        """Compare the variables to another Variables object or DataFrame.
+
+        Parameters
+        ----------
+        other: pd.DataFrame
+            The DataFrame to compare the variables to.
+        """
+        if isinstance(other, Variables):
+            other = other.to_pandas()
+
+        df = self.to_pandas()
+
+        # Compare columns and indices
+        logger.info(f"Columns that don't match: {set(df.columns) - set(other.columns)}")
+        logger.info(f"Indices that don't match: {set(df.index) - set(other.index)}")
+
+        # Compare values
+        diff = df.sub(other)
+        rel_diff = df.sub(other).div(other).mul(100)
+        rel_diff = rel_diff[other != 0]
+
+        return diff, rel_diff
 
     @classmethod
     def from_excel(cls, file_path: os.PathLike, *args, **kwargs):
@@ -123,17 +304,73 @@ class Variables:
         model class, and it should return a dictionary with the variable names
         as keys and the variable information as values. The variable information
         should contain at least the following keys:
-        - "history": int
-            The number of periods that the variable requires information from.
+        - "history": int - The number of periods that the variable requires information from.
+        - "sectors": list - The sectors that the variable is associated with.
+        - "unit": str - The unit of the variable.
+        - "notation": str - The notation of the variable.
         """
         return {}
+
+    def info_to_csv(self, file_path: str, sphinx_math: bool = False):
+        """Convert the variables information to a CSV file.
+
+        Parameters
+        ----------
+        file_path: str
+            The path to the CSV file to save the variables information to.
+        sphinx_math: bool
+            Whether to add a ":math:" marker to the notation column, e.g. for
+            usage in the documentation
+        """
+        df = pd.DataFrame.from_dict(self.info, orient="index")
+        df["sectors"] = df["sectors"].apply(lambda x: ", ".join(x))
+        df["history"] = df["history"].astype(int)
+        if sphinx_math:
+            df["notation"] = df["notation"].apply(lambda x: r":math:`" + x + r"`")
+        df.columns = [i.title() for i in df.columns]
+        df.to_csv(file_path)
+
+    def initialize_tensors(self, t: int, **kwargs):
+        """Initialize the output tensors, creating two different dictionaries.
+        First, a dictionary for the state variables (i.e. those that require
+        only t-1 information, but no history) and second a dictionary for the
+        history variables (i.e. those that require information from further
+        previous periods). This distinction is important for PyTorch based
+        simulations to reduce memory usage.
+
+        Parameters
+        ----------
+        t: int
+            The number of periods to initialize the tensors for.
+        """
+        # State variables (only t-1 information)
+        state_vars = self.new_state(**kwargs)
+
+        # History variables (v["history"] rows)
+        self.history = {}
+        for k, v in self.info.items():
+            if "history" in v and v["history"] > 0:
+                self.history[k] = []
+
+        # Initialize the timeseries
+        self.timeseries = {}
+        for k, v in self.info.items():
+            if "sectors" in v and len(v["sectors"]) > 0:
+                self.timeseries[k] = torch.zeros(t, len(v["sectors"]))
+            else:
+                self.timeseries[k] = torch.zeros(t, 1)
+
+        return state_vars, self.history
 
     def new_state(self, **kwargs):
         """Initialize the state variables for the given period."""
 
         state = {}
         for k, v in self.info.items():
-            state[k] = torch.zeros(len(v["sectors"]), **kwargs)
+            if "sectors" in v and len(v["sectors"]) > 0:
+                state[k] = torch.zeros(len(v["sectors"]), **kwargs)
+            else:
+                state[k] = torch.zeros(1, **kwargs)
 
         return state
 
@@ -216,6 +453,62 @@ class Variables:
         dicts = {k: v.tolist() for k, v in self.timeseries.items()}
         with open(file_path, "w") as file:
             json.dump(dicts, file)
+
+    def to_pandas(self):
+        """Convert the variables to a pandas DataFrame."""
+        df = pd.concat({k: pd.DataFrame(v) for k, v in self.timeseries.items()}, axis=1)
+        return df
+
+    def verify_sfc_info(self):
+        """Verify that the sfc information in the info dictionary is complete.
+
+        This function checks first whether there is an sfc entry in the info
+        dictionary for each variable. If there is, it then checks whether the
+        sfc information makes sense, i.e. if they are flows they should have
+        and "inflow" and "outflow" tuple in the list, otherwise they should
+        contain at least one tuple with the first element being either "index",
+        "asset" or "liability".
+        """
+        for k, v in self.info.items():
+
+            if "sfc" not in v:
+                logger.warning(f"No SFC information for {k}")
+                return False
+
+            if isinstance(v["sfc"], tuple):
+                if not self._verify_sfc_item(v["sfc"], k):
+                    return False
+            elif isinstance(v["sfc"], list):
+                for sfc in v["sfc"]:
+                    if not self._verify_sfc_item(sfc, k):
+                        return False
+            else:
+                logger.warning(f"Sfc information for {k} is not a list or tuple")
+                return False
+
+        return True
+
+    def _verify_sfc_item(self, sfc: tuple, key: str):
+        """Verify that an sfc item is valid by checking the first element is
+        an accepted stock/flow/index type and that there are two elements in
+        the tuple.
+
+        Parameters
+        ----------
+        sfc: tuple
+            The sfc item to verify.
+        key: str
+            The key of the variable.
+        """
+        if sfc[0].lower() not in ["inflow", "outflow", "index", "asset", "liability"]:
+            logger.warning(f"sfc information for {key} is not a valid item")
+            return False
+        if len(sfc) != 2:
+            logger.warning(
+                f"sfc information for {key} is not a valid tuple of length 2: {sfc}"
+            )
+            return False
+        return True
 
 
 if __name__ == "__main__":

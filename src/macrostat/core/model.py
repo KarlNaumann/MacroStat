@@ -77,19 +77,19 @@ class Model:
             directory.
         """
         # Essential attributes
-        if not isinstance(parameters, Parameters):
+        if isinstance(parameters, dict):
             self.parameters = Parameters(
                 parameters=parameters, hyperparameters=hyperparameters
             )
         else:
             self.parameters = parameters
 
-        if not isinstance(scenarios, Scenarios):
+        if isinstance(scenarios, dict):
             self.scenarios = Scenarios(parameters=self.parameters, scenarios=scenarios)
         else:
             self.scenarios = scenarios
 
-        if not isinstance(variables, Variables):
+        if isinstance(variables, dict):
             self.variables = Variables(parameters=self.parameters, variables=variables)
         else:
             self.variables = variables
@@ -149,7 +149,7 @@ class Model:
         with open(path, "wb") as f:
             pickle.dump(self, f)
 
-    def simulate(self, scenario: int = 0, *args, **kwargs):
+    def simulate(self, scenario: int | str = 0, *args, **kwargs):
         """Simulate the model.
 
         Parameters
@@ -158,13 +158,17 @@ class Model:
             The scenario to use for the model run, defaults to 0, which
             represents the default scenario (no shocks).
         """
+        if isinstance(scenario, str):
+            scenario = self.scenarios.get_scenario_index(scenario)
+
         logging.info(f"Starting simulation. Scenario: {scenario}")
         behavior = self.behavior(
             self.parameters,
             self.scenarios,
             self.variables,
-            record=True,
             scenario=scenario,
+            *args,
+            **kwargs,
         )
         with torch.no_grad():
             return behavior.forward(*args, **kwargs)
