@@ -42,6 +42,8 @@ class GL06SIM(Model):
         scenarios: ScenariosGL06SIM | None
             The scenarios of the model. If None, default scenarios will be used.
         """
+        if parameters is None:
+            parameters = ParametersGL06SIM()
         if variables is None:
             variables = VariablesGL06SIM(parameters=parameters)
         if scenarios is None:
