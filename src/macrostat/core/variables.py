@@ -10,6 +10,7 @@ __maintainer__ = ["Karl Naumann-Woleske"]
 import json
 import logging
 import os
+import re
 from typing import Self
 
 import pandas as pd
@@ -62,6 +63,189 @@ class Variables:
             self.info = variable_info
 
         self.timeseries = timeseries
+
+    def balance_sheet_theoretical(
+        self,
+        time_notation: bool = False,
+        mathfmt: str = "sphinx",
+        non_camel_case: bool = False,
+    ):
+        """Calculate the theoretical balance sheet of the model based on the
+        information in the info dictionary.
+
+        Parameters
+        ----------
+        time_notation: bool
+            Whether to add a time index to the balance sheet.
+        mathfmt: str
+            The format to use for the math. Can be "sphinx", "myst", or "latex".
+        non_camel_case: bool
+            Whether to convert variable names to non-camel case.
+
+        Returns
+        -------
+        pd.DataFrame
+            A DataFrame containing the theoretical balance sheet of the model.
+        """
+        if not self.verify_sfc_info():
+            raise ValueError("SFC information is not complete")
+
+        sfc = {
+            k: v["sfc"]
+            for k, v in self.info.items()
+            if v["sfc"][0][0].lower() in ["asset", "liability"]
+        }
+
+        bs = {}
+        for k, v in sfc.items():
+            for kind, sector in v:
+                if non_camel_case:
+                    item = re.sub(r"([A-Z])", r" \1", k.replace(sector, ""))
+                else:
+                    item = k.replace(sector, "")
+
+                if item not in bs:
+                    bs[item] = {}
+
+                if kind.lower() == "asset":
+                    bs[item][sector] = f"+{self.info[k]['notation']}"
+                elif kind.lower() == "liability":
+                    bs[item][sector] = f"-{self.info[k]['notation']}"
+
+        bs = pd.DataFrame.from_dict(bs, orient="index")
+
+        # Add columns for any other sectors that are not in the sfc
+        for sector in self.parameters.hyper["sectors"]:
+            if sector not in bs.columns:
+                bs[sector] = 0
+
+        # Sort the columns by the order of the sectors
+        bs = bs[self.parameters.hyper["sectors"]]
+
+        # Add the total column to the end
+        bs["Total"] = 0
+
+        if time_notation:
+            bs = bs.map(lambda x: f"{x}(t)" if x != 0 else x)
+
+        if mathfmt == "sphinx":
+            bs = bs.map(lambda x: r":math:`" + str(x) + r"`")
+        elif mathfmt in ["myst", "latex"]:
+            bs = bs.map(lambda x: r"$" + str(x) + r"$")
+        else:
+            raise ValueError(f"Invalid math format: {mathfmt}")
+
+        return bs
+
+    def balance_sheet_actual(self):
+        """Calculate the actual balance sheet of the model."""
+        raise NotImplementedError("Not implemented yet")
+
+    def transaction_matrix_theoretical(
+        self,
+        time_notation: bool = False,
+        mathfmt: str = "sphinx",
+        non_camel_case: bool = False,
+    ):
+        """Calculate the theoretical transaction matrix of the model based on the
+        information in the info dictionary.
+
+        Parameters
+        ----------
+        time_notation: bool
+            Whether to add a time index to the transaction matrix.
+        sphinx_math: bool
+            The format to use for the math. Can be "sphinx", "myst", or "latex".
+        non_camel_case: bool
+            Whether to convert variable names to non-camel case.
+
+        Returns
+        -------
+        pd.DataFrame
+            A DataFrame containing the theoretical balance sheet of the model.
+        """
+        if not self.verify_sfc_info():
+            raise ValueError("SFC information is not complete")
+
+        # Get all the flows
+        flows = {
+            k: v["sfc"]
+            for k, v in self.info.items()
+            if v["sfc"][0][0].lower() in ["inflow", "outflow"]
+        }
+
+        # Get all the stocks
+        stocks = {
+            k: v["sfc"]
+            for k, v in self.info.items()
+            if v["sfc"][0][0].lower() in ["asset", "liability"]
+        }
+
+        tm = {}
+        # Capture the flows
+        for k, v in flows.items():
+            for kind, sector in v:
+                if non_camel_case:
+                    item = re.sub(r"([A-Z])", r" \1", k)
+                else:
+                    item = k
+
+                if item not in tm:
+                    tm[item] = {}
+
+                if kind.lower() == "inflow":
+                    tm[item][sector] = f"+{self.info[k]['notation']}"
+                elif kind.lower() == "outflow":
+                    tm[item][sector] = f"-{self.info[k]['notation']}"
+
+        # Capture the change in stocks
+        for k, v in stocks.items():
+            for kind, sector in v:
+                if non_camel_case:
+                    item = re.sub(r"([A-Z])", r" \1", k.replace(sector, ""))
+                    item = f"Change in {item}"
+                else:
+                    item = f"Change in {k.replace(sector, '')}"
+
+                if item not in tm:
+                    tm[item] = {}
+
+                if kind.lower() == "asset":
+                    tm[item][sector] = r"-\Delta " + self.info[k]["notation"]
+                elif kind.lower() == "liability":
+                    tm[item][sector] = r"+\Delta " + self.info[k]["notation"]
+
+        tm = pd.DataFrame.from_dict(tm, orient="index").fillna(0)
+
+        # Add columns for any other sectors that are not in the sfc
+        for sector in self.parameters.hyper["sectors"]:
+            if sector not in tm.columns:
+                tm[sector] = 0
+
+        # Sort the columns by the order of the sectors
+        tm = tm[self.parameters.hyper["sectors"]]
+
+        # Add the total column to the end
+        tm["Total"] = 0
+
+        # Add total row
+        tm.loc["Total"] = 0
+
+        if time_notation:
+            tm = tm.map(lambda x: f"{x}(t)" if x != 0 else x)
+
+        if mathfmt == "sphinx":
+            tm = tm.map(lambda x: r":math:`" + str(x) + r"`")
+        elif mathfmt in ["myst", "latex"]:
+            tm = tm.map(lambda x: r"$" + str(x) + r"$")
+        else:
+            raise ValueError(f"Invalid math format: {mathfmt}")
+
+        return tm
+
+    def transaction_matrix_actual(self):
+        """Calculate the actual transaction matrix of the model."""
+        raise NotImplementedError("Not implemented yet")
 
     def compare(self, other: Self | pd.DataFrame):
         """Compare the variables to another Variables object or DataFrame.
@@ -274,6 +458,57 @@ class Variables:
         """Convert the variables to a pandas DataFrame."""
         df = pd.concat({k: pd.DataFrame(v) for k, v in self.timeseries.items()}, axis=1)
         return df
+
+    def verify_sfc_info(self):
+        """Verify that the sfc information in the info dictionary is complete.
+
+        This function checks first whether there is an sfc entry in the info
+        dictionary for each variable. If there is, it then checks whether the
+        sfc information makes sense, i.e. if they are flows they should have
+        and "inflow" and "outflow" tuple in the list, otherwise they should
+        contain at least one tuple with the first element being either "index",
+        "asset" or "liability".
+        """
+        for k, v in self.info.items():
+
+            if "sfc" not in v:
+                logger.warning(f"No SFC information for {k}")
+                return False
+
+            if isinstance(v["sfc"], tuple):
+                if not self._verify_sfc_item(v["sfc"], k):
+                    return False
+            elif isinstance(v["sfc"], list):
+                for sfc in v["sfc"]:
+                    if not self._verify_sfc_item(sfc, k):
+                        return False
+            else:
+                logger.warning(f"Sfc information for {k} is not a list or tuple")
+                return False
+
+        return True
+
+    def _verify_sfc_item(self, sfc: tuple, key: str):
+        """Verify that an sfc item is valid by checking the first element is
+        an accepted stock/flow/index type and that there are two elements in
+        the tuple.
+
+        Parameters
+        ----------
+        sfc: tuple
+            The sfc item to verify.
+        key: str
+            The key of the variable.
+        """
+        if sfc[0].lower() not in ["inflow", "outflow", "index", "asset", "liability"]:
+            logger.warning(f"sfc information for {key} is not a valid item")
+            return False
+        if len(sfc) != 2:
+            logger.warning(
+                f"sfc information for {key} is not a valid tuple of length 2: {sfc}"
+            )
+            return False
+        return True
 
 
 if __name__ == "__main__":
