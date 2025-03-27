@@ -30,7 +30,7 @@ if __name__ == "__main__":
             ".. csv-table::",
             "\t:file: parameters.csv",
             "\t:header-rows: 1",
-            "\n",
+            "\n\n",
         ]
 
         with open(f"{modeldir}/parameters.rst", "w") as f:
@@ -49,7 +49,7 @@ if __name__ == "__main__":
             ".. csv-table::",
             "\t:file: variables.csv",
             "\t:header-rows: 1",
-            "\n",
+            "\n\n",
         ]
 
         with open(f"{modeldir}/variables.rst", "w") as f:

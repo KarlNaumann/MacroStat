@@ -10,4 +10,5 @@ Contents
 .. toctree::
    :maxdepth: 3
 
+   Core Structure <core>
    Godley & Lavoie (2006) <GL06/index>

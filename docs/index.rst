@@ -12,7 +12,6 @@ Contents
    :maxdepth: 2
 
    Overview <readme>
-   User Guide <userguide/index>
    Models <models/index>
    Contributing <contributing>
    License <license>
