@@ -77,4 +77,5 @@ class ParametersGL06SIMEX(Parameters):
         hyperparameters = super().get_default_hyperparameters()
         hyperparameters["timesteps"] = 100
         hyperparameters["timesteps_initialization"] = 1
+        hyperparameters["sectors"] = ["Household", "Production", "Government"]
         return hyperparameters

@@ -42,6 +42,8 @@ class GL06SIMEX(Model):
         scenarios: ScenariosGL06SIMEX | None
             The scenarios of the model. If None, default scenarios will be used.
         """
+        if parameters is None:
+            parameters = ParametersGL06SIMEX()
         if variables is None:
             variables = VariablesGL06SIMEX(parameters=parameters)
         if scenarios is None:
