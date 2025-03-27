@@ -16,7 +16,7 @@ if __name__ == "__main__":
         subdir = modelname if len(group) == 0 else f"{group[0]}/{modelname}"
         modeldir = f"{args.docdir}/models/{subdir}"
 
-        print("  - Creating Parameters")
+        print("  - Creating Parameter table")
         model_classes = get_model_classes(modelname=modelname)
         parameters = model_classes.Parameters()
         parameters.to_csv(f"{modeldir}/parameters.csv", sphinx_math=True)
@@ -36,7 +36,7 @@ if __name__ == "__main__":
         with open(f"{modeldir}/parameters.rst", "w") as f:
             f.write("\n".join(rst))
 
-        print("  - Creating Variables")
+        print("  - Creating Variables table")
         variables = model_classes.Variables()
         variables.info_to_csv(f"{modeldir}/variables.csv", sphinx_math=True)
 
@@ -54,3 +54,15 @@ if __name__ == "__main__":
 
         with open(f"{modeldir}/variables.rst", "w") as f:
             f.write("\n".join(rst))
+
+        print("  - Creating Balance Sheet table")
+        balance_sheet = variables.balance_sheet_theoretical(
+            time_notation=True, mathfmt="myst", non_camel_case=True
+        )
+        balance_sheet.to_csv(f"{modeldir}/balance_sheet.csv")
+
+        print("  - Creating Transaction Matrix table")
+        transaction_matrix = variables.transaction_matrix_theoretical(
+            time_notation=True, mathfmt="myst", non_camel_case=True
+        )
+        transaction_matrix.to_csv(f"{modeldir}/transaction_matrix.csv")
