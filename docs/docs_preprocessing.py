@@ -30,11 +30,10 @@ if __name__ == "__main__":
             ".. csv-table::",
             "\t:file: parameters.csv",
             "\t:header-rows: 1",
-            "\n\n",
         ]
 
         with open(f"{modeldir}/parameters.rst", "w") as f:
-            f.write("\n".join(rst))
+            f.write("\n".join(rst) + "\n")
 
         print("  - Creating Variables table")
         variables = model_classes.Variables()
@@ -49,11 +48,10 @@ if __name__ == "__main__":
             ".. csv-table::",
             "\t:file: variables.csv",
             "\t:header-rows: 1",
-            "\n\n",
         ]
 
         with open(f"{modeldir}/variables.rst", "w") as f:
-            f.write("\n".join(rst))
+            f.write("\n".join(rst) + "\n")
 
         print("  - Creating Balance Sheet table")
         balance_sheet = variables.balance_sheet_theoretical(
