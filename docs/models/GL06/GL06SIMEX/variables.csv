@@ -1,16 +1,17 @@
-,Notation,Unit,History,Sectors
-ConsumptionDemand,:math:`C_d`,MU,0,Household
-ConsumptionSupply,:math:`C_s`,MU,0,Household
-GovernmentDemand,:math:`G_d`,MU,0,Government
-GovernmentSupply,:math:`G_s`,MU,0,Household
-TaxSupply,:math:`T_s`,MU,0,Household
-TaxDemand,:math:`T_d`,MU,0,Government
-LabourSupply,:math:`N_s`,MU,0,Household
-LabourDemand,:math:`N_d`,MU,0,Household
-DisposableIncome,:math:`YD`,MU,0,Household
-ExpectedDisposableIncome,:math:`YD^e`,MU,0,Household
-Wages,:math:`W`,MU,0,Household
-GovernmentMoneyStock,:math:`H_s`,MU,0,Government
-HouseholdMoneyDemand,:math:`H_d`,MU,0,Household
-HouseholdMoneyStock,:math:`H_h`,MU,0,Household
-NationalIncome,:math:`Y`,MU,0,Macroeconomy
+,Notation,Unit,History,Sectors,Sfc
+ConsumptionDemand,:math:`C_d`,USD,0,Household,"[('Index', 'Household')]"
+ConsumptionSupply,:math:`C_s`,USD,0,Household,"[('Inflow', 'Production'), ('Outflow', 'Household')]"
+GovernmentDemand,:math:`G_d`,USD,0,Government,"[('Index', 'Government')]"
+GovernmentSupply,:math:`G_s`,USD,0,Household,"[('Inflow', 'Production'), ('Outflow', 'Government')]"
+TaxDemand,:math:`T_d`,USD,0,Government,"[('Index', 'Government')]"
+TaxSupply,:math:`T_s`,USD,0,Household,"[('Outflow', 'Household'), ('Inflow', 'Government')]"
+LabourDemand,:math:`N_d`,USD,0,Household,"[('Index', 'Production')]"
+LabourSupply,:math:`N_s`,USD,0,Household,"[('Index', 'Household')]"
+LabourEarnings,:math:`W\cdot N_s`,USD,0,Household,"[('Inflow', 'Household'), ('Outflow', 'Production')]"
+DisposableIncome,:math:`YD`,USD,0,Household,"[('Index', 'Household')]"
+ExpectedDisposableIncome,:math:`YD^e`,MU,0,Household,"[('Index', 'Household')]"
+Wages,:math:`W`,USD,0,Household,"[('Index', 'Household')]"
+GovernmentMoneyStock,:math:`H_s`,USD,0,Government,"[('Liability', 'Government')]"
+HouseholdMoneyDemand,:math:`H_d`,MU,0,Household,"[('Index', 'Household')]"
+HouseholdMoneyStock,:math:`H_h`,MU,0,Household,"[('Asset', 'Household')]"
+NationalIncome,:math:`Y`,MU,0,Macroeconomy,"[('Index', 'Macroeconomy')]"
