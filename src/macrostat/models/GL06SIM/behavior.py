@@ -126,6 +126,7 @@ class BehaviorGL06SIM(Behavior):
         self.labour_supply(t, scenario)
         self.tax_demand(t, scenario)
         self.tax_supply(t, scenario)
+        self.labour_income(t, scenario)
         self.disposable_income(t, scenario)
         self.consumption_demand(t, scenario)
         self.consumption_supply(t, scenario)
@@ -284,6 +285,35 @@ class BehaviorGL06SIM(Behavior):
         """
         self.state["TaxSupply"] = self.state["TaxDemand"]
 
+    def labour_income(self, t: torch.tensor, scenario: dict):
+        r"""The labour income is the wage rate times the labour supply. This is
+        an intermediate variable used to calculate the disposable income, but is
+        computed explicitly here to compute the transaction flows.
+
+        Parameters
+        ----------
+        t : torch.tensor
+            Current time step
+        scenario : dict
+            Scenario dictionary
+
+        Equations
+        ---------
+        .. math::
+            W(t) N_s(t)
+
+        Dependency
+        ----------
+        - scenario: WageRate
+        - state: LabourSupply
+
+        Sets
+        -----
+        - LabourIncome
+
+        """
+        self.state["LabourIncome"] = scenario["WageRate"] * self.state["LabourSupply"]
+
     def disposable_income(self, t: torch.tensor, scenario: dict):
         r"""The disposable income is the wage bill minus the taxes.
         Equation (3.5) in the book.
@@ -301,8 +331,7 @@ class BehaviorGL06SIM(Behavior):
 
         Dependency
         ----------
-        - scenario: WageRate
-        - state: LabourSupply
+        - state: LabourIncome
         - state: TaxSupply
 
         Sets
@@ -311,7 +340,7 @@ class BehaviorGL06SIM(Behavior):
 
         """
         self.state["DisposableIncome"] = (
-            scenario["WageRate"] * self.state["LabourSupply"] - self.state["TaxSupply"]
+            self.state["LabourIncome"] - self.state["TaxSupply"]
         )
 
     def consumption_demand(self, t: torch.tensor, scenario: dict):
