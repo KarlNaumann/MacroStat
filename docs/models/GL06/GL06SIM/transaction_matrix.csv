@@ -1,7 +1,8 @@
 ,Household,Production,Government,Total
- Consumption Supply,$-C_s(t)$,$+C_s(t)$,$0$,$0$
- Government Supply,$0$,$+G_s(t)$,$-G_s(t)$,$0$
- Labour Earnings,$+W\cdot N_s(t)$,$-W\cdot N_s(t)$,$0$,$0$
- Tax Supply,$-T_s(t)$,$0$,$+T_s(t)$,$0$
-Change in  Money Stock,$-\Delta H_h(t)$,$0$,$+\Delta H_s(t)$,$0$
+,Current,Current,Current,
+Consumption Supply,$-C_s(t)$,$+C_s(t)$,,$0$
+Government Supply,,$+G_s(t)$,$-G_s(t)$,$0$
+Tax Supply,$-T_s(t)$,,$+T_s(t)$,$0$
+Labour Earnings,$+W(t)\cdot N_s(t)$,$-W(t)\cdot N_s(t)$,,$0$
+Change in Money Stock,$-\Delta H_h(t)$,,$+\Delta H_s(t)$,$0$
 Total,$0$,$0$,$0$,$0$

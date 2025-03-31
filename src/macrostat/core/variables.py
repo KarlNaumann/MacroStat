@@ -66,7 +66,6 @@ class Variables:
 
     def balance_sheet_theoretical(
         self,
-        time_notation: bool = False,
         mathfmt: str = "sphinx",
         non_camel_case: bool = False,
     ):
@@ -75,8 +74,6 @@ class Variables:
 
         Parameters
         ----------
-        time_notation: bool
-            Whether to add a time index to the balance sheet.
         mathfmt: str
             The format to use for the math. Can be "sphinx", "myst", or "latex".
         non_camel_case: bool
@@ -90,23 +87,30 @@ class Variables:
         if not self.verify_sfc_info():
             raise ValueError("SFC information is not complete")
 
-        sfc = {
+        # Get all the stocks
+        stocks = {
             k: v["sfc"]
             for k, v in self.info.items()
             if v["sfc"][0][0].lower() in ["asset", "liability"]
         }
 
         bs = {}
-        for k, v in sfc.items():
+        for k, v in stocks.items():
             for kind, sector in v:
-                if not isinstance(sector, tuple):
-                    sector = (sector, "current")
 
+                # Set the default balance sheet section to "Current"
+                if isinstance(sector, list):
+                    sector = tuple(sector)
+                elif not isinstance(sector, tuple):
+                    sector = (sector, "Current")
+
+                # Convert variable name to non-camel case if requested
                 if non_camel_case:
-                    item = re.sub(r"([A-Z])", r" \1", k.replace(sector[0], ""))
+                    item = re.sub(r"([A-Z])", r" \1", k.replace(sector[0], "")).strip()
                 else:
                     item = k.replace(sector[0], "")
 
+                # Add the item to the balance sheet
                 if item not in bs:
                     bs[item] = {}
 
@@ -115,28 +119,24 @@ class Variables:
                 elif kind.lower() == "liability":
                     bs[item][sector] = f"-{self.info[k]['notation']}"
 
+        # Maintain the order of stocks
+        order = list(bs.keys())
         bs = pd.DataFrame.from_dict(bs, orient="index")
+        bs = bs.loc[order]
 
         # Add columns for any other sectors that are not in the sfc
         for sector in self.parameters.hyper["sectors"]:
             if sector not in bs.columns:
-                bs[(sector, "current")] = 0
+                bs[(sector, "Current")] = None
 
         # Sort the columns by the order of the sectors
         bs = bs[self.parameters.hyper["sectors"]]
 
+        # Apply the math format
+        bs = self._apply_math_format(bs, mathfmt)
+
         # Add the total column to the end
         bs["Total"] = 0
-
-        if time_notation:
-            bs = bs.map(lambda x: f"{x}(t)" if x != 0 else x)
-
-        if mathfmt == "sphinx":
-            bs = bs.map(lambda x: r":math:`" + str(x) + r"`")
-        elif mathfmt in ["myst", "latex"]:
-            bs = bs.map(lambda x: r"$" + str(x) + r"$")
-        else:
-            raise ValueError(f"Invalid math format: {mathfmt}")
 
         return bs
 
@@ -146,7 +146,6 @@ class Variables:
 
     def transaction_matrix_theoretical(
         self,
-        time_notation: bool = False,
         mathfmt: str = "sphinx",
         non_camel_case: bool = False,
     ):
@@ -155,9 +154,7 @@ class Variables:
 
         Parameters
         ----------
-        time_notation: bool
-            Whether to add a time index to the transaction matrix.
-        sphinx_math: bool
+        mathfmt: str
             The format to use for the math. Can be "sphinx", "myst", or "latex".
         non_camel_case: bool
             Whether to convert variable names to non-camel case.
@@ -188,17 +185,24 @@ class Variables:
         # Capture the flows
         for k, v in flows.items():
             for kind, sector in v:
-                if not isinstance(sector, tuple):
-                    sector = (sector, "current")
 
+                # Set the default balance sheet section to "Current"
+                if isinstance(sector, list):
+                    sector = tuple(sector)
+                elif not isinstance(sector, tuple):
+                    sector = (sector, "Current")
+
+                # Convert variable name to non-camel case if requested
                 if non_camel_case:
-                    item = re.sub(r"([A-Z])", r" \1", k)
+                    item = re.sub(r"([A-Z])", r" \1", k).strip()
                 else:
                     item = k
 
+                # Add the item to the transaction matrix
                 if item not in tm:
                     tm[item] = {}
 
+                # Add item to the transaction matrix
                 if kind.lower() == "inflow":
                     tm[item][sector] = f"+{self.info[k]['notation']}"
                 elif kind.lower() == "outflow":
@@ -207,32 +211,47 @@ class Variables:
         # Capture the change in stocks
         for k, v in stocks.items():
             for kind, sector in v:
-                if not isinstance(sector, tuple):
-                    sector = (sector, "current")
 
+                # Set the default balance sheet section to "Current"
+                if isinstance(sector, list):
+                    sector = tuple(sector)
+                elif not isinstance(sector, tuple):
+                    sector = (sector, "Current")
+
+                # Change in wealth is not considered a flow
+                if "wealth" in k.lower():
+                    continue
+
+                # Convert variable name to non-camel case if requested
                 if non_camel_case:
-                    item = re.sub(r"([A-Z])", r" \1", k.replace(sector[0], ""))
+                    item = re.sub(r"([A-Z])", r" \1", k.replace(sector[0], "")).strip()
                     item = f"Change in {item}"
                 else:
                     item = f"Change in {k.replace(sector[0], '')}"
 
+                # Add the item to the transaction matrix
                 if item not in tm:
                     tm[item] = {}
 
+                # Add item to the transaction matrix, increases are outflows
+                # and decreases are inflows
                 if kind.lower() == "asset":
                     tm[item][sector] = r"-\Delta " + self.info[k]["notation"]
                 elif kind.lower() == "liability":
                     tm[item][sector] = r"+\Delta " + self.info[k]["notation"]
 
-        tm = pd.DataFrame.from_dict(tm, orient="index").fillna(0)
+        # Maintain the order of flows then changes in stocks
+        order = list(tm.keys())
+        tm = pd.DataFrame.from_dict(tm, orient="index")
+        tm = tm.loc[order]
 
         # Add columns for any other sectors that are not in the sfc
         for sector in self.parameters.hyper["sectors"]:
             if sector not in tm.columns:
-                tm[sector] = 0
+                tm[(sector, "Current")] = None
 
         # Sort the columns by the order of the sectors
-        tm = tm[self.parameters.hyper["sectors"]]
+        tm = tm.loc[:, self.parameters.hyper["sectors"]]
 
         # Add the total column to the end
         tm["Total"] = 0
@@ -240,15 +259,8 @@ class Variables:
         # Add total row
         tm.loc["Total"] = 0
 
-        if time_notation:
-            tm = tm.map(lambda x: f"{x}(t)" if x != 0 else x)
-
-        if mathfmt == "sphinx":
-            tm = tm.map(lambda x: r":math:`" + str(x) + r"`")
-        elif mathfmt in ["myst", "latex"]:
-            tm = tm.map(lambda x: r"$" + str(x) + r"$")
-        else:
-            raise ValueError(f"Invalid math format: {mathfmt}")
+        # Apply the math format
+        tm = self._apply_math_format(tm, mathfmt)
 
         return tm
 
@@ -496,6 +508,23 @@ class Variables:
                 return False
 
         return True
+
+    @staticmethod
+    def _apply_math_format(df: pd.DataFrame, mathfmt: str):
+        """Apply a math format to a DataFrame."""
+        # Optionally wrap the notation in math mode
+        if mathfmt == "sphinx":
+            nonemask = df.isna()
+            df = df.map(lambda x: r":math:`" + str(x) + r"`")
+            df[nonemask] = ""
+        elif mathfmt in ["myst", "latex"]:
+            nonemask = df.isna()
+            df = df.map(lambda x: r"$" + str(x) + r"$")
+            df[nonemask] = ""
+        else:
+            raise ValueError(f"Invalid math format: {mathfmt}")
+
+        return df
 
     def _verify_sfc_item(self, sfc: tuple, key: str):
         """Verify that an sfc item is valid by checking the first element is
