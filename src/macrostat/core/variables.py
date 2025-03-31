@@ -99,10 +99,13 @@ class Variables:
         bs = {}
         for k, v in sfc.items():
             for kind, sector in v:
+                if not isinstance(sector, tuple):
+                    sector = (sector, "current")
+
                 if non_camel_case:
-                    item = re.sub(r"([A-Z])", r" \1", k.replace(sector, ""))
+                    item = re.sub(r"([A-Z])", r" \1", k.replace(sector[0], ""))
                 else:
-                    item = k.replace(sector, "")
+                    item = k.replace(sector[0], "")
 
                 if item not in bs:
                     bs[item] = {}
@@ -117,7 +120,7 @@ class Variables:
         # Add columns for any other sectors that are not in the sfc
         for sector in self.parameters.hyper["sectors"]:
             if sector not in bs.columns:
-                bs[sector] = 0
+                bs[(sector, "current")] = 0
 
         # Sort the columns by the order of the sectors
         bs = bs[self.parameters.hyper["sectors"]]
@@ -185,6 +188,9 @@ class Variables:
         # Capture the flows
         for k, v in flows.items():
             for kind, sector in v:
+                if not isinstance(sector, tuple):
+                    sector = (sector, "current")
+
                 if non_camel_case:
                     item = re.sub(r"([A-Z])", r" \1", k)
                 else:
@@ -201,11 +207,14 @@ class Variables:
         # Capture the change in stocks
         for k, v in stocks.items():
             for kind, sector in v:
+                if not isinstance(sector, tuple):
+                    sector = (sector, "current")
+
                 if non_camel_case:
-                    item = re.sub(r"([A-Z])", r" \1", k.replace(sector, ""))
+                    item = re.sub(r"([A-Z])", r" \1", k.replace(sector[0], ""))
                     item = f"Change in {item}"
                 else:
-                    item = f"Change in {k.replace(sector, '')}"
+                    item = f"Change in {k.replace(sector[0], '')}"
 
                 if item not in tm:
                     tm[item] = {}
