@@ -11,10 +11,10 @@ import json
 import logging
 import os
 import re
-from typing import Self
 
 import pandas as pd
 import torch
+from typing_extensions import Self
 
 from macrostat.core.parameters import Parameters
 
@@ -64,9 +64,12 @@ class Variables:
 
         self.timeseries = timeseries
 
+    ############################################################################
+    # Accounting Functions
+    ############################################################################
+
     def balance_sheet_theoretical(
         self,
-        time_notation: bool = False,
         mathfmt: str = "sphinx",
         non_camel_case: bool = False,
     ):
@@ -75,8 +78,6 @@ class Variables:
 
         Parameters
         ----------
-        time_notation: bool
-            Whether to add a time index to the balance sheet.
         mathfmt: str
             The format to use for the math. Can be "sphinx", "myst", or "latex".
         non_camel_case: bool
@@ -90,20 +91,29 @@ class Variables:
         if not self.verify_sfc_info():
             raise ValueError("SFC information is not complete")
 
-        sfc = {
+        # Get all the stocks
+        stocks = {
             k: v["sfc"]
             for k, v in self.info.items()
             if v["sfc"][0][0].lower() in ["asset", "liability"]
         }
 
         bs = {}
-        for k, v in sfc.items():
+        for k, v in stocks.items():
             for kind, sector in v:
-                if non_camel_case:
-                    item = re.sub(r"([A-Z])", r" \1", k.replace(sector, ""))
-                else:
-                    item = k.replace(sector, "")
+                # Set the default balance sheet section to "Current"
+                if isinstance(sector, list):
+                    sector = tuple(sector)
+                elif not isinstance(sector, tuple):
+                    sector = (sector, "Current")
 
+                # Convert variable name to non-camel case if requested
+                if non_camel_case:
+                    item = re.sub(r"([A-Z])", r" \1", k.replace(sector[0], "")).strip()
+                else:
+                    item = k.replace(sector[0], "")
+
+                # Add the item to the balance sheet
                 if item not in bs:
                     bs[item] = {}
 
@@ -112,28 +122,24 @@ class Variables:
                 elif kind.lower() == "liability":
                     bs[item][sector] = f"-{self.info[k]['notation']}"
 
+        # Maintain the order of stocks
+        order = list(bs.keys())
         bs = pd.DataFrame.from_dict(bs, orient="index")
+        bs = bs.loc[order]
 
         # Add columns for any other sectors that are not in the sfc
         for sector in self.parameters.hyper["sectors"]:
             if sector not in bs.columns:
-                bs[sector] = 0
+                bs[(sector, "Current")] = None
 
         # Sort the columns by the order of the sectors
         bs = bs[self.parameters.hyper["sectors"]]
 
+        # Apply the math format
+        bs = self._apply_math_format(bs, mathfmt)
+
         # Add the total column to the end
         bs["Total"] = 0
-
-        if time_notation:
-            bs = bs.map(lambda x: f"{x}(t)" if x != 0 else x)
-
-        if mathfmt == "sphinx":
-            bs = bs.map(lambda x: r":math:`" + str(x) + r"`")
-        elif mathfmt in ["myst", "latex"]:
-            bs = bs.map(lambda x: r"$" + str(x) + r"$")
-        else:
-            raise ValueError(f"Invalid math format: {mathfmt}")
 
         return bs
 
@@ -143,7 +149,6 @@ class Variables:
 
     def transaction_matrix_theoretical(
         self,
-        time_notation: bool = False,
         mathfmt: str = "sphinx",
         non_camel_case: bool = False,
     ):
@@ -152,9 +157,7 @@ class Variables:
 
         Parameters
         ----------
-        time_notation: bool
-            Whether to add a time index to the transaction matrix.
-        sphinx_math: bool
+        mathfmt: str
             The format to use for the math. Can be "sphinx", "myst", or "latex".
         non_camel_case: bool
             Whether to convert variable names to non-camel case.
@@ -185,14 +188,23 @@ class Variables:
         # Capture the flows
         for k, v in flows.items():
             for kind, sector in v:
+                # Set the default balance sheet section to "Current"
+                if isinstance(sector, list):
+                    sector = tuple(sector)
+                elif not isinstance(sector, tuple):
+                    sector = (sector, "Current")
+
+                # Convert variable name to non-camel case if requested
                 if non_camel_case:
-                    item = re.sub(r"([A-Z])", r" \1", k)
+                    item = re.sub(r"([A-Z])", r" \1", k).strip()
                 else:
                     item = k
 
+                # Add the item to the transaction matrix
                 if item not in tm:
                     tm[item] = {}
 
+                # Add item to the transaction matrix
                 if kind.lower() == "inflow":
                     tm[item][sector] = f"+{self.info[k]['notation']}"
                 elif kind.lower() == "outflow":
@@ -201,29 +213,46 @@ class Variables:
         # Capture the change in stocks
         for k, v in stocks.items():
             for kind, sector in v:
+                # Set the default balance sheet section to "Current"
+                if isinstance(sector, list):
+                    sector = tuple(sector)
+                elif not isinstance(sector, tuple):
+                    sector = (sector, "Current")
+
+                # Change in wealth is not considered a flow
+                if "wealth" in k.lower():
+                    continue
+
+                # Convert variable name to non-camel case if requested
                 if non_camel_case:
-                    item = re.sub(r"([A-Z])", r" \1", k.replace(sector, ""))
+                    item = re.sub(r"([A-Z])", r" \1", k.replace(sector[0], "")).strip()
                     item = f"Change in {item}"
                 else:
-                    item = f"Change in {k.replace(sector, '')}"
+                    item = f"Change in {k.replace(sector[0], '')}"
 
+                # Add the item to the transaction matrix
                 if item not in tm:
                     tm[item] = {}
 
+                # Add item to the transaction matrix, increases are outflows
+                # and decreases are inflows
                 if kind.lower() == "asset":
                     tm[item][sector] = r"-\Delta " + self.info[k]["notation"]
                 elif kind.lower() == "liability":
                     tm[item][sector] = r"+\Delta " + self.info[k]["notation"]
 
-        tm = pd.DataFrame.from_dict(tm, orient="index").fillna(0)
+        # Maintain the order of flows then changes in stocks
+        order = list(tm.keys())
+        tm = pd.DataFrame.from_dict(tm, orient="index")
+        tm = tm.loc[order]
 
         # Add columns for any other sectors that are not in the sfc
         for sector in self.parameters.hyper["sectors"]:
             if sector not in tm.columns:
-                tm[sector] = 0
+                tm[(sector, "Current")] = None
 
         # Sort the columns by the order of the sectors
-        tm = tm[self.parameters.hyper["sectors"]]
+        tm = tm.loc[:, self.parameters.hyper["sectors"]]
 
         # Add the total column to the end
         tm["Total"] = 0
@@ -231,21 +260,18 @@ class Variables:
         # Add total row
         tm.loc["Total"] = 0
 
-        if time_notation:
-            tm = tm.map(lambda x: f"{x}(t)" if x != 0 else x)
-
-        if mathfmt == "sphinx":
-            tm = tm.map(lambda x: r":math:`" + str(x) + r"`")
-        elif mathfmt in ["myst", "latex"]:
-            tm = tm.map(lambda x: r"$" + str(x) + r"$")
-        else:
-            raise ValueError(f"Invalid math format: {mathfmt}")
+        # Apply the math format
+        tm = self._apply_math_format(tm, mathfmt)
 
         return tm
 
     def transaction_matrix_actual(self):
         """Calculate the actual transaction matrix of the model."""
         raise NotImplementedError("Not implemented yet")
+
+    ############################################################################
+    # Comparison Functions
+    ############################################################################
 
     def compare(self, other: Self | pd.DataFrame):
         """Compare the variables to another Variables object or DataFrame.
@@ -270,6 +296,10 @@ class Variables:
         rel_diff = rel_diff[other != 0]
 
         return diff, rel_diff
+
+    ############################################################################
+    # IO Functions
+    ############################################################################
 
     @classmethod
     def from_excel(cls, file_path: os.PathLike, *args, **kwargs):
@@ -296,6 +326,49 @@ class Variables:
         timeseries = {k: torch.tensor(v) for k, v in data.items()}
         return cls(timeseries=timeseries)
 
+    def to_excel(self, file_path: os.PathLike):
+        """Convert the variables to an Excel file.
+
+        Parameters
+        ----------
+        file_path: os.PathLike
+            The path to the Excel file to save the variables to.
+        """
+        raise NotImplementedError("Not implemented yet")
+
+    def to_json(self, file_path: os.PathLike):
+        """Convert the parameters to a JSON file.
+
+        Parameters
+        ----------
+        file_path: os.PathLike
+            The path to the JSON file to save the timeseries to.
+        """
+        dicts = {k: v.tolist() for k, v in self.timeseries.items()}
+        with open(file_path, "w") as file:
+            json.dump(dicts, file)
+
+    def to_pandas(self):
+        """Convert the variables to a pandas DataFrame."""
+        df = pd.concat({k: pd.DataFrame(v) for k, v in self.timeseries.items()}, axis=1)
+        return df
+
+    ############################################################################
+    # General Functions
+    ############################################################################
+
+    def check_health(self):
+        """Check the health of the variables. This is where the user may want to
+        implement checks for consistency of the variables, e.g. whether the
+        balance sheet is in balance, or whether the redundant equations hold.
+
+        By default, this function returns True, indicating that the variables
+        are healthy. This is to facilitate usage of the variables object in other
+        functions.
+        """
+        logger.warning("Check health not implemented for this model")
+        return True
+
     def get_default_variables(self):
         """Return the default variables information dictionary.
 
@@ -304,10 +377,12 @@ class Variables:
         model class, and it should return a dictionary with the variable names
         as keys and the variable information as values. The variable information
         should contain at least the following keys:
+
         - "history": int - The number of periods that the variable requires information from.
         - "sectors": list - The sectors that the variable is associated with.
         - "unit": str - The unit of the variable.
         - "notation": str - The notation of the variable.
+
         """
         return {}
 
@@ -432,33 +507,6 @@ class Variables:
                 logger.error(f"Timeseries: {self.timeseries[k][t, :]}")
                 raise e
 
-    def to_excel(self, file_path: os.PathLike):
-        """Convert the variables to an Excel file.
-
-        Parameters
-        ----------
-        file_path: os.PathLike
-            The path to the Excel file to save the variables to.
-        """
-        raise NotImplementedError("Not implemented yet")
-
-    def to_json(self, file_path: os.PathLike):
-        """Convert the parameters to a JSON file.
-
-        Parameters
-        ----------
-        file_path: os.PathLike
-            The path to the JSON file to save the timeseries to.
-        """
-        dicts = {k: v.tolist() for k, v in self.timeseries.items()}
-        with open(file_path, "w") as file:
-            json.dump(dicts, file)
-
-    def to_pandas(self):
-        """Convert the variables to a pandas DataFrame."""
-        df = pd.concat({k: pd.DataFrame(v) for k, v in self.timeseries.items()}, axis=1)
-        return df
-
     def verify_sfc_info(self):
         """Verify that the sfc information in the info dictionary is complete.
 
@@ -470,7 +518,6 @@ class Variables:
         "asset" or "liability".
         """
         for k, v in self.info.items():
-
             if "sfc" not in v:
                 logger.warning(f"No SFC information for {k}")
                 return False
@@ -487,6 +534,27 @@ class Variables:
                 return False
 
         return True
+
+    ############################################################################
+    # Helper Functions
+    ############################################################################
+
+    @staticmethod
+    def _apply_math_format(df: pd.DataFrame, mathfmt: str):
+        """Apply a math format to a DataFrame."""
+        # Optionally wrap the notation in math mode
+        if mathfmt == "sphinx":
+            nonemask = df.isna()
+            df = df.map(lambda x: r":math:`" + str(x) + r"`")
+            df[nonemask] = ""
+        elif mathfmt in ["myst", "latex"]:
+            nonemask = df.isna()
+            df = df.map(lambda x: r"$" + str(x) + r"$")
+            df[nonemask] = ""
+        else:
+            raise ValueError(f"Invalid math format: {mathfmt}")
+
+        return df
 
     def _verify_sfc_item(self, sfc: tuple, key: str):
         """Verify that an sfc item is valid by checking the first element is

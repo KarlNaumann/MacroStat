@@ -1,2 +1,3 @@
 ,Household,Production,Government,Total
- Money Stock,$+H_h(t)$,$0$,$-H_s(t)$,$0$
+,Current,Current,Current,
+Money Stock,$+H_h(t)$,,$-H_s(t)$,0

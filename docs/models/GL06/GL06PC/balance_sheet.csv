@@ -1,0 +1,5 @@
+,Household,Production,Government,CentralBank,Total
+,Current,Current,Current,Capital,
+Money Stock,$+H_h(t)$,,,$-H_{s}(t)$,0
+Bill Stock,$+B_h(t)$,,$-B_s(t)$,$+B_{CB}(t)$,0
+Wealth,$-V(t)$,,$+V(t)$,,0
