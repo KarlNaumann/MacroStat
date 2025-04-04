@@ -11,10 +11,10 @@ import json
 import logging
 import os
 import re
-from typing import Self
 
 import pandas as pd
 import torch
+from typing_extensions import Self
 
 from macrostat.core.parameters import Parameters
 
@@ -64,6 +64,10 @@ class Variables:
 
         self.timeseries = timeseries
 
+    ############################################################################
+    # Accounting Functions
+    ############################################################################
+
     def balance_sheet_theoretical(
         self,
         mathfmt: str = "sphinx",
@@ -97,7 +101,6 @@ class Variables:
         bs = {}
         for k, v in stocks.items():
             for kind, sector in v:
-
                 # Set the default balance sheet section to "Current"
                 if isinstance(sector, list):
                     sector = tuple(sector)
@@ -185,7 +188,6 @@ class Variables:
         # Capture the flows
         for k, v in flows.items():
             for kind, sector in v:
-
                 # Set the default balance sheet section to "Current"
                 if isinstance(sector, list):
                     sector = tuple(sector)
@@ -211,7 +213,6 @@ class Variables:
         # Capture the change in stocks
         for k, v in stocks.items():
             for kind, sector in v:
-
                 # Set the default balance sheet section to "Current"
                 if isinstance(sector, list):
                     sector = tuple(sector)
@@ -268,6 +269,10 @@ class Variables:
         """Calculate the actual transaction matrix of the model."""
         raise NotImplementedError("Not implemented yet")
 
+    ############################################################################
+    # Comparison Functions
+    ############################################################################
+
     def compare(self, other: Self | pd.DataFrame):
         """Compare the variables to another Variables object or DataFrame.
 
@@ -291,6 +296,10 @@ class Variables:
         rel_diff = rel_diff[other != 0]
 
         return diff, rel_diff
+
+    ############################################################################
+    # IO Functions
+    ############################################################################
 
     @classmethod
     def from_excel(cls, file_path: os.PathLike, *args, **kwargs):
@@ -317,6 +326,49 @@ class Variables:
         timeseries = {k: torch.tensor(v) for k, v in data.items()}
         return cls(timeseries=timeseries)
 
+    def to_excel(self, file_path: os.PathLike):
+        """Convert the variables to an Excel file.
+
+        Parameters
+        ----------
+        file_path: os.PathLike
+            The path to the Excel file to save the variables to.
+        """
+        raise NotImplementedError("Not implemented yet")
+
+    def to_json(self, file_path: os.PathLike):
+        """Convert the parameters to a JSON file.
+
+        Parameters
+        ----------
+        file_path: os.PathLike
+            The path to the JSON file to save the timeseries to.
+        """
+        dicts = {k: v.tolist() for k, v in self.timeseries.items()}
+        with open(file_path, "w") as file:
+            json.dump(dicts, file)
+
+    def to_pandas(self):
+        """Convert the variables to a pandas DataFrame."""
+        df = pd.concat({k: pd.DataFrame(v) for k, v in self.timeseries.items()}, axis=1)
+        return df
+
+    ############################################################################
+    # General Functions
+    ############################################################################
+
+    def check_health(self):
+        """Check the health of the variables. This is where the user may want to
+        implement checks for consistency of the variables, e.g. whether the
+        balance sheet is in balance, or whether the redundant equations hold.
+
+        By default, this function returns True, indicating that the variables
+        are healthy. This is to facilitate usage of the variables object in other
+        functions.
+        """
+        logger.warning("Check health not implemented for this model")
+        return True
+
     def get_default_variables(self):
         """Return the default variables information dictionary.
 
@@ -325,10 +377,12 @@ class Variables:
         model class, and it should return a dictionary with the variable names
         as keys and the variable information as values. The variable information
         should contain at least the following keys:
+
         - "history": int - The number of periods that the variable requires information from.
         - "sectors": list - The sectors that the variable is associated with.
         - "unit": str - The unit of the variable.
         - "notation": str - The notation of the variable.
+
         """
         return {}
 
@@ -453,33 +507,6 @@ class Variables:
                 logger.error(f"Timeseries: {self.timeseries[k][t, :]}")
                 raise e
 
-    def to_excel(self, file_path: os.PathLike):
-        """Convert the variables to an Excel file.
-
-        Parameters
-        ----------
-        file_path: os.PathLike
-            The path to the Excel file to save the variables to.
-        """
-        raise NotImplementedError("Not implemented yet")
-
-    def to_json(self, file_path: os.PathLike):
-        """Convert the parameters to a JSON file.
-
-        Parameters
-        ----------
-        file_path: os.PathLike
-            The path to the JSON file to save the timeseries to.
-        """
-        dicts = {k: v.tolist() for k, v in self.timeseries.items()}
-        with open(file_path, "w") as file:
-            json.dump(dicts, file)
-
-    def to_pandas(self):
-        """Convert the variables to a pandas DataFrame."""
-        df = pd.concat({k: pd.DataFrame(v) for k, v in self.timeseries.items()}, axis=1)
-        return df
-
     def verify_sfc_info(self):
         """Verify that the sfc information in the info dictionary is complete.
 
@@ -491,7 +518,6 @@ class Variables:
         "asset" or "liability".
         """
         for k, v in self.info.items():
-
             if "sfc" not in v:
                 logger.warning(f"No SFC information for {k}")
                 return False
@@ -508,6 +534,10 @@ class Variables:
                 return False
 
         return True
+
+    ############################################################################
+    # Helper Functions
+    ############################################################################
 
     @staticmethod
     def _apply_math_format(df: pd.DataFrame, mathfmt: str):
