@@ -1,3 +1,10 @@
+from .GL06PC import (
+    GL06PC,
+    BehaviorGL06PC,
+    ParametersGL06PC,
+    ScenariosGL06PC,
+    VariablesGL06PC,
+)
 from .GL06SIM import (
     GL06SIM,
     BehaviorGL06SIM,
@@ -30,4 +37,10 @@ __all__ = [
     "ParametersGL06SIMEX",
     "ScenariosGL06SIMEX",
     "VariablesGL06SIMEX",
+    # Godley-Lavoie 2006 PC model
+    "GL06PC",
+    "BehaviorGL06PC",
+    "ParametersGL06PC",
+    "ScenariosGL06PC",
+    "VariablesGL06PC",
 ]
