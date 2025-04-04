@@ -55,12 +55,12 @@ if __name__ == "__main__":
 
         print("  - Creating Balance Sheet table")
         balance_sheet = variables.balance_sheet_theoretical(
-            time_notation=True, mathfmt="myst", non_camel_case=True
+            mathfmt="myst", non_camel_case=True
         )
         balance_sheet.to_csv(f"{modeldir}/balance_sheet.csv")
 
         print("  - Creating Transaction Matrix table")
         transaction_matrix = variables.transaction_matrix_theoretical(
-            time_notation=True, mathfmt="myst", non_camel_case=True
+            mathfmt="myst", non_camel_case=True
         )
         transaction_matrix.to_csv(f"{modeldir}/transaction_matrix.csv")
