@@ -104,7 +104,7 @@ class Parameters:
         else:
             logger.warning(f"Key {key} not found in parameters or hyperparameters.")
 
-    def __str__(self):
+    def __str__(self):  # pragma: no cover
         """Return a string representation of the parameters.
 
         This function returns a string representation of the parameters,
@@ -142,8 +142,8 @@ class Parameters:
             data = json.load(file)
 
         return cls(
-            parameter_history=data["Parameters"],
-            hyperparameter_history=data["HyperParameters"],
+            parameters=data["Parameters"],
+            hyperparameters=data["HyperParameters"],
         )
 
     @classmethod
@@ -178,7 +178,6 @@ class Parameters:
             "seed": 42,
             "device": "cpu",
             "requires_grad": False,
-            "sectors": [],
         }
 
     def get_default_parameters(self):
@@ -255,8 +254,8 @@ class Parameters:
         with open(file_path, "w") as file:
             json.dump(
                 {
-                    "Parameters": self.parameter_history,
-                    "HyperParameters": self.hyperparameter_history,
+                    "Parameters": self.values,
+                    "HyperParameters": self.hyper,
                 },
                 file,
             )
@@ -290,9 +289,10 @@ class Parameters:
             if all(conditions):
                 found_bounds[key] = (info["lower bound"], info["upper bound"])
 
-        if needed_bounds.difference(found_bounds):
+        found_bound_params = set(found_bounds.keys())
+        if needed_bounds.difference(found_bound_params):
             raise BoundaryError(
-                f"Missing bounds for parameters: {needed_bounds - found_bounds}"
+                f"Missing bounds for parameters: {needed_bounds - found_bound_params}"
             )
 
         # Check that the bounds are valid

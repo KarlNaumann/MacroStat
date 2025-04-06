@@ -21,7 +21,7 @@ from macrostat.core import Parameters, Scenarios
 class ScenarioTestClass(Scenarios):
     """Test class for the Scenarios class"""
 
-    def get_default_scenario_values(self):
+    def get_default_scenario_values(self) -> dict:
         """Get the default values for the scenarios"""
         return {k: 0.0 for k in ["shock1", "shock2", "shock3"]}
 
@@ -31,7 +31,15 @@ class TestScenarios:
 
     # Sample parameters
     params = Parameters(
-        parameters={"param1": 1.0},
+        parameters={
+            "param1": {
+                "value": 1.0,
+                "lower bound": 0.0,
+                "upper bound": 2.0,
+                "unit": "units",
+                "notation": "p_1",
+            }
+        },
         hyperparameters={
             "timesteps": 100,
             "timesteps_initialization": 10,
@@ -39,10 +47,8 @@ class TestScenarios:
             "seed": 42,
             "device": "cpu",
             "requires_grad": False,
-            "T": 100,
-            "scenario_trigger": 50,
+            "sectors": [],
         },
-        bounds={"param1": (0.0, 2.0)},
     )
 
     # Sample scenarios
@@ -83,7 +89,7 @@ class TestScenarios:
         # Test auto-naming when name=None
         s.add_scenario(None, test_data)
         assert 0 in s.timeseries
-        assert s.info[len(s.info) - 1]["Name"] == 1
+        assert s.info[len(s.info) - 1]["Name"] == "Scenario 1"
 
         # Test explicit naming
         s.add_scenario("test", test_data)
@@ -97,7 +103,7 @@ class TestScenarios:
         assert torch.all(s.timeseries[1]["var1"][trigger:] == 1.0)
 
         # Check tensor
-        t = min(50, self.params["T"] - trigger)
+        t = min(50, self.params["timesteps"] - trigger)
         assert torch.allclose(
             s.timeseries[1]["var2"][trigger : trigger + t, 0], torch.ones(t)
         )
