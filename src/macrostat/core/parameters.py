@@ -111,8 +111,8 @@ class Parameters:
         with the hyperparameters and parameters aligned.
         """
         # Find the longest key for alignment
-        hyper_max_len = max(len(key) for key in self.hyper.keys())
-        param_max_len = max(len(key) for key in self.values.keys())
+        hyper_max_len = max([len(key) for key in self.hyper.keys()] + [10])
+        param_max_len = max([len(key) for key in self.values.keys()] + [10])
         max_key_length = max(hyper_max_len, param_max_len)
 
         # Create the output string, hyperparameters first

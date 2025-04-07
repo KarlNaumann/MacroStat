@@ -68,6 +68,38 @@ class Variables:
     # Accounting Functions
     ############################################################################
 
+    def get_stock_variables(self):
+        """Get all the stock variables from the info dictionary. Stock variables
+        are those that are assets or liabilities, i.e. their "sfc" tuple starts
+        with "asset" or "liability".
+        """
+        return {
+            k: v["sfc"]
+            for k, v in self.info.items()
+            if v["sfc"][0][0].lower() in ["asset", "liability"]
+        }
+
+    def get_flow_variables(self):
+        """Get all the flow variables from the info dictionary. Flow variables
+        are those that are flows between sectors i.e. their "sfc" tuple starts
+        with "inflow" or "outflow".
+        """
+        return {
+            k: v["sfc"]
+            for k, v in self.info.items()
+            if v["sfc"][0][0].lower() in ["inflow", "outflow"]
+        }
+
+    def get_index_variables(self):
+        """Get all the index variables from the info dictionary. Index variables
+        are those that are indices, i.e. their "sfc" tuple starts with "index".
+        """
+        return {
+            k: v["sfc"]
+            for k, v in self.info.items()
+            if v["sfc"][0][0].lower() == "index"
+        }
+
     def balance_sheet_theoretical(
         self,
         mathfmt: str = "sphinx",
@@ -91,15 +123,8 @@ class Variables:
         if not self.verify_sfc_info():
             raise ValueError("SFC information is not complete")
 
-        # Get all the stocks
-        stocks = {
-            k: v["sfc"]
-            for k, v in self.info.items()
-            if v["sfc"][0][0].lower() in ["asset", "liability"]
-        }
-
         bs = {}
-        for k, v in stocks.items():
+        for k, v in self.get_stock_variables().items():
             for kind, sector in v:
                 # Set the default balance sheet section to "Current"
                 if isinstance(sector, list):
@@ -108,29 +133,39 @@ class Variables:
                     sector = (sector, "Current")
 
                 # Convert variable name to non-camel case if requested
+                item = k.replace(sector[0], "").replace(sector[0].lower(), "")
                 if non_camel_case:
-                    item = re.sub(r"([A-Z])", r" \1", k.replace(sector[0], "")).strip()
+                    item = re.sub(r"([A-Z])", r" \1", item).strip()
+
+                if kind.lower() == "asset":
+                    notation = f"+{self.info[k]['notation']}"
                 else:
-                    item = k.replace(sector[0], "")
+                    # Only other option is that kind.lower() == "liability":
+                    notation = f"-{self.info[k]['notation']}"
 
                 # Add the item to the balance sheet
                 if item not in bs:
-                    bs[item] = {}
+                    bs[item] = {sector: notation}
+                else:
+                    bs[item][sector] = notation
 
-                if kind.lower() == "asset":
-                    bs[item][sector] = f"+{self.info[k]['notation']}"
-                elif kind.lower() == "liability":
-                    bs[item][sector] = f"-{self.info[k]['notation']}"
+        if len(bs) > 0:
+            order = list(bs.keys())
+            # Generate the balance sheet (in order of stocks)
+            bs = pd.DataFrame.from_dict(bs, orient="index")
+            bs = bs.loc[order]
 
-        # Maintain the order of stocks
-        order = list(bs.keys())
-        bs = pd.DataFrame.from_dict(bs, orient="index")
-        bs = bs.loc[order]
-
-        # Add columns for any other sectors that are not in the sfc
-        for sector in self.parameters.hyper["sectors"]:
-            if sector not in bs.columns:
-                bs[(sector, "Current")] = None
+            # Add columns for any other sectors that are not in the sfc
+            for sector in self.parameters.hyper["sectors"]:
+                if sector not in bs.columns:
+                    bs[(sector, "Current")] = None
+        else:
+            # If there are no stocks, create a DataFrame with the sectors and Current
+            bs = pd.DataFrame(
+                columns=pd.MultiIndex.from_product(
+                    [self.parameters.hyper["sectors"], ["Current"]]
+                )
+            )
 
         # Sort the columns by the order of the sectors
         bs = bs[self.parameters.hyper["sectors"]]
@@ -170,29 +205,11 @@ class Variables:
         if not self.verify_sfc_info():
             raise ValueError("SFC information is not complete")
 
-        # Get all the flows
-        flows = {
-            k: v["sfc"]
-            for k, v in self.info.items()
-            if v["sfc"][0][0].lower() in ["inflow", "outflow"]
-        }
-
-        # Get all the stocks
-        stocks = {
-            k: v["sfc"]
-            for k, v in self.info.items()
-            if v["sfc"][0][0].lower() in ["asset", "liability"]
-        }
-
         tm = {}
         # Capture the flows
-        for k, v in flows.items():
+        for k, v in self.get_flow_variables().items():
             for kind, sector in v:
-                # Set the default balance sheet section to "Current"
-                if isinstance(sector, list):
-                    sector = tuple(sector)
-                elif not isinstance(sector, tuple):
-                    sector = (sector, "Current")
+                sector = self._convert_sector_to_tuples(sector)
 
                 # Convert variable name to non-camel case if requested
                 if non_camel_case:
@@ -200,46 +217,46 @@ class Variables:
                 else:
                     item = k
 
-                # Add the item to the transaction matrix
-                if item not in tm:
-                    tm[item] = {}
-
                 # Add item to the transaction matrix
                 if kind.lower() == "inflow":
-                    tm[item][sector] = f"+{self.info[k]['notation']}"
-                elif kind.lower() == "outflow":
-                    tm[item][sector] = f"-{self.info[k]['notation']}"
+                    notation = f"+{self.info[k]['notation']}"
+                else:
+                    # Only other option is that kind.lower() == "outflow":
+                    notation = f"-{self.info[k]['notation']}"
+
+                # Add the item to the transaction matrix
+                if item not in tm:
+                    tm[item] = {sector: notation}
+                else:
+                    tm[item][sector] = notation
 
         # Capture the change in stocks
-        for k, v in stocks.items():
+        for k, v in self.get_stock_variables().items():
             for kind, sector in v:
-                # Set the default balance sheet section to "Current"
-                if isinstance(sector, list):
-                    sector = tuple(sector)
-                elif not isinstance(sector, tuple):
-                    sector = (sector, "Current")
+                sector = self._convert_sector_to_tuples(sector)
 
                 # Change in wealth is not considered a flow
                 if "wealth" in k.lower():
                     continue
 
                 # Convert variable name to non-camel case if requested
+                item = k.replace(sector[0], "").replace(sector[0].lower(), "")
                 if non_camel_case:
-                    item = re.sub(r"([A-Z])", r" \1", k.replace(sector[0], "")).strip()
-                    item = f"Change in {item}"
+                    item = re.sub(r"([A-Z])", r" \1", item).strip()
+
+                item = f"Change in {item}"
+
+                if kind.lower() == "asset":
+                    notation = f"+{self.info[k]['notation']}"
                 else:
-                    item = f"Change in {k.replace(sector[0], '')}"
+                    # Only other option is that kind.lower() == "liability":
+                    notation = f"-{self.info[k]['notation']}"
 
                 # Add the item to the transaction matrix
                 if item not in tm:
-                    tm[item] = {}
-
-                # Add item to the transaction matrix, increases are outflows
-                # and decreases are inflows
-                if kind.lower() == "asset":
-                    tm[item][sector] = r"-\Delta " + self.info[k]["notation"]
-                elif kind.lower() == "liability":
-                    tm[item][sector] = r"+\Delta " + self.info[k]["notation"]
+                    tm[item] = {sector: notation}
+                else:
+                    tm[item][sector] = notation
 
         # Maintain the order of flows then changes in stocks
         order = list(tm.keys())
@@ -353,6 +370,25 @@ class Variables:
         df = pd.concat({k: pd.DataFrame(v) for k, v in self.timeseries.items()}, axis=1)
         return df
 
+    def info_to_csv(self, file_path: str, sphinx_math: bool = False):
+        """Convert the variables information to a CSV file.
+
+        Parameters
+        ----------
+        file_path: str
+            The path to the CSV file to save the variables information to.
+        sphinx_math: bool
+            Whether to add a ":math:" marker to the notation column, e.g. for
+            usage in the documentation
+        """
+        df = pd.DataFrame.from_dict(self.info, orient="index")
+        df["sectors"] = df["sectors"].apply(lambda x: ", ".join(x))
+        df["history"] = df["history"].astype(int)
+        if sphinx_math:
+            df["notation"] = df["notation"].apply(lambda x: r":math:`" + x + r"`")
+        df.columns = [i.title() for i in df.columns]
+        df.to_csv(file_path)
+
     ############################################################################
     # General Functions
     ############################################################################
@@ -385,25 +421,6 @@ class Variables:
 
         """
         return {}
-
-    def info_to_csv(self, file_path: str, sphinx_math: bool = False):
-        """Convert the variables information to a CSV file.
-
-        Parameters
-        ----------
-        file_path: str
-            The path to the CSV file to save the variables information to.
-        sphinx_math: bool
-            Whether to add a ":math:" marker to the notation column, e.g. for
-            usage in the documentation
-        """
-        df = pd.DataFrame.from_dict(self.info, orient="index")
-        df["sectors"] = df["sectors"].apply(lambda x: ", ".join(x))
-        df["history"] = df["history"].astype(int)
-        if sphinx_math:
-            df["notation"] = df["notation"].apply(lambda x: r":math:`" + x + r"`")
-        df.columns = [i.title() for i in df.columns]
-        df.to_csv(file_path)
 
     def initialize_tensors(self, t: int, **kwargs):
         """Initialize the output tensors, creating two different dictionaries.
@@ -517,21 +534,26 @@ class Variables:
         contain at least one tuple with the first element being either "index",
         "asset" or "liability".
         """
+
         for k, v in self.info.items():
             if "sfc" not in v:
                 logger.warning(f"No SFC information for {k}")
                 return False
 
-            if isinstance(v["sfc"], tuple):
-                if not self._verify_sfc_item(v["sfc"], k):
+            if not isinstance(v["sfc"], (tuple, list)):
+                logger.warning(f"Sfc information for {k} is not a list or tuple")
+                return False
+            elif isinstance(v["sfc"], tuple):
+                if self._verify_sfc_item(v["sfc"], k):
+                    continue
+                else:
                     return False
             elif isinstance(v["sfc"], list):
                 for sfc in v["sfc"]:
-                    if not self._verify_sfc_item(sfc, k):
+                    if self._verify_sfc_item(sfc, k):
+                        continue
+                    else:
                         return False
-            else:
-                logger.warning(f"Sfc information for {k} is not a list or tuple")
-                return False
 
         return True
 
@@ -568,7 +590,16 @@ class Variables:
         key: str
             The key of the variable.
         """
-        if sfc[0].lower() not in ["inflow", "outflow", "index", "asset", "liability"]:
+        if not isinstance(sfc[0], str):
+            logger.warning(f"sfc information for {key} is not a valid item")
+            return False
+        elif sfc[0].lower() not in [
+            "inflow",
+            "outflow",
+            "index",
+            "asset",
+            "liability",
+        ]:
             logger.warning(f"sfc information for {key} is not a valid item")
             return False
         if len(sfc) != 2:
@@ -577,6 +608,36 @@ class Variables:
             )
             return False
         return True
+
+    @staticmethod
+    def _convert_sector_to_tuples(sector):
+        """The point of this method is to ensure that for the SFC tuples, there
+        is always a sector and balance sheet section, if there is no balance
+        sheet section, it is assumed to be the current account.
+
+        Parameters
+        ----------
+        sector: str | tuple | list
+            The sector to convert.
+
+        Returns
+        -------
+        tuple
+            A tuple of the sector and balance sheet section.
+        """
+        # Convert the sector to a tuple from str or list
+        if isinstance(sector, list):
+            sector = tuple(sector)
+        elif isinstance(sector, str):
+            sector = (sector, "Current")
+
+        # Check that the sector is a tuple
+        if not isinstance(sector, tuple):
+            raise ValueError(f"Sector {sector} is not a tuple")
+        elif len(sector) != 2:
+            raise ValueError(f"Sector {sector} is not a tuple of length 2")
+        else:
+            return sector
 
 
 if __name__ == "__main__":
