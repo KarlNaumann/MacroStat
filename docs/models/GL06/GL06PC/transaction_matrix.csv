@@ -7,6 +7,6 @@ Interest Earned On Bills Household,$+r(t-1)\cdot B_h(t-1)$,,$-r(t-1)\cdot B_h(t-
 Interest Earned On Bills Central Bank,,,$-r(t-1)\cdot B_{CB}(t-1)$,$+r(t-1)\cdot B_{CB}(t-1)$,,$0$
 Central Bank Profits,,,$+r(t-1)\cdot B_{CB}(t-1)$,$-r(t-1)\cdot B_{CB}(t-1)$,,$0$
 Taxes,$-T(t)$,,$+T(t)$,,,$0$
-Change in Money Stock,$-\Delta H_h(t)$,,,,$+\Delta H_{s}(t)$,$0$
-Change in Bill Stock,$-\Delta B_h(t)$,,$+\Delta B_s(t)$,,$-\Delta B_{CB}(t)$,$0$
+Change in Money Stock,$+H_h(t)$,,,,$-H_{s}(t)$,$0$
+Change in Bill Stock,$+B_h(t)$,,$-B_s(t)$,,$+B_{CB}(t)$,$0$
 Total,$0$,$0$,$0$,$0$,$0$,$0$
