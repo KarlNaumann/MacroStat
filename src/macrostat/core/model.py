@@ -43,7 +43,7 @@ class Model:
 
     def __init__(
         self,
-        parameters: Parameters | dict,
+        parameters: Parameters | dict | None = None,
         hyperparameters: dict | None = None,
         scenarios: Scenarios | dict = None,
         variables: Variables | dict = None,
@@ -81,20 +81,32 @@ class Model:
             self.parameters = Parameters(
                 parameters=parameters, hyperparameters=hyperparameters
             )
-        else:
+        elif isinstance(parameters, Parameters):
             self.parameters = parameters
-
-        if isinstance(scenarios, dict):
-            self.scenarios = Scenarios(parameters=self.parameters, scenarios=scenarios)
+            if hyperparameters is not None:
+                self.parameters.hyper.update(hyperparameters)
         else:
+            logger.warning("No parameters provided, using default parameters")
+            self.parameters = Parameters()
+
+        if isinstance(scenarios, Scenarios):
             self.scenarios = scenarios
-
-        if isinstance(variables, dict):
-            self.variables = Variables(parameters=self.parameters, variables=variables)
         else:
-            self.variables = variables
+            logger.warning("No scenarios provided, using default scenarios")
+            self.scenarios = Scenarios(parameters=self.parameters)
 
-        self.behavior = behavior
+        if isinstance(variables, Variables):
+            self.variables = variables
+        else:
+            logger.warning("No variables provided, using default variables")
+            self.variables = Variables(parameters=self.parameters)
+
+        if behavior is not None and issubclass(behavior, Behavior):
+            self.behavior = behavior
+        else:
+            logger.warning("No behavior provided, using default behavior")
+            self.behavior = Behavior
+
         self.name = name
 
         logging.basicConfig(level=log_level, filename=log_file)
@@ -112,7 +124,7 @@ class Model:
         parameters = Parameters.from_json(parameter_file)
         scenarios = Scenarios.from_json(scenario_file, parameters=parameters)
         variables = Variables.from_json(variable_file, parameters=parameters)
-        return cls(parameters, scenarios, variables)
+        return cls(parameters=parameters, scenarios=scenarios, variables=variables)
 
     @classmethod
     def load(cls, path: os.PathLike):

@@ -62,7 +62,10 @@ class Variables:
         else:
             self.info = variable_info
 
-        self.timeseries = timeseries
+        if timeseries is None:
+            self.initialize_tensors(self.parameters.hyper["timesteps"])
+        else:
+            self.timeseries = timeseries
 
     ############################################################################
     # Accounting Functions
