@@ -72,23 +72,16 @@ class Scenarios:
 
         if scenarios is not None:
             for name, timeseries in scenarios.items():
-                self.add_scenario(name, timeseries)
+                self.add_scenario(timeseries=timeseries, name=name)
 
         self.calibration_variables = (
             [] if calibration_variables is None else calibration_variables
         )
 
-        if scenario_info is None:
-            self.info = {
-                k: dict(
-                    Name=f"Scenario {k}",
-                    Colour=f"#{random.randint(0, 0xFFFFFF):06x}",
-                    Index=torch.arange(self.scenario_duration),
-                )
-                for k in self.timeseries.keys()
-            }
-        else:
-            self.info = scenario_info
+        if scenario_info is not None:
+            self.info.update(scenario_info)
+
+        self.verify_scenario_info()
 
         self.current_scenario = 0
 
@@ -113,29 +106,30 @@ class Scenarios:
 
         return self.timeseries[scenario][variable]
 
-    def add_scenario(self, name: str, timeseries: dict, colour: str = None):
+    def add_scenario(self, timeseries: dict, name: str = None, colour: str = None):
         """Add a scenario to the model.
 
         Parameters
         ----------
-        name: str
-            The name of the scenario.
         timeseries: dict
             The timeseries of the scenario.
-        colour: str
-            The colour of the scenario.
+        name: str | None
+            The name of the scenario. If None, the scenario will be named
+            "Scenario.N" where N is the number of scenarios.
+        colour: str | None
+            The colour of the scenario. If None, a random colour will be generated.
         """
         # Add the scenario info
         scID = len(self.info)
-        if name is None:
-            name = len(self.info)
-        if colour is None:
-            colour = f"#{random.randint(0, 0xFFFFFF):06x}"
+        name = f"Scenario.{scID}" if name is None else name
+        colour = f"#{random.randint(0, 0xFFFFFF):06x}" if colour is None else colour
 
         self.info[scID] = {
             "Name": name,
             "Colour": colour,
-            "Index": np.arange(self.parameters["timesteps"]),
+            "Index": np.arange(
+                self.parameters["timesteps"] - self.parameters["scenario_trigger"]
+            ),
         }
 
         # Copy default scenario as a starting point
@@ -156,12 +150,15 @@ class Scenarios:
             elif isinstance(v, torch.Tensor):
                 t = min(len(v), self.parameters["timesteps"] - trigger)
                 self.timeseries[scID][k][trigger : trigger + t, 0] = v.squeeze()[:t]
+            elif isinstance(v, (pd.Series, pd.DataFrame)):
+                t = min(len(v), self.parameters["timesteps"] - trigger)
+                self.timeseries[scID][k][trigger : trigger + t, 0] = torch.tensor(
+                    v.values[:t]
+                )
+                self.info[scID]["Index"] = v.index.to_numpy()
             else:
                 t = min(len(v), self.parameters["timesteps"] - trigger)
                 self.timeseries[scID][k][trigger : trigger + t, 0] = torch.tensor(v[:t])
-
-            if isinstance(v, (pd.Series, pd.DataFrame)):
-                self.info[scID]["Index"] = v.index.to_numpy()
 
     @classmethod
     def from_excel(cls, excel_path: str, parameters: Parameters):
@@ -192,15 +189,25 @@ class Scenarios:
         with open(json_path, "r") as f:
             data = json.load(f)
 
+        # Get the scenario details
         info = data.pop("ScenarioDetails")
         info = {int(float(k)): v for k, v in info.items()}
 
+        # Get the calibration variables
+        calibration_variables = data.pop("CalibrationVariables")
+
+        # Get the timeseries
         timeseries = {}
         for k, v in info.items():
             if k != 0:
                 timeseries[k] = data[f"Scenario.{k}"]
 
-        return cls(parameters=parameters, scenarios=timeseries, scenario_info=info)
+        return cls(
+            parameters=parameters,
+            scenarios=timeseries,
+            scenario_info=info,
+            calibration_variables=calibration_variables,
+        )
 
     def get_default_scenario(self) -> dict:
         """Return the default scenario variable in vectorized form."""
@@ -264,6 +271,9 @@ class Scenarios:
             for sc, ts in self.timeseries.items()
         }
 
+        # Add the calibration variables
+        data["CalibrationVariables"] = self.calibration_variables
+
         # Convert scenario info to dict of lists
         data["ScenarioDetails"] = {}
         for k, v in self.info.items():
@@ -291,6 +301,26 @@ class Scenarios:
             tensor.requires_grad = k in self.calibration_variables
 
         return vscenarios
+
+    def verify_scenario_info(self):
+        """Verify that the scenario info is consistent:
+        1. There should be a one-to-one mapping between scenario info and timeseries
+        2. The scenario info should be a subset of the timeseries keys
+        3. The scenario info should have the ["Name", "Colour", "Index"] keys
+        """
+
+        # Check that there is a one-to-one mapping between scenario info and timeseries
+        if set(self.info.keys()) != set(self.timeseries.keys()):
+            raise ValueError(
+                "There should be a one-to-one mapping between scenario info and timeseries"
+            )
+
+        # Check that the scenario info is a subset of the timeseries keys
+        for k, v in self.info.items():
+            if set(v.keys()) != {"Name", "Colour", "Index"}:
+                raise ValueError(
+                    f"Scenario info for scenario {k} should have the ['Name', 'Colour', 'Index'] keys"
+                )
 
 
 if __name__ == "__main__":

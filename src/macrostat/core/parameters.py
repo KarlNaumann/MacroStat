@@ -104,15 +104,15 @@ class Parameters:
         else:
             logger.warning(f"Key {key} not found in parameters or hyperparameters.")
 
-    def __str__(self):
+    def __str__(self):  # pragma: no cover
         """Return a string representation of the parameters.
 
         This function returns a string representation of the parameters,
         with the hyperparameters and parameters aligned.
         """
         # Find the longest key for alignment
-        hyper_max_len = max(len(key) for key in self.hyper.keys())
-        param_max_len = max(len(key) for key in self.values.keys())
+        hyper_max_len = max([len(key) for key in self.hyper.keys()] + [10])
+        param_max_len = max([len(key) for key in self.values.keys()] + [10])
         max_key_length = max(hyper_max_len, param_max_len)
 
         # Create the output string, hyperparameters first
@@ -142,8 +142,8 @@ class Parameters:
             data = json.load(file)
 
         return cls(
-            parameter_history=data["Parameters"],
-            hyperparameter_history=data["HyperParameters"],
+            parameters=data["Parameters"],
+            hyperparameters=data["HyperParameters"],
         )
 
     @classmethod
@@ -156,6 +156,44 @@ class Parameters:
             The path to the Excel file to load the parameters from.
         """
         raise NotImplementedError("Not implemented")
+
+    @classmethod
+    def from_csv(cls, file_path: os.PathLike, *args, **kwargs):
+        """Initialize the parameters from a CSV file.
+
+        Parameters
+        ----------
+        file_path: os.PathLike
+            The path to the CSV file to load the parameters from.
+        """
+        df = pd.read_csv(file_path, index_col=0)
+
+        # Parameters
+        par = df[df["ParameterType"] == "Parameter"].drop(columns=["ParameterType"])
+        par.columns = [i.lower() for i in par.columns]
+        par["value"] = par["value"].astype(float)
+        par = par.to_dict(orient="index")
+
+        # Hyperparameters
+        hyper = df[df["ParameterType"] == "HyperParameter"]["Value"]
+        hyper.index = hyper.index.str.lower()
+        hyper = hyper.to_dict()
+        # Try to convert to int, else bool, else keep as string
+        for key, value in hyper.items():
+            if value.isdigit():
+                hyper[key] = int(value)
+            elif value.lower() == "true":
+                hyper[key] = True
+            elif value.lower() == "false":
+                hyper[key] = False
+            else:
+                hyper[key] = value
+
+        # Convert the dataframe to a dictionary
+        return cls(
+            parameters=par,
+            hyperparameters=hyper,
+        )
 
     def get_default_hyperparameters(self):
         """Return the default hyperparameters.
@@ -178,7 +216,6 @@ class Parameters:
             "seed": 42,
             "device": "cpu",
             "requires_grad": False,
-            "sectors": [],
         }
 
     def get_default_parameters(self):
@@ -226,12 +263,19 @@ class Parameters:
         sphinx_math: bool
             Whether to use Sphinx math notation in the CSV file.
         """
-        df = pd.DataFrame.from_dict(self.values, orient="index").sort_index()
-        df = df[["notation", "unit", "value", "lower bound", "upper bound"]]
-        df.columns = ["Notation", "Unit", "Value", "Lower Bound", "Upper Bound"]
-        df.index.name = "Parameter"
+        par = pd.DataFrame.from_dict(self.values, orient="index").sort_index()
+        par = par[["notation", "unit", "value", "lower bound", "upper bound"]]
+        par.columns = ["Notation", "Unit", "Value", "Lower Bound", "Upper Bound"]
         if sphinx_math:
-            df["Notation"] = df["Notation"].apply(lambda x: r":math:`" + x + r"`")
+            par["Notation"] = par["Notation"].apply(lambda x: r":math:`" + x + r"`")
+        par["ParameterType"] = "Parameter"
+
+        hyper = pd.DataFrame.from_dict(self.hyper, orient="index").sort_index()
+        hyper.columns = ["Value"]
+        hyper["ParameterType"] = "HyperParameter"
+
+        df = pd.concat([par, hyper], axis=0)
+        print(df)
         df.to_csv(file_path)
 
     def to_excel(self, file_path: os.PathLike, *args, **kwargs):
@@ -255,8 +299,8 @@ class Parameters:
         with open(file_path, "w") as file:
             json.dump(
                 {
-                    "Parameters": self.parameter_history,
-                    "HyperParameters": self.hyperparameter_history,
+                    "Parameters": self.values,
+                    "HyperParameters": self.hyper,
                 },
                 file,
             )
@@ -290,9 +334,10 @@ class Parameters:
             if all(conditions):
                 found_bounds[key] = (info["lower bound"], info["upper bound"])
 
-        if needed_bounds.difference(found_bounds):
+        found_bound_params = set(found_bounds.keys())
+        if needed_bounds.difference(found_bound_params):
             raise BoundaryError(
-                f"Missing bounds for parameters: {needed_bounds - found_bounds}"
+                f"Missing bounds for parameters: {needed_bounds - found_bound_params}"
             )
 
         # Check that the bounds are valid

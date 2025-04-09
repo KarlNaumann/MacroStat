@@ -2,6 +2,8 @@ importlib_metadata==8.5.0
 nbsphinx
 numpy==2.1.1
 pandas==2.2.3
+pytest>=7.0.0
+pytest-cov>=4.0.0
 scipy==1.14.1
 setuptools==75.1.0
 torch==2.4.1
