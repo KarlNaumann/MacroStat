@@ -491,7 +491,6 @@ class TestVariables:
         assert not v._verify_sfc_item(
             v.info["householdMoneyStock"]["sfc"], "householdMoneyStock"
         )
-        print(caplog.text)
         assert (
             "sfc information for householdMoneyStock is not a valid item" in caplog.text
         )

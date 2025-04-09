@@ -275,7 +275,6 @@ class Parameters:
         hyper["ParameterType"] = "HyperParameter"
 
         df = pd.concat([par, hyper], axis=0)
-        print(df)
         df.to_csv(file_path)
 
     def to_excel(self, file_path: os.PathLike, *args, **kwargs):
