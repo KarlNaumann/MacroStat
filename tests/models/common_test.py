@@ -264,6 +264,11 @@ class BaseModelTest:
                 assert isinstance(default_vars[var]["sfc"], list)
                 assert len(default_vars[var]["sfc"]) > 0
 
+    def test_default_variables_sfc_info_valid(self):
+        """Test that default variables have valid sfc information"""
+        if self.isSFC:
+            assert self.model.variables.verify_sfc_info()
+
     ##############################################################
     # Tests on the scenarios level
     # Since there can be none or many, we can't test the default
