@@ -164,11 +164,20 @@ html_theme = "furo"
 # Theme options are theme-specific and customize the look and feel of a theme
 # further.  For a list of options available for each theme, see the
 # documentation.
-# html_theme_options = {
-#    "bodyfont": "sans-serif",
-#    "headerfont": "sans-serif",
-#    "rightsidebar": False,
-# }
+html_theme_options = {
+    "light_css_variables": {
+        "color-brand-primary": "#011828",
+        "color-brand-content": "#011828",
+        "color-foreground-secondary": "#011828",
+        "color-background-hover": "#01182833",
+    },
+    "dark_css_variables": {
+        "color-brand-primary": "#03A3B3",
+        "color-brand-content": "#03A3B3",
+        "color-foreground-border": "#03A3B3",
+        # "color-background-border": "#03A3B3",
+    },
+}
 
 # Add any paths that contain custom themes here, relative to this directory.
 # html_theme_path = []
