@@ -149,7 +149,9 @@ html_theme_options = {
     "logo": {
         "link": "/",
     },
+    # "footer_start": ["copyright", "sphinx-version", "doc_version"],
 }
+
 
 # Add any paths that contain custom themes here, relative to this directory.
 # html_theme_path = []
@@ -180,6 +182,11 @@ html_static_path = ["_static"]
 html_css_files = [
     "custom.css",
 ]
+
+html_sidebars = {
+    "index": ["logo_sidebar.html"],
+    "changelog": ["logo_sidebar.html"],
+}
 
 # If not '', a 'Last updated on:' timestamp is inserted at every page bottom,
 # using the given strftime format.
