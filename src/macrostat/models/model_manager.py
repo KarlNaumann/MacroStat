@@ -1,3 +1,8 @@
+"""Model Manager
+
+This module provides a manager for all models in the MacroStat library. It allows for easy access to all models, as well as the ability to get the classes for a specific model.
+"""
+
 import os
 from typing import NamedTuple, Type
 

@@ -8,51 +8,14 @@
 # serve to show the default.
 
 import os
-import shutil
 import sys
 
 # -- Path setup --------------------------------------------------------------
-
-__location__ = os.path.dirname(__file__)
-
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
+__location__ = os.path.dirname(__file__)
 sys.path.insert(0, os.path.join(__location__, "../src"))
-
-# -- Run sphinx-apidoc -------------------------------------------------------
-# This hack is necessary since RTD does not issue `sphinx-apidoc` before running
-# `sphinx-build -b html . _build/html`. See Issue:
-# https://github.com/readthedocs/readthedocs.org/issues/1139
-# DON'T FORGET: Check the box "Install your project inside a virtualenv using
-# setup.py install" in the RTD Advanced Settings.
-# Additionally it helps us to avoid running apidoc manually
-
-try:  # for Sphinx >= 1.7
-    from sphinx.ext import apidoc
-except ImportError:
-    from sphinx import apidoc
-
-output_dir = os.path.join(__location__, "api")
-module_dir = os.path.join(__location__, "../src/macrostat")
-try:
-    shutil.rmtree(output_dir)
-except FileNotFoundError:
-    pass
-
-try:
-    import sphinx
-
-    cmd_line = f"sphinx-apidoc --implicit-namespaces -f -o {output_dir} {module_dir}"
-
-    args = cmd_line.split(" ")
-    if tuple(sphinx.__version__.split(".")) >= ("1", "7"):
-        # This is a rudimentary parse_version to avoid external dependencies
-        args = args[1:]
-
-    apidoc.main(args)
-except Exception as e:
-    print("Running `sphinx-apidoc` failed!\n{}".format(e))
 
 # -- Preprocessing -----------------------------------------------------------
 # This creates the csv files with the tables of parameters and variables for
@@ -61,10 +24,6 @@ print("Preprocessing ...")
 os.system(f"python {__location__}/docs_preprocessing.py --docdir {__location__}")
 
 # -- Extensions --------------------------------------------------------------
-
-# If your documentation needs a minimal Sphinx version, state it here.
-# needs_sphinx = '1.0'
-
 # Add any Sphinx extension module names here, as strings. They can be extensions
 # coming with Sphinx (named 'sphinx.ext.*') or your custom ones.
 extensions = [
@@ -81,22 +40,20 @@ extensions = [
     # "nbsphinx",
     "sphinxcontrib.bibtex",
     "myst_nb",
+    "sphinx_design",
 ]
 
 # -- General configuration ---------------------------------------------------
 
 # General information about the project.
 project = "MacroStat"
-copyright = "2024, Karl Naumann-Woleske"
+copyright = "2025, Karl Naumann-Woleske"
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
 # built documents.
-#
 # version: The short X.Y version.
 # release: The full version, including alpha/beta/rc tags.
-# If you don’t need the separation provided between version and release,
-# just set them both to the same value.
 try:
     from macrostat import __version__ as version
 except ImportError:
@@ -112,6 +69,7 @@ master_doc = "index"
 
 # The suffix of source filenames.
 source_suffix = ".rst"
+
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ["_templates"]
 
@@ -154,21 +112,47 @@ nb_execution_mode = "off"
 # Autodoc sections (Napoleon)
 napoleon_custom_sections = ["Equations", "Dependency", "Sets"]
 
+# -- Autodoc and Autosummary configuration -----------------------------------
 
+# Autodoc settings
+autodoc_default_options = {
+    "members": True,
+    "undoc-members": False,
+    "show-inheritance": True,
+    "inherited-members": False,  # Don't show inherited members
+}
+
+# Autosummary settings
+autosummary_generate = True
+autosummary_generate_overwrite = True
+autosummary_imported_members = False
+autosummary_context = {
+    "toctree": {
+        "maxdepth": 2,
+    }
+}
 # -- Options for HTML output -------------------------------------------------
 
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
-html_theme = "furo"
+html_theme = "pydata_sphinx_theme"
 
-# Theme options are theme-specific and customize the look and feel of a theme
-# further.  For a list of options available for each theme, see the
-# documentation.
-# html_theme_options = {
-#    "bodyfont": "sans-serif",
-#    "headerfont": "sans-serif",
-#    "rightsidebar": False,
-# }
+html_theme_options = {
+    "show_toc_level": 2,
+    "icon_links": [
+        {
+            "name": "GitHub",
+            "url": "https://github.com/KarlNaumann/MacroStat",
+            "icon": "fa-brands fa-square-github",
+            "type": "fontawesome",
+        },
+    ],
+    "logo": {
+        "link": "/",
+    },
+    # "footer_start": ["copyright", "sphinx-version", "doc_version"],
+}
+
 
 # Add any paths that contain custom themes here, relative to this directory.
 # html_theme_path = []
@@ -182,7 +166,8 @@ html_theme = "furo"
 
 # The name of an image file (relative to this directory) to place at the top
 # of the sidebar.
-# html_logo = ""
+html_logo = "_static/macrostat_logo.svg"
+html_favicon = "_static/macrostat_favicon.png"
 
 # The name of an image file (within the static path) to use as favicon of the
 # docs.  This file should be a Windows icon file (.ico) being 16x16 or 32x32
@@ -193,6 +178,16 @@ html_theme = "furo"
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ["_static"]
+
+# Add custom CSS file
+html_css_files = [
+    "custom.css",
+]
+
+html_sidebars = {
+    "index": ["logo_sidebar.html"],
+    "changelog": ["logo_sidebar.html"],
+}
 
 # If not '', a 'Last updated on:' timestamp is inserted at every page bottom,
 # using the given strftime format.

@@ -24,18 +24,29 @@ logger = logging.getLogger(__name__)
 
 
 class Model:
-    """A class representing a macroeconomic model.
+    """A general class to represent a macroeconomic model.
 
     This class provides a wrapper for users to write their underlying model
-    behavior while maintaining a uniformly accessible interface. Specifically,
-    the user is expected to adapt the model.simulate() function to their needs,
-    respecting only that the return of that function is a pandas dataframe.
+    behavior while maintaining a uniformly accessible interface.
+
+    Attributes
+    ----------
+    parameters : macrostat.core.parameters.Parameters
+        The parameters of the model.
+    scenarios : macrostat.core.scenarios.Scenarios
+        The scenarios of the model.
+    variables : macrostat.core.variables.Variables
+        The variables of the model.
+    behavior : macrostat.core.behavior.Behavior
+        The behavior class of the model.
+    name : str
+        The name of the model.
 
     Example
     -------
-    A general workflow for a model might look like
+    A general workflow for a model might look like:
 
-    >>> model = Model(parameters, hyperparameters)
+    >>> model = Model()
     >>> output = model.simulate()
     >>> model.save()
 

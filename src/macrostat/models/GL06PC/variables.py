@@ -55,20 +55,20 @@ class VariablesGL06PC(Variables):
         Equations
         ---------
         Redundant equations:
-        .. math::
-            :nowrap:
+            .. math::
+                :nowrap:
 
-            \begin{align}
-                H_h(t) = H_s(t)
-            \end{align}
+                \begin{align}
+                    H_h(t) = H_s(t)
+                \end{align}
 
         General checks:
-        .. math::
-            :nowrap:
+            .. math::
+                :nowrap:
 
-            \begin{align}
-                A(t) &> 0 & L(t) &> 0
-            \end{align}
+                \begin{align}
+                    A(t) &> 0 & L(t) &> 0
+                \end{align}
 
         where :math:`A(t)` are all assets and :math:`L(t)` are all liabilities.
 

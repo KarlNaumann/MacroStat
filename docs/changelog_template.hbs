@@ -1,0 +1,43 @@
+*********
+Changelog
+*********
+This is an automatically generated changelog, for a more complete textual description of the changes
+please refer to the version release notes.
+
+{{#each releases}}
+  {{#if href}}
+    `{{title}} <{{href}}>`_{{#if tag}} - {{isoDate}}{{/if}}
+    ================================================================================================================================
+  {{else}}
+    {{title}}{{#if tag}} - {{isoDate}}{{/if}}
+    ================================================================================================================================
+  {{/if}}
+
+  {{#if summary}}
+    {{summary}}
+  {{/if}}
+
+  {{#if merges}}
+    Merges / Pull Requests
+    -----------------------
+
+    {{#each merges}}
+      - `[#{{id}}] <{{href}}>`_: {{message}}
+    {{/each}}
+  {{/if}}
+
+  {{#if fixes}}
+    Fixed
+    -----
+
+    {{#each fixes}}
+      - {{#if commit.breaking}}**Breaking change:** {{/if}}{{commit.subject}}{{#each fixes}} {{#if href}}[`#{{id}}`]({{href}}){{/if}}{{/each}}
+    {{/each}}
+  {{/if}}
+
+  {{#commit-list commits heading='Commits
+  --------'}}
+    - `{{shorthash}} <{{href}}>`_: {{subject}}
+  {{/commit-list}}
+
+{{/each}}
