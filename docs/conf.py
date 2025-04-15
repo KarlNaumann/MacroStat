@@ -40,22 +40,20 @@ extensions = [
     # "nbsphinx",
     "sphinxcontrib.bibtex",
     "myst_nb",
+    "sphinx_design",
 ]
 
 # -- General configuration ---------------------------------------------------
 
 # General information about the project.
 project = "MacroStat"
-copyright = "2024, Karl Naumann-Woleske"
+copyright = "2025, Karl Naumann-Woleske"
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
 # built documents.
-#
 # version: The short X.Y version.
 # release: The full version, including alpha/beta/rc tags.
-# If you don’t need the separation provided between version and release,
-# just set them both to the same value.
 try:
     from macrostat import __version__ as version
 except ImportError:
@@ -136,23 +134,20 @@ autosummary_context = {
 
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
-html_theme = "furo"
+html_theme = "pydata_sphinx_theme"
 
-# Theme options are theme-specific and customize the look and feel of a theme
-# further.  For a list of options available for each theme, see the
-# documentation.
 html_theme_options = {
-    "light_css_variables": {
-        "color-brand-primary": "#011828",
-        "color-brand-content": "#011828",
-        "color-foreground-secondary": "#011828",
-        "color-background-hover": "#01182833",
-    },
-    "dark_css_variables": {
-        "color-brand-primary": "#03A3B3",
-        "color-brand-content": "#03A3B3",
-        "color-foreground-border": "#03A3B3",
-        # "color-background-border": "#03A3B3",
+    "show_toc_level": 2,
+    "icon_links": [
+        {
+            "name": "GitHub",
+            "url": "https://github.com/KarlNaumann/MacroStat",
+            "icon": "fa-brands fa-square-github",
+            "type": "fontawesome",
+        },
+    ],
+    "logo": {
+        "link": "/",
     },
 }
 
