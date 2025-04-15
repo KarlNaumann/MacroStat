@@ -1,46 +1,21 @@
-from .GL06PC import (
-    GL06PC,
-    BehaviorGL06PC,
-    ParametersGL06PC,
-    ScenariosGL06PC,
-    VariablesGL06PC,
-)
-from .GL06SIM import (
-    GL06SIM,
-    BehaviorGL06SIM,
-    ParametersGL06SIM,
-    ScenariosGL06SIM,
-    VariablesGL06SIM,
-)
-from .GL06SIMEX import (
-    GL06SIMEX,
-    BehaviorGL06SIMEX,
-    ParametersGL06SIMEX,
-    ScenariosGL06SIMEX,
-    VariablesGL06SIMEX,
-)
+"""The macrostat.models module
+
+The macrostat.models module consists of the following classes
+
+.. autosummary::
+    :toctree: models
+
+    GL06PC
+    GL06SIM
+    GL06SIMEX
+    model_manager
+
+"""
+
 from .model_manager import get_available_models, get_model, get_model_classes
 
 __all__ = [
     "get_available_models",
     "get_model",
     "get_model_classes",
-    # Godley-Lavoie 2006 SIM model
-    "GL06SIM",
-    "BehaviorGL06SIM",
-    "ParametersGL06SIM",
-    "ScenariosGL06SIM",
-    "VariablesGL06SIM",
-    # Godley-Lavoie 2006 SIMEX model
-    "GL06SIMEX",
-    "BehaviorGL06SIMEX",
-    "ParametersGL06SIMEX",
-    "ScenariosGL06SIMEX",
-    "VariablesGL06SIMEX",
-    # Godley-Lavoie 2006 PC model
-    "GL06PC",
-    "BehaviorGL06PC",
-    "ParametersGL06PC",
-    "ScenariosGL06PC",
-    "VariablesGL06PC",
 ]
