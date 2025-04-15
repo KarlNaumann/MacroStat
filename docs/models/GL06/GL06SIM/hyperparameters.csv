@@ -1,0 +1,8 @@
+,Notation,Unit,Value
+device,,,cpu
+requires_grad,,,False
+scenario_trigger,,,0
+sectors,,,"['Household', 'Production', 'Government']"
+seed,,,42
+timesteps,,,100
+timesteps_initialization,,,1

@@ -19,14 +19,33 @@ if __name__ == "__main__":
         print("  - Creating Parameter table")
         model_classes = get_model_classes(modelname=modelname)
         parameters = model_classes.Parameters()
-        parameters.to_csv(f"{modeldir}/parameters.csv", sphinx_math=True)
+        df = parameters.to_csv(f"{modeldir}/parameters.csv", sphinx_math=True)
 
+        # Intermediate step: we separate parameters and hyperparameters
+        params = df[df["ParameterType"] == "Parameter"]
+        params = params.drop(columns=["ParameterType"])
+        params.to_csv(f"{modeldir}/parameters.csv")
+        hyper = df[df["ParameterType"] == "HyperParameter"]
+        hyper = hyper.drop(columns=["ParameterType", "Lower Bound", "Upper Bound"])
+        hyper.to_csv(f"{modeldir}/hyperparameters.csv")
+
+        # Create the parameters.rst file
         version_str = f"Parameters {modelname}"
         rst = [
             len(version_str) * "=",
             version_str,
             len(version_str) * "=",
             "\n",
+            f"The following two tables contain the default values for the hyperparameters and parameters of the {modelname} model.",
+            "\n",
+            "Hyperparameters",
+            len("Hyperparameters") * "=",
+            ".. csv-table::",
+            "\t:file: hyperparameters.csv",
+            "\t:header-rows: 1",
+            "\n",
+            "Parameters",
+            len("Parameters") * "=",
             ".. csv-table::",
             "\t:file: parameters.csv",
             "\t:header-rows: 1",
@@ -44,6 +63,8 @@ if __name__ == "__main__":
             len(version_str) * "=",
             version_str,
             len(version_str) * "=",
+            "\n",
+            f"The following table contains the default information for the variables of the {modelname} model.",
             "\n",
             ".. csv-table::",
             "\t:file: variables.csv",
