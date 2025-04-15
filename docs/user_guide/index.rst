@@ -9,3 +9,4 @@ This section contains the documentation of the user guide of MacroStat.
 
    Getting Started <getting_started>
    Core Model Structure <core/index>
+   LaTeX Interfaces <latex_interfaces>

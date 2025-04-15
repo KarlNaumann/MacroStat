@@ -117,8 +117,9 @@ napoleon_custom_sections = ["Equations", "Dependency", "Sets"]
 # Autodoc settings
 autodoc_default_options = {
     "members": True,
-    "undoc-members": True,
+    "undoc-members": False,
     "show-inheritance": True,
+    "inherited-members": False,  # Don't show inherited members
 }
 
 # Autosummary settings
