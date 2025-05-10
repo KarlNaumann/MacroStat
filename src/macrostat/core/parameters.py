@@ -276,6 +276,7 @@ class Parameters:
 
         df = pd.concat([par, hyper], axis=0)
         df.to_csv(file_path)
+        return df
 
     def to_excel(self, file_path: os.PathLike, *args, **kwargs):
         """Convert the parameters to an Excel file.
