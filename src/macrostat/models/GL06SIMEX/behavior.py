@@ -119,25 +119,29 @@ class BehaviorGL06SIMEX(Behavior):
         self.state["MoneySupply"] = torch.zeros(1)
         self.state["HouseholdMoneyStock"] = torch.zeros(1)
 
-    def step(self, t: int, scenario: dict):
+    def step(self, t: int, scenario: dict, params: dict | None = None):
         """Step function of the Godley-Lavoie 2006 SIMEX model."""
 
-        self.government_supply(t, scenario)
-        self.expected_disposable_income(t, scenario)
-        self.consumption_demand(t, scenario)
-        self.consumption_supply(t, scenario)
-        self.national_income(t, scenario)
-        self.labour_demand(t, scenario)
-        self.labour_supply(t, scenario)
-        self.tax_demand(t, scenario)
-        self.tax_supply(t, scenario)
-        self.labour_income(t, scenario)
-        self.disposable_income(t, scenario)
-        self.government_money_stock(t, scenario)
-        self.household_money_demand(t, scenario)
-        self.household_money_stock(t, scenario)
+        kwargs = dict(t=t, scenario=scenario, params=params)
 
-    def government_supply(self, t: torch.tensor, scenario: dict):
+        self.government_supply(**kwargs)
+        self.expected_disposable_income(**kwargs)
+        self.consumption_demand(**kwargs)
+        self.consumption_supply(**kwargs)
+        self.national_income(**kwargs)
+        self.labour_demand(**kwargs)
+        self.labour_supply(**kwargs)
+        self.tax_demand(**kwargs)
+        self.tax_supply(**kwargs)
+        self.labour_income(**kwargs)
+        self.disposable_income(**kwargs)
+        self.government_money_stock(**kwargs)
+        self.household_money_demand(**kwargs)
+        self.household_money_stock(**kwargs)
+
+    def government_supply(
+        self, t: torch.tensor, scenario: dict, params: dict | None = None
+    ):
         r"""In the model it is assumed that the supply will adjust to the demand,
         that is, whatever is demanded can and will be produced. Equation (3.2)
         in the book.
@@ -165,7 +169,9 @@ class BehaviorGL06SIMEX(Behavior):
         """
         self.state["GovernmentSupply"] = scenario["GovernmentDemand"]
 
-    def labour_demand(self, t: torch.tensor, scenario: dict):
+    def labour_demand(
+        self, t: torch.tensor, scenario: dict, params: dict | None = None
+    ):
         r"""We can resolve the labour demand from the national income equation,
         together with the consumption demand (+ disposable income) and the government demand
         knowing that labour demand is equal to labour supply.
@@ -194,7 +200,9 @@ class BehaviorGL06SIMEX(Behavior):
         """
         self.state["LabourDemand"] = self.state["NationalIncome"] / scenario["WageRate"]
 
-    def labour_supply(self, t: torch.tensor, scenario: dict):
+    def labour_supply(
+        self, t: torch.tensor, scenario: dict, params: dict | None = None
+    ):
         r"""In the model it is assumed that the supply will be equal to
         the amount of labour demanded. Equation (3.4) in the book
 
@@ -221,7 +229,7 @@ class BehaviorGL06SIMEX(Behavior):
         """
         self.state["LabourSupply"] = self.state["LabourDemand"]
 
-    def tax_demand(self, t: torch.tensor, scenario: dict):
+    def tax_demand(self, t: torch.tensor, scenario: dict, params: dict | None = None):
         r"""The tax demand is a function of the tax rate, the labour supply,
         and the wage rate. Equation (3.6) in the book.
 
@@ -249,10 +257,10 @@ class BehaviorGL06SIMEX(Behavior):
 
         """
         self.state["TaxDemand"] = (
-            self.params["TaxRate"] * self.state["LabourSupply"] * scenario["WageRate"]
+            params["TaxRate"] * self.state["LabourSupply"] * scenario["WageRate"]
         )
 
-    def tax_supply(self, t: torch.tensor, scenario: dict):
+    def tax_supply(self, t: torch.tensor, scenario: dict, params: dict | None = None):
         r"""In the model it is assumed that the supply will be equal to
         the amount of taxes demanded. Equation (3.3) in the book
 
@@ -279,7 +287,9 @@ class BehaviorGL06SIMEX(Behavior):
         """
         self.state["TaxSupply"] = self.state["TaxDemand"]
 
-    def expected_disposable_income(self, t: torch.tensor, scenario: dict):
+    def expected_disposable_income(
+        self, t: torch.tensor, scenario: dict, params: dict | None = None
+    ):
         r"""The expected disposable income is simply the prior period's
         disposable income. Equation (3.20) in the book.
 
@@ -304,7 +314,9 @@ class BehaviorGL06SIMEX(Behavior):
         """
         self.state["ExpectedDisposableIncome"] = self.prior["DisposableIncome"]
 
-    def labour_income(self, t: torch.tensor, scenario: dict):
+    def labour_income(
+        self, t: torch.tensor, scenario: dict, params: dict | None = None
+    ):
         r"""The labour income is the wage rate times the labour supply. This is
         an intermediate variable used to calculate the disposable income, but is
         computed explicitly here to compute the transaction flows.
@@ -333,7 +345,9 @@ class BehaviorGL06SIMEX(Behavior):
         """
         self.state["LabourIncome"] = scenario["WageRate"] * self.state["LabourSupply"]
 
-    def disposable_income(self, t: torch.tensor, scenario: dict):
+    def disposable_income(
+        self, t: torch.tensor, scenario: dict, params: dict | None = None
+    ):
         r"""The disposable income is the wage bill minus the taxes.
         Equation (3.5) in the book.
 
@@ -362,7 +376,9 @@ class BehaviorGL06SIMEX(Behavior):
             self.state["LabourIncome"] - self.state["TaxSupply"]
         )
 
-    def consumption_demand(self, t: torch.tensor, scenario: dict):
+    def consumption_demand(
+        self, t: torch.tensor, scenario: dict, params: dict | None = None
+    ):
         r"""The consumption demand is a function of the disposable income,
         the propensity to consume income, and the propensity to consume savings.
         Equation (3.7) in the book.
@@ -389,13 +405,13 @@ class BehaviorGL06SIMEX(Behavior):
         - ConsumptionDemand
         """
         self.state["ConsumptionDemand"] = (
-            self.params["PropensityToConsumeIncome"]
-            * self.state["ExpectedDisposableIncome"]
-            + self.params["PropensityToConsumeSavings"]
-            * self.prior["HouseholdMoneyStock"]
+            params["PropensityToConsumeIncome"] * self.state["ExpectedDisposableIncome"]
+            + params["PropensityToConsumeSavings"] * self.prior["HouseholdMoneyStock"]
         )
 
-    def consumption_supply(self, t: torch.tensor, scenario: dict):
+    def consumption_supply(
+        self, t: torch.tensor, scenario: dict, params: dict | None = None
+    ):
         r"""In the model it is assumed that the supply will adjust to the demand,
         that is, whatever is demanded can and will be produced. Equation (3.1)
         in the book.
@@ -423,7 +439,9 @@ class BehaviorGL06SIMEX(Behavior):
         """
         self.state["ConsumptionSupply"] = self.state["ConsumptionDemand"]
 
-    def government_money_stock(self, t: torch.tensor, scenario: dict):
+    def government_money_stock(
+        self, t: torch.tensor, scenario: dict, params: dict | None = None
+    ):
         r"""The government money stock is a function of the government demand,
         and the tax supply. Equation (3.8) in the book.
 
@@ -456,7 +474,9 @@ class BehaviorGL06SIMEX(Behavior):
             - self.state["TaxDemand"]
         )
 
-    def household_money_demand(self, t: torch.tensor, scenario: dict):
+    def household_money_demand(
+        self, t: torch.tensor, scenario: dict, params: dict | None = None
+    ):
         r"""The household demand for money is equivalent to their expected
         income in excess of consumption demand
 
@@ -489,7 +509,9 @@ class BehaviorGL06SIMEX(Behavior):
             - self.state["ConsumptionDemand"]
         )
 
-    def household_money_stock(self, t: torch.tensor, scenario: dict):
+    def household_money_stock(
+        self, t: torch.tensor, scenario: dict, params: dict | None = None
+    ):
         r"""The household money stock is a function of the disposable income,
         the propensity to consume income, and the propensity to consume savings.
         Equation (3.9) in the book.
@@ -523,7 +545,9 @@ class BehaviorGL06SIMEX(Behavior):
             - self.state["ConsumptionDemand"]
         )
 
-    def national_income(self, t: torch.tensor, scenario: dict):
+    def national_income(
+        self, t: torch.tensor, scenario: dict, params: dict | None = None
+    ):
         r"""The national income is the sum of the consumption demand,
         the government demand, and the tax supply. Equation (3.10) in the book.
 
