@@ -20,7 +20,13 @@ class TestBehavior:
     @pytest.fixture
     def behavior_instance(self):
         """Create a basic behavior instance for testing"""
-        parameters = Parameters()
+
+        parameters = Parameters(
+            {
+                "alpha": {"value": 1.0, "lower bound": 0.0, "upper bound": 2.0},
+                "beta": {"value": 2.0, "lower bound": 0.0, "upper bound": 4.0},
+            }
+        )
         scenarios = Scenarios(parameters=parameters)
         variables = Variables(parameters=parameters)
 
@@ -53,7 +59,7 @@ class TestBehavior:
 
         # Mock the initialize method since it's abstract
         behavior_instance.initialize = lambda: None
-        behavior_instance.step = lambda t, s: None
+        behavior_instance.step = lambda t, scenario, params: None
 
         # Run forward pass
         behavior_instance.forward()
@@ -71,11 +77,10 @@ class TestBehavior:
         behavior_instance.hyper["device"] = "cpu"
         behavior_instance.hyper["timesteps_initialization"] = 2
         behavior_instance.hyper["timesteps"] = 5
-        behavior_instance.record = True
 
         # Mock required methods
         behavior_instance.initialize = lambda: None
-        behavior_instance.step = lambda t, s: None
+        behavior_instance.step = lambda t, scenario, params: None
 
         # Run forward pass
         behavior_instance.forward()
@@ -101,7 +106,9 @@ class TestBehavior:
         # Mock required methods and track scenario values
         behavior_instance.initialize = lambda: None
         scenario_values = []
-        behavior_instance.step = lambda t, s: scenario_values.append(s["test"].item())
+        behavior_instance.step = lambda t, scenario, params: scenario_values.append(
+            scenario["test"].item()
+        )
 
         # Run forward pass
         behavior_instance.forward()
@@ -121,7 +128,7 @@ class TestBehavior:
 
         # Mock required methods
         behavior_instance.initialize = lambda: None
-        behavior_instance.step = lambda t, s: None
+        behavior_instance.step = lambda t, scenario, params: None
 
         # Run forward pass
         behavior_instance.forward()
@@ -129,6 +136,52 @@ class TestBehavior:
         # Check history was updated
         assert isinstance(behavior_instance.history, dict)
         assert behavior_instance.prior is not None
+
+    def test_apply_parameter_shocks_no_shocks(self, behavior_instance):
+        """Test the apply_parameter_shocks method with no shocks.
+
+        In this case, the method should just return a dictionary where the
+        values and the objects are the same as in the original behavior_instance.params
+        dictionary.
+        """
+        params = behavior_instance.apply_parameter_shocks(t=0, scenario={})
+        for key, value in behavior_instance.params.items():
+            assert params[key] == value
+
+    def test_apply_parameter_shocks_multiplicative_shock(self, behavior_instance):
+        """Test the apply_parameter_shocks method with a multiplicative shock"""
+
+        scenario = {"alpha_multiply": 2.0, "beta_multiply": 2.0}
+        params = behavior_instance.apply_parameter_shocks(t=0, scenario=scenario)
+        assert params["alpha"] == 2.0
+        assert params["beta"] == 4.0
+
+    def test_apply_parameter_shocks_additive_shock(self, behavior_instance):
+        """Test the apply_parameter_shocks method with an additive shock"""
+
+        scenario = {"alpha_add": 1.0, "beta_add": 1.0}
+        params = behavior_instance.apply_parameter_shocks(t=0, scenario=scenario)
+        assert params["alpha"] == 2.0
+        assert params["beta"] == 3.0
+
+    def test_apply_parameter_shocks_multiplicative_and_additive_shock(
+        self, behavior_instance
+    ):
+        """Test the apply_parameter_shocks method with a multiplicative and additive shock
+
+        In case of a combined shock, it should first apply the multiplicative shock and
+        only afterwards the additive shock.
+        """
+
+        scenario = {
+            "alpha_multiply": 2.0,
+            "beta_multiply": 2.0,
+            "alpha_add": 1.0,
+            "beta_add": 1.0,
+        }
+        params = behavior_instance.apply_parameter_shocks(t=0, scenario=scenario)
+        assert params["alpha"] == 3.0
+        assert params["beta"] == 5.0
 
     def test_diffwhere(self, behavior_instance):
         """Test the differentiable where function"""

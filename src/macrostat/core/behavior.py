@@ -116,10 +116,14 @@ class Behavior(torch.nn.Module):
             )
             scenario = {k: idx @ v for k, v in self.scenarios.items()}
 
-            self.step(t, scenario)
+            # Apply parameter shocks
+            params = self.apply_parameter_shocks(t, scenario)
 
+            # Step the model
+            self.step(t=t, scenario=scenario, params=params)
+
+            # Store the outputs
             self.variables.record_state(t, self.state)
-
             self.history = self.variables.update_history(self.state)
             self.prior = self.state
             self.state = self.variables.new_state()
@@ -135,7 +139,7 @@ class Behavior(torch.nn.Module):
         """
         raise NotImplementedError("Behavior.initialize() to be implemented by model")
 
-    def step(self, t: int, scenario: dict):
+    def step(self, t: int, scenario: dict, params: dict | None = None):
         """Step function of the behavior.
 
         This should include the model's main loop.
@@ -148,6 +152,45 @@ class Behavior(torch.nn.Module):
             The scenario information for the current timestep.
         """
         raise NotImplementedError("Behavior.step() to be implemented by model")
+
+    def apply_parameter_shocks(self, t: int, scenario: dict):
+        """Apply parameter shocks to the model.
+
+        Any parameter in the model can be shocked/changed during the simulation
+        using the scenario information. Specifically, for a parameter alpha, the
+        user can pass two types of potential shocks:
+        1. An multiplicative shock, generically named alpha_multiply
+        2. An additive shock, generically named alpha_add
+
+        This function will apply the shocks to the parameters, and return a
+        dictionary with the updated parameters. The application of the shocks is
+        independent, that is, the multiplicative shock does not affect the additive
+        shock and vice versa. This is done by first applying the multiplicative
+        shock, and then the additive shock.
+
+        Parameters
+        ----------
+        t: int
+            The current timestep.
+        scenario: dict
+            The scenario information for the current timestep.
+
+        Returns
+        -------
+        dict
+            A dictionary with the updated parameters.
+        """
+        params = {}
+
+        for key, value in self.params.items():
+            mul, add = torch.tensor(1.0), torch.tensor(0.0)
+            if f"{key}_multiply" in scenario:
+                mul = scenario[f"{key}_multiply"]
+            if f"{key}_add" in scenario:
+                add = scenario[f"{key}_add"]
+            params[key] = value * mul + add
+
+        return params
 
     # Some Differentiable PyTorch Alternatives
 
