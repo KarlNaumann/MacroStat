@@ -213,12 +213,8 @@ class Behavior(torch.nn.Module):
         x2 : torch.Tensor
             Value to be returned if condition is False
         """
-        if self.hyper["diffwhere"]:
-            sig = torch.sigmoid(torch.mul(condition, self.hyper["sigmoid_constant"]))
-            out = torch.add(torch.mul(sig, torch.sub(x1, x2)), x2)
-        else:
-            out = torch.where(condition > 0, x1, x2)
-        return out
+        sig = torch.sigmoid(torch.mul(condition, self.hyper["sigmoid_constant"]))
+        return torch.add(torch.mul(sig, torch.sub(x1, x2)), x2)
 
     def tanhmask(self, x):
         """Convert a variable into 0 (x<0) and 1 (x>0)
