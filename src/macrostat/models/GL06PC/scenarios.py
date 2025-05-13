@@ -45,4 +45,5 @@ class ScenariosGL06PC(Scenarios):
             "GovernmentDemand": 20,
             "WageRate": 1,
             "InterestRate": 0.025,
+            "PropensityToConsumeIncome_add": 0,
         }
