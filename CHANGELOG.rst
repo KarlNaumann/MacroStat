@@ -4,6 +4,25 @@ Changelog
 This is an automatically generated changelog, for a more complete textual description of the changes
 please refer to the version release notes.
 
+`v0.4.0 <https://github.com/KarlNaumann/MacroStat/compare/v0.3.0...v0.4.0>`_ - 2025-04-15
+================================================================================================================================
+
+Merges / Pull Requests
+-----------------------
+
+- `[#7] <https://github.com/KarlNaumann/MacroStat/pull/7>`_: Documentation
+- `[#6] <https://github.com/KarlNaumann/MacroStat/pull/6>`_: Core testing
+- `[#5] <https://github.com/KarlNaumann/MacroStat/pull/5>`_: GL06 Model PC
+- `[#4] <https://github.com/KarlNaumann/MacroStat/pull/4>`_: Model SIM and SIMEX
+- `[#3] <https://github.com/KarlNaumann/MacroStat/pull/3>`_: Core model structure overhaul
+
+Commits
+--------
+
+- `1edb2c1 <https://github.com/KarlNaumann/MacroStat/commit/1edb2c1147d34f9f4dcbfa2227732fc44bda968c>`_: [FIX] Remove paths from requirements.txt
+- `57475a3 <https://github.com/KarlNaumann/MacroStat/commit/57475a37502116b5ed0b87d0b079810f7d6a30ab>`_: [FIX] Proper formatting following pre-commit-hooks
+- `83bbe89 <https://github.com/KarlNaumann/MacroStat/commit/83bbe89daee81e59a906cb7437914abc39c21425>`_: [FIX] Simplify requirements
+
 `v0.3.0 <https://github.com/KarlNaumann/MacroStat/compare/v0.2.0...v0.3.0>`_ - 2024-10-03
 ================================================================================================================================
 
