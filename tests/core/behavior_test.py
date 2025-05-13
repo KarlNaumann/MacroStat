@@ -28,7 +28,6 @@ class TestBehavior:
             parameters=parameters,
             scenarios=scenarios,
             variables=variables,
-            record=False,
             scenario=0,
         )
 
@@ -39,7 +38,6 @@ class TestBehavior:
         assert isinstance(behavior_instance.hyper, dict)
         assert isinstance(behavior_instance.scenarios, torch.nn.ParameterDict)
         assert isinstance(behavior_instance.variables, Variables)
-        assert behavior_instance.record is False
         assert behavior_instance.scenarioID == 0
         assert behavior_instance.differentiable is False
         assert behavior_instance.debug is False

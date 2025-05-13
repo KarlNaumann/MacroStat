@@ -26,7 +26,6 @@ class Behavior(torch.nn.Module):
         parameters: Parameters,
         scenarios: Scenarios,
         variables: Variables,
-        record: bool = False,
         scenario: int = 0,
         differentiable: bool = False,
         debug: bool = False,
@@ -41,9 +40,6 @@ class Behavior(torch.nn.Module):
             The scenarios of the model.
         variables: macrostat.core.variables.Variables
             The variables of the model.
-        record: bool
-            Whether to record the model output as a whole timeseries, or just
-            the state variables (less memory-intensive).
         scenario: int
             The scenario to use for the model run.
         debug: bool
@@ -65,7 +61,6 @@ class Behavior(torch.nn.Module):
 
         # Settings
         self.differentiable = differentiable
-        self.record = record
         self.debug = debug
 
     def forward(self):
@@ -82,14 +77,11 @@ class Behavior(torch.nn.Module):
         torch.manual_seed(self.hyper["seed"])
 
         # Initialize the output tensors
-        kwargs = {
-            "dtype": torch.float32,
-            "requires_grad": self.hyper["requires_grad"],
-            "device": self.hyper["device"],
-        }
-
         self.state, self.history = self.variables.initialize_tensors(
-            t=self.hyper["timesteps"], **kwargs
+            t=self.hyper["timesteps"],
+            dtype=torch.float32,
+            requires_grad=self.hyper["requires_grad"],
+            device=self.hyper["device"],
         )
 
         # Initialize the model
@@ -97,13 +89,14 @@ class Behavior(torch.nn.Module):
             f"Initializing model (t=0...{self.hyper['timesteps_initialization']})"
         )
         self.initialize()
-        if self.record:
-            for t in range(self.hyper["timesteps_initialization"]):
-                self.variables.record_state(t, self.state)
+
+        for t in range(self.hyper["timesteps_initialization"]):
+            self.variables.record_state(t, self.state)
 
         for t in range(self.hyper["timesteps_initialization"]):
             self.history = self.variables.update_history(self.state)
 
+        # Initialize the prior and state
         self.prior = self.state
         self.state = self.variables.new_state()
 

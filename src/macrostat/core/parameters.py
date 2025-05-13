@@ -266,7 +266,7 @@ class Parameters:
         par = pd.DataFrame.from_dict(self.values, orient="index").sort_index()
         par = par[["notation", "unit", "value", "lower bound", "upper bound"]]
         par.columns = ["Notation", "Unit", "Value", "Lower Bound", "Upper Bound"]
-        if sphinx_math:
+        if sphinx_math:  # pragma: no cover
             par["Notation"] = par["Notation"].apply(lambda x: r":math:`" + x + r"`")
         par["ParameterType"] = "Parameter"
 
