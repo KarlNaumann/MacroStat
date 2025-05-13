@@ -128,31 +128,37 @@ class BehaviorGL06PC(Behavior):
         self.state["InterestRate"] = torch.zeros(1)
         self.state["DisposableIncome"] = torch.zeros(1)
 
-    def step(self, t: int, scenario: dict):
+    def step(self, **kwargs):
         """Step function of the Godley-Lavoie 2006 PC model."""
 
         # Scenario items
-        self.consumption_government(t, scenario)
-        self.set_interest_rate(t, scenario)
+        self.consumption_government(**kwargs)
+        self.set_interest_rate(**kwargs)
 
         # Items based on prior
-        self.interest_earned_on_bills_household(t, scenario)
-        self.interest_earned_on_bills_central_bank(t, scenario)
+        self.interest_earned_on_bills_household(**kwargs)
+        self.interest_earned_on_bills_central_bank(**kwargs)
 
         # Solution of the step
-        self.national_income(t, scenario)
-        self.taxes(t, scenario)
-        self.disposable_income(t, scenario)
-        self.consumption(t, scenario)
-        self.wealth(t, scenario)
-        self.household_bill_holdings(t, scenario)
-        self.household_money_stock(t, scenario)
-        self.central_bank_profits(t, scenario)
-        self.government_bill_issuance(t, scenario)
-        self.central_bank_bill_holdings(t, scenario)
-        self.central_bank_money_stock(t, scenario)
+        self.national_income(**kwargs)
+        self.taxes(**kwargs)
+        self.disposable_income(**kwargs)
+        self.consumption(**kwargs)
+        self.wealth(**kwargs)
+        self.household_bill_holdings(**kwargs)
+        self.household_money_stock(**kwargs)
+        self.central_bank_profits(**kwargs)
+        self.government_bill_issuance(**kwargs)
+        self.central_bank_bill_holdings(**kwargs)
+        self.central_bank_money_stock(**kwargs)
 
-    def consumption_government(self, t: int, scenario: dict):
+    def consumption_government(
+        self,
+        t: int,
+        scenario: dict,
+        params: dict | None = None,
+        **kwargs,
+    ):
         r"""Calculate the consumption of the government. This is
         given exogenously by the scenario.
 
@@ -162,6 +168,8 @@ class BehaviorGL06PC(Behavior):
             The time step.
         scenario: dict
             The scenario.
+        params: dict | None
+            The parameters.
 
         Dependency
         ----------
@@ -173,7 +181,9 @@ class BehaviorGL06PC(Behavior):
         """
         self.state["ConsumptionGovernment"] = scenario["GovernmentDemand"]
 
-    def set_interest_rate(self, t: int, scenario: dict):
+    def set_interest_rate(
+        self, t: int, scenario: dict, params: dict | None = None, **kwargs
+    ):
         r"""Set the interest rate. This is given exogenously by the scenario.
 
         Parameters
@@ -182,6 +192,8 @@ class BehaviorGL06PC(Behavior):
             The time step.
         scenario: dict
             The scenario.
+        params: dict | None
+            The parameters.
 
         Dependency
         ----------
@@ -193,7 +205,9 @@ class BehaviorGL06PC(Behavior):
         """
         self.state["InterestRate"] = scenario["InterestRate"]
 
-    def interest_earned_on_bills_household(self, t: int, scenario: dict):
+    def interest_earned_on_bills_household(
+        self, t: int, scenario: dict, params: dict | None = None, **kwargs
+    ):
         r"""Calculate the interest earned on bills by the household.
 
         Parameters
@@ -202,6 +216,8 @@ class BehaviorGL06PC(Behavior):
             The time step.
         scenario: dict
             The scenario.
+        params: dict | None
+            The parameters.
 
         Equations
         ---------
@@ -225,7 +241,9 @@ class BehaviorGL06PC(Behavior):
             self.prior["InterestRate"] * self.prior["HouseholdBillStock"]
         )
 
-    def interest_earned_on_bills_central_bank(self, t: int, scenario: dict):
+    def interest_earned_on_bills_central_bank(
+        self, t: int, scenario: dict, params: dict | None = None, **kwargs
+    ):
         r"""Calculate the interest earned on bills by the central bank.
 
         Parameters
@@ -234,6 +252,8 @@ class BehaviorGL06PC(Behavior):
             The time step.
         scenario: dict
             The scenario.
+        params: dict | None
+            The parameters.
 
         Equations
         ---------
@@ -257,7 +277,9 @@ class BehaviorGL06PC(Behavior):
             self.prior["InterestRate"] * self.prior["CentralBankBillStock"]
         )
 
-    def national_income(self, t: int, scenario: dict):
+    def national_income(
+        self, t: int, scenario: dict, params: dict | None = None, **kwargs
+    ):
         r"""Calculate the national income based on the closed-form solution derived in the documentation.
 
         The closed-form solution is used to avoid the need to solve the system of equations iteratively, thus
@@ -269,7 +291,8 @@ class BehaviorGL06PC(Behavior):
             The time step.
         scenario: dict
             The scenario.
-
+        params: dict | None
+            The parameters.
 
         Equations
         ---------
@@ -282,9 +305,12 @@ class BehaviorGL06PC(Behavior):
 
         Dependency
         ----------
+        - params: PropensityToConsumeIncome
+        - params: TaxRate
         - state: InterestEarnedOnBillsHousehold
-        - state: ConsumptionGovernment
+        - params: PropensityToConsumeSavings
         - prior: Wealth
+        - state: ConsumptionGovernment
 
         Sets
         -----
@@ -292,20 +318,20 @@ class BehaviorGL06PC(Behavior):
         """
         self.state["NationalIncome"] = (
             # Spending out of bond income
-            self.params["PropensityToConsumeIncome"]
-            * (1 - self.params["TaxRate"])
+            params["PropensityToConsumeIncome"]
+            * (1 - params["TaxRate"])
             * self.state["InterestEarnedOnBillsHousehold"]
             # Spending out of wealth
-            + self.params["PropensityToConsumeSavings"] * self.prior["Wealth"]
+            + params["PropensityToConsumeSavings"] * self.prior["Wealth"]
             # Government spending
             + self.state["ConsumptionGovernment"]
         ) / (
             # Multiplier
             1
-            - self.params["PropensityToConsumeIncome"] * (1 - self.params["TaxRate"])
+            - params["PropensityToConsumeIncome"] * (1 - params["TaxRate"])
         )
 
-    def taxes(self, t: int, scenario: dict):
+    def taxes(self, t: int, scenario: dict, params: dict | None = None, **kwargs):
         r"""Calculate the taxes.
 
         Parameters
@@ -314,6 +340,8 @@ class BehaviorGL06PC(Behavior):
             The time step.
         scenario: dict
             The scenario.
+        params: dict | None
+            The parameters.
 
         Equations
         ---------
@@ -326,6 +354,7 @@ class BehaviorGL06PC(Behavior):
 
         Dependency
         ----------
+        - params: TaxRate
         - state: NationalIncome
         - state: InterestEarnedOnBillsHousehold
 
@@ -333,11 +362,13 @@ class BehaviorGL06PC(Behavior):
         -----
         - Taxes
         """
-        self.state["Taxes"] = self.params["TaxRate"] * (
+        self.state["Taxes"] = params["TaxRate"] * (
             self.state["NationalIncome"] + self.state["InterestEarnedOnBillsHousehold"]
         )
 
-    def disposable_income(self, t: int, scenario: dict):
+    def disposable_income(
+        self, t: int, scenario: dict, params: dict | None = None, **kwargs
+    ):
         r"""Calculate the disposable income.
 
         Parameters
@@ -346,6 +377,8 @@ class BehaviorGL06PC(Behavior):
             The time step.
         scenario: dict
             The scenario.
+        params: dict | None
+            The parameters.
 
         Equations
         ---------
@@ -372,7 +405,7 @@ class BehaviorGL06PC(Behavior):
             + self.state["InterestEarnedOnBillsHousehold"]
         )
 
-    def consumption(self, t: int, scenario: dict):
+    def consumption(self, t: int, scenario: dict, params: dict | None = None, **kwargs):
         r"""Calculate the consumption.
 
         Parameters
@@ -381,6 +414,8 @@ class BehaviorGL06PC(Behavior):
             The time step.
         scenario: dict
             The scenario.
+        params: dict | None
+            The parameters.
 
         Equations
         ---------
@@ -395,17 +430,19 @@ class BehaviorGL06PC(Behavior):
         ----------
         - state: DisposableIncome
         - prior: Wealth
+        - params: PropensityToConsumeIncome
+        - params: PropensityToConsumeSavings
 
         Sets
         -----
         - ConsumptionHousehold
         """
         self.state["ConsumptionHousehold"] = (
-            self.params["PropensityToConsumeIncome"] * self.state["DisposableIncome"]
-            + self.params["PropensityToConsumeSavings"] * self.prior["Wealth"]
+            params["PropensityToConsumeIncome"] * self.state["DisposableIncome"]
+            + params["PropensityToConsumeSavings"] * self.prior["Wealth"]
         )
 
-    def wealth(self, t: int, scenario: dict):
+    def wealth(self, t: int, scenario: dict, params: dict | None = None, **kwargs):
         r"""Calculate the wealth.
 
         Parameters
@@ -414,6 +451,8 @@ class BehaviorGL06PC(Behavior):
             The time step.
         scenario: dict
             The scenario.
+        params: dict | None
+            The parameters.
 
         Equations
         ---------
@@ -440,7 +479,9 @@ class BehaviorGL06PC(Behavior):
             - self.state["ConsumptionHousehold"]
         )
 
-    def household_bill_holdings(self, t: int, scenario: dict):
+    def household_bill_holdings(
+        self, t: int, scenario: dict, params: dict | None = None, **kwargs
+    ):
         r"""Calculate the household bill holdings.
 
         Parameters
@@ -449,6 +490,8 @@ class BehaviorGL06PC(Behavior):
             The time step.
         scenario: dict
             The scenario.
+        params: dict | None
+            The parameters.
 
         Equations
         ---------
@@ -461,9 +504,12 @@ class BehaviorGL06PC(Behavior):
 
         Dependency
         ----------
-        - state: DisposableIncome
         - state: Wealth
+        - state: DisposableIncome
         - state: InterestRate
+        - params: WealthShareBills_Constant
+        - params: WealthShareBills_InterestRate
+        - params: WealthShareBills_Income
 
         Sets
         -----
@@ -471,16 +517,18 @@ class BehaviorGL06PC(Behavior):
         """
         self.state["HouseholdBillStock"] = self.state["Wealth"] * (
             # Baseline share
-            self.params["WealthShareBills_Constant"]
+            params["WealthShareBills_Constant"]
             # Interest rate effect
-            + self.params["WealthShareBills_InterestRate"] * self.state["InterestRate"]
+            + params["WealthShareBills_InterestRate"] * self.state["InterestRate"]
             # Income-to-wealth ratio effect
-            - self.params["WealthShareBills_Income"]
+            - params["WealthShareBills_Income"]
             * self.state["DisposableIncome"]
             / self.state["Wealth"]
         )
 
-    def household_money_stock(self, t: int, scenario: dict):
+    def household_money_stock(
+        self, t: int, scenario: dict, params: dict | None = None, **kwargs
+    ):
         r"""Calculate the household deposits as a residual.
 
         Parameters
@@ -489,6 +537,8 @@ class BehaviorGL06PC(Behavior):
             The time step.
         scenario: dict
             The scenario.
+        params: dict | None
+            The parameters.
 
         Equations
         ---------
@@ -512,7 +562,9 @@ class BehaviorGL06PC(Behavior):
             self.state["Wealth"] - self.state["HouseholdBillStock"]
         )
 
-    def central_bank_profits(self, t: int, scenario: dict):
+    def central_bank_profits(
+        self, t: int, scenario: dict, params: dict | None = None, **kwargs
+    ):
         r"""Calculate the central bank profits (income on bills held).
 
         Parameters
@@ -521,6 +573,8 @@ class BehaviorGL06PC(Behavior):
             The time step.
         scenario: dict
             The scenario.
+        params: dict | None
+            The parameters.
 
         Equations
         ---------
@@ -544,7 +598,9 @@ class BehaviorGL06PC(Behavior):
             self.prior["InterestRate"] * self.prior["CentralBankBillStock"]
         )
 
-    def government_bill_issuance(self, t: int, scenario: dict):
+    def government_bill_issuance(
+        self, t: int, scenario: dict, params: dict | None = None, **kwargs
+    ):
         r"""Calculate the government bill issuance.
 
         Parameters
@@ -553,6 +609,8 @@ class BehaviorGL06PC(Behavior):
             The time step.
         scenario: dict
             The scenario.
+        params: dict | None
+            The parameters.
 
         Equations
         ---------
@@ -591,7 +649,9 @@ class BehaviorGL06PC(Behavior):
             )
         )
 
-    def central_bank_bill_holdings(self, t: int, scenario: dict):
+    def central_bank_bill_holdings(
+        self, t: int, scenario: dict, params: dict | None = None, **kwargs
+    ):
         r"""Calculate the central bank bill holdings.
 
         Parameters
@@ -600,6 +660,8 @@ class BehaviorGL06PC(Behavior):
             The time step.
         scenario: dict
             The scenario.
+        params: dict | None
+            The parameters.
 
         Equations
         ---------
@@ -623,7 +685,9 @@ class BehaviorGL06PC(Behavior):
             self.state["GovernmentBillStock"] - self.state["HouseholdBillStock"]
         )
 
-    def central_bank_money_stock(self, t: int, scenario: dict):
+    def central_bank_money_stock(
+        self, t: int, scenario: dict, params: dict | None = None, **kwargs
+    ):
         r"""Calculate the central bank money stock.
 
         Parameters
@@ -632,6 +696,8 @@ class BehaviorGL06PC(Behavior):
             The time step.
         scenario: dict
             The scenario.
+        params: dict | None
+            The parameters.
 
         Equations
         ---------

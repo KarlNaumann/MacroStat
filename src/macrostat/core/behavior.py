@@ -26,7 +26,6 @@ class Behavior(torch.nn.Module):
         parameters: Parameters,
         scenarios: Scenarios,
         variables: Variables,
-        record: bool = False,
         scenario: int = 0,
         differentiable: bool = False,
         debug: bool = False,
@@ -41,9 +40,6 @@ class Behavior(torch.nn.Module):
             The scenarios of the model.
         variables: macrostat.core.variables.Variables
             The variables of the model.
-        record: bool
-            Whether to record the model output as a whole timeseries, or just
-            the state variables (less memory-intensive).
         scenario: int
             The scenario to use for the model run.
         debug: bool
@@ -65,7 +61,6 @@ class Behavior(torch.nn.Module):
 
         # Settings
         self.differentiable = differentiable
-        self.record = record
         self.debug = debug
 
     def forward(self):
@@ -82,14 +77,11 @@ class Behavior(torch.nn.Module):
         torch.manual_seed(self.hyper["seed"])
 
         # Initialize the output tensors
-        kwargs = {
-            "dtype": torch.float32,
-            "requires_grad": self.hyper["requires_grad"],
-            "device": self.hyper["device"],
-        }
-
         self.state, self.history = self.variables.initialize_tensors(
-            t=self.hyper["timesteps"], **kwargs
+            t=self.hyper["timesteps"],
+            dtype=torch.float32,
+            requires_grad=self.hyper["requires_grad"],
+            device=self.hyper["device"],
         )
 
         # Initialize the model
@@ -97,13 +89,14 @@ class Behavior(torch.nn.Module):
             f"Initializing model (t=0...{self.hyper['timesteps_initialization']})"
         )
         self.initialize()
-        if self.record:
-            for t in range(self.hyper["timesteps_initialization"]):
-                self.variables.record_state(t, self.state)
+
+        for t in range(self.hyper["timesteps_initialization"]):
+            self.variables.record_state(t, self.state)
 
         for t in range(self.hyper["timesteps_initialization"]):
             self.history = self.variables.update_history(self.state)
 
+        # Initialize the prior and state
         self.prior = self.state
         self.state = self.variables.new_state()
 
@@ -123,10 +116,14 @@ class Behavior(torch.nn.Module):
             )
             scenario = {k: idx @ v for k, v in self.scenarios.items()}
 
-            self.step(t, scenario)
+            # Apply parameter shocks
+            params = self.apply_parameter_shocks(t, scenario)
 
+            # Step the model
+            self.step(t=t, scenario=scenario, params=params)
+
+            # Store the outputs
             self.variables.record_state(t, self.state)
-
             self.history = self.variables.update_history(self.state)
             self.prior = self.state
             self.state = self.variables.new_state()
@@ -142,7 +139,7 @@ class Behavior(torch.nn.Module):
         """
         raise NotImplementedError("Behavior.initialize() to be implemented by model")
 
-    def step(self, t: int, scenario: dict):
+    def step(self, t: int, scenario: dict, params: dict | None = None):
         """Step function of the behavior.
 
         This should include the model's main loop.
@@ -155,6 +152,45 @@ class Behavior(torch.nn.Module):
             The scenario information for the current timestep.
         """
         raise NotImplementedError("Behavior.step() to be implemented by model")
+
+    def apply_parameter_shocks(self, t: int, scenario: dict):
+        """Apply parameter shocks to the model.
+
+        Any parameter in the model can be shocked/changed during the simulation
+        using the scenario information. Specifically, for a parameter alpha, the
+        user can pass two types of potential shocks:
+        1. An multiplicative shock, generically named alpha_multiply
+        2. An additive shock, generically named alpha_add
+
+        This function will apply the shocks to the parameters, and return a
+        dictionary with the updated parameters. The application of the shocks is
+        independent, that is, the multiplicative shock does not affect the additive
+        shock and vice versa. This is done by first applying the multiplicative
+        shock, and then the additive shock.
+
+        Parameters
+        ----------
+        t: int
+            The current timestep.
+        scenario: dict
+            The scenario information for the current timestep.
+
+        Returns
+        -------
+        dict
+            A dictionary with the updated parameters.
+        """
+        params = {}
+
+        for key, value in self.params.items():
+            mul, add = torch.tensor(1.0), torch.tensor(0.0)
+            if f"{key}_multiply" in scenario:
+                mul = scenario[f"{key}_multiply"]
+            if f"{key}_add" in scenario:
+                add = scenario[f"{key}_add"]
+            params[key] = value * mul + add
+
+        return params
 
     # Some Differentiable PyTorch Alternatives
 
@@ -177,12 +213,8 @@ class Behavior(torch.nn.Module):
         x2 : torch.Tensor
             Value to be returned if condition is False
         """
-        if self.hyper["diffwhere"]:
-            sig = torch.sigmoid(torch.mul(condition, self.hyper["sigmoid_constant"]))
-            out = torch.add(torch.mul(sig, torch.sub(x1, x2)), x2)
-        else:
-            out = torch.where(condition > 0, x1, x2)
-        return out
+        sig = torch.sigmoid(torch.mul(condition, self.hyper["sigmoid_constant"]))
+        return torch.add(torch.mul(sig, torch.sub(x1, x2)), x2)
 
     def tanhmask(self, x):
         """Convert a variable into 0 (x<0) and 1 (x>0)
