@@ -112,6 +112,7 @@ class BehaviorGL06PCEX(Behavior):
         - DisposableIncome
 
         """
+        # Flows
         self.state["ConsumptionHousehold"] = torch.zeros(1)
         self.state["ConsumptionGovernment"] = torch.zeros(1)
         self.state["NationalIncome"] = torch.zeros(1)
@@ -119,14 +120,19 @@ class BehaviorGL06PCEX(Behavior):
         self.state["InterestEarnedOnBillsCentralBank"] = torch.zeros(1)
         self.state["CentralBankProfits"] = torch.zeros(1)
         self.state["Taxes"] = torch.zeros(1)
+        # Stocks
         self.state["HouseholdMoneyStock"] = torch.zeros(1)
         self.state["CentralBankMoneyStock"] = torch.zeros(1)
         self.state["HouseholdBillStock"] = torch.zeros(1)
         self.state["GovernmentBillStock"] = torch.zeros(1)
         self.state["CentralBankBillStock"] = torch.zeros(1)
         self.state["Wealth"] = torch.zeros(1)
+        # Indices
         self.state["InterestRate"] = torch.zeros(1)
         self.state["DisposableIncome"] = torch.zeros(1)
+        self.state["ExpectedDisposableIncome"] = torch.zeros(1)
+        self.state["ExpectedWealth"] = torch.zeros(1)
+        self.state["HouseholdBillDemand"] = torch.zeros(1)
 
     def step(self, **kwargs):
         """Step function of the Godley-Lavoie 2006 PC model."""
@@ -138,13 +144,16 @@ class BehaviorGL06PCEX(Behavior):
         # Items based on prior
         self.interest_earned_on_bills_household(**kwargs)
         self.interest_earned_on_bills_central_bank(**kwargs)
+        self.expected_disposable_income(**kwargs)
 
         # Solution of the step
+        self.consumption(**kwargs)
         self.national_income(**kwargs)
         self.taxes(**kwargs)
         self.disposable_income(**kwargs)
-        self.consumption(**kwargs)
         self.wealth(**kwargs)
+        self.expected_wealth(**kwargs)
+        self.household_bill_demand(**kwargs)
         self.household_bill_holdings(**kwargs)
         self.household_money_stock(**kwargs)
         self.central_bank_profits(**kwargs)
@@ -277,6 +286,70 @@ class BehaviorGL06PCEX(Behavior):
             self.prior["InterestRate"] * self.prior["CentralBankBillStock"]
         )
 
+    def expected_disposable_income(
+        self, t: torch.tensor, scenario: dict, params: dict | None = None
+    ):
+        r"""The expected disposable income is simply the prior period's
+        disposable income. Equation (3.20) in the book.
+
+        Parameters
+        ----------
+        t : torch.tensor
+            Current time step
+        scenario : dict
+
+        Equations
+        ---------
+        .. math::
+            YD^e(t) = YD(t-1)
+
+        Dependency
+        ----------
+        - prior: DisposableIncome
+
+        Sets
+        -----
+        - ExpectedDisposableIncome
+        """
+        self.state["ExpectedDisposableIncome"] = self.prior["DisposableIncome"]
+
+    def consumption(self, t: int, scenario: dict, params: dict | None = None, **kwargs):
+        r"""Calculate the consumption.
+
+        Parameters
+        ----------
+        t: int
+            The time step.
+        scenario: dict
+            The scenario.
+        params: dict | None
+            The parameters.
+
+        Equations
+        ---------
+        .. math::
+            :nowrap:
+
+            \begin{align}
+                C(t) = \alpha_1 YD^e(t) + \alpha_2 V(t-1)
+            \end{align}
+
+        Dependency
+        ----------
+        - state: ExpectedDisposableIncome
+        - prior: Wealth
+        - params: PropensityToConsumeIncome
+        - params: PropensityToConsumeSavings
+
+        Sets
+        -----
+        - ConsumptionHousehold
+        """
+        self.state["ConsumptionHousehold"] = (
+            params["PropensityToConsumeIncome"] * self.state["ExpectedDisposableIncome"]
+            + params["PropensityToConsumeSavings"] * self.prior["Wealth"]
+        )
+
     def national_income(
         self, t: int, scenario: dict, params: dict | None = None, **kwargs
     ):
@@ -300,16 +373,12 @@ class BehaviorGL06PCEX(Behavior):
             :nowrap:
 
             \begin{align}
-                Y(t) = \frac{\alpha_1(1-\theta)r(t-1)B_h(t-1) + \alpha_2 V(t-1) + G(t)}{1 - \alpha_1(1-\theta)}
+                Y(t) = C(t) + G(t)
             \end{align}
 
         Dependency
         ----------
-        - params: PropensityToConsumeIncome
-        - params: TaxRate
-        - state: InterestEarnedOnBillsHousehold
-        - params: PropensityToConsumeSavings
-        - prior: Wealth
+        - state: ConsumptionHousehold
         - state: ConsumptionGovernment
 
         Sets
@@ -317,18 +386,7 @@ class BehaviorGL06PCEX(Behavior):
         - NationalIncome
         """
         self.state["NationalIncome"] = (
-            # Spending out of bond income
-            params["PropensityToConsumeIncome"]
-            * (1 - params["TaxRate"])
-            * self.state["InterestEarnedOnBillsHousehold"]
-            # Spending out of wealth
-            + params["PropensityToConsumeSavings"] * self.prior["Wealth"]
-            # Government spending
-            + self.state["ConsumptionGovernment"]
-        ) / (
-            # Multiplier
-            1
-            - params["PropensityToConsumeIncome"] * (1 - params["TaxRate"])
+            self.state["ConsumptionHousehold"] + self.state["ConsumptionGovernment"]
         )
 
     def taxes(self, t: int, scenario: dict, params: dict | None = None, **kwargs):
@@ -405,43 +463,6 @@ class BehaviorGL06PCEX(Behavior):
             + self.state["InterestEarnedOnBillsHousehold"]
         )
 
-    def consumption(self, t: int, scenario: dict, params: dict | None = None, **kwargs):
-        r"""Calculate the consumption.
-
-        Parameters
-        ----------
-        t: int
-            The time step.
-        scenario: dict
-            The scenario.
-        params: dict | None
-            The parameters.
-
-        Equations
-        ---------
-        .. math::
-            :nowrap:
-
-            \begin{align}
-                C(t) = \alpha_1 YD(t) + \alpha_2 V(t-1)
-            \end{align}
-
-        Dependency
-        ----------
-        - state: DisposableIncome
-        - prior: Wealth
-        - params: PropensityToConsumeIncome
-        - params: PropensityToConsumeSavings
-
-        Sets
-        -----
-        - ConsumptionHousehold
-        """
-        self.state["ConsumptionHousehold"] = (
-            params["PropensityToConsumeIncome"] * self.state["DisposableIncome"]
-            + params["PropensityToConsumeSavings"] * self.prior["Wealth"]
-        )
-
     def wealth(self, t: int, scenario: dict, params: dict | None = None, **kwargs):
         r"""Calculate the wealth.
 
@@ -479,6 +500,95 @@ class BehaviorGL06PCEX(Behavior):
             - self.state["ConsumptionHousehold"]
         )
 
+    def expected_wealth(
+        self, t: int, scenario: dict, params: dict | None = None, **kwargs
+    ):
+        r"""Calculate the expected wealth.
+
+        Parameters
+        ----------
+        t: int
+            The time step.
+        scenario: dict
+            The scenario.
+        params: dict | None
+            The parameters.
+
+        Equations
+        ---------
+        .. math::
+            :nowrap:
+
+            \begin{align}
+                V^e(t) = V(t-1) + YD^e(t) - C(t)
+            \end{align}
+
+        Dependency
+        ----------
+        - state: ExpectedDisposableIncome
+        - state: ConsumptionHousehold
+        - prior: Wealth
+
+        Sets
+        -----
+        - ExpectedWealth
+        """
+        self.state["ExpectedWealth"] = (
+            self.prior["Wealth"]
+            + self.state["ExpectedDisposableIncome"]
+            - self.state["ConsumptionHousehold"]
+        )
+
+    def household_bill_demand(
+        self, t: int, scenario: dict, params: dict | None = None, **kwargs
+    ):
+        r"""Calculate the household bill demand.
+
+        Parameters
+        ----------
+        t: int
+            The time step.
+        scenario: dict
+            The scenario.
+        params: dict | None
+            The parameters.
+
+        Equations
+        ---------
+        .. math::
+            :nowrap:
+
+            \begin{align}
+                \frac{B_h(t)}{V^e(t)} = \lambda_0 + \lambda_1 r(t) - \lambda_2 \frac{YD^e(t)}{V^e(t)}
+            \end{align}
+
+        Dependency
+        ----------
+        - state: ExpectedWealth
+        - state: ExpectedDisposableIncome
+        - state: InterestRate
+        - params: WealthShareBills_Constant
+        - params: WealthShareBills_InterestRate
+        - params: WealthShareBills_Income
+
+        Sets
+        -----
+        - HouseholdBillDemand
+        """
+        self.state["HouseholdBillDemand"] = self.state["ExpectedWealth"] * (
+            # Baseline share
+            params["WealthShareBills_Constant"]
+            # Interest rate effect
+            + params["WealthShareBills_InterestRate"] * self.state["InterestRate"]
+            # Income-to-wealth ratio effect
+            - params["WealthShareBills_Income"]
+            * torch.where(
+                self.state["ExpectedWealth"] > 0,
+                self.state["ExpectedDisposableIncome"] / self.state["ExpectedWealth"],
+                torch.zeros_like(self.state["ExpectedDisposableIncome"]),
+            )
+        )
+
     def household_bill_holdings(
         self, t: int, scenario: dict, params: dict | None = None, **kwargs
     ):
@@ -499,32 +609,19 @@ class BehaviorGL06PCEX(Behavior):
             :nowrap:
 
             \begin{align}
-                \frac{B_h(t)}{V(t)} = \lambda_0 + \lambda_1 r(t) - \lambda_2 \frac{YD(t)}{V(t)}
+                B_h(t) = B_h(t-1) + (B_h^d(t) - B_h(t-1))
             \end{align}
 
         Dependency
         ----------
-        - state: Wealth
-        - state: DisposableIncome
-        - state: InterestRate
-        - params: WealthShareBills_Constant
-        - params: WealthShareBills_InterestRate
-        - params: WealthShareBills_Income
+        - state: HouseholdBillDemand
+        - prior: HouseholdBillStock
 
         Sets
         -----
         - HouseholdBillStock
         """
-        self.state["HouseholdBillStock"] = self.state["Wealth"] * (
-            # Baseline share
-            params["WealthShareBills_Constant"]
-            # Interest rate effect
-            + params["WealthShareBills_InterestRate"] * self.state["InterestRate"]
-            # Income-to-wealth ratio effect
-            - params["WealthShareBills_Income"]
-            * self.state["DisposableIncome"]
-            / self.state["Wealth"]
-        )
+        self.state["HouseholdBillStock"] = self.state["HouseholdBillDemand"]
 
     def household_money_stock(
         self, t: int, scenario: dict, params: dict | None = None, **kwargs

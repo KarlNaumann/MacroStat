@@ -214,4 +214,25 @@ class VariablesGL06PCEX(Variables):
                 "sectors": ["Household"],
                 "sfc": [("Index", "Household")],
             },
+            "ExpectedDisposableIncome": {
+                "notation": r"YD^e(t)",
+                "unit": "USD",
+                "history": 0,
+                "sectors": ["Household"],
+                "sfc": [("Index", "Household")],
+            },
+            "ExpectedWealth": {
+                "notation": r"V^e(t)",
+                "unit": "USD",
+                "history": 0,
+                "sectors": ["Household"],
+                "sfc": [("Index", "Household")],
+            },
+            "HouseholdBillDemand": {
+                "notation": r"B_d(t)",
+                "unit": "USD",
+                "history": 0,
+                "sectors": ["Household"],
+                "sfc": [("Index", "Household")],
+            },
         }
