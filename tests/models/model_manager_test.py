@@ -8,6 +8,7 @@ __license__ = "MIT"
 __version__ = "0.1.0"
 __maintainer__ = ["Karl Naumann-Woleske"]
 
+import os
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -25,10 +26,21 @@ class TestModelManager:
 
     def setup_test_models(self, tmp_path):
         """Set up test model directory structure."""
+
+        # Create the __init__.py in the test directory itself
+        init_file = os.path.join(str(tmp_path), "__init__.py")
+        with open(init_file, "w") as f:
+            f.write("")  # Create empty file
+
+        # Ensure the directory exists and is accessible
+        assert os.path.exists(
+            init_file
+        ), f"Test directory not properly set up at {init_file}"
+
         # Create model directories and files
         for model_name in ["ModelA", "ModelB"]:
-            model_dir = tmp_path / model_name
-            model_dir.mkdir()
+            model_dir = os.path.join(str(tmp_path), model_name)
+            os.makedirs(model_dir, exist_ok=True)
 
             # Create required files
             files = [
@@ -41,7 +53,9 @@ class TestModelManager:
             ]
 
             for file in files:
-                (model_dir / file).touch()
+                file_path = os.path.join(model_dir, file)
+                with open(file_path, "w") as f:
+                    f.write("")  # Create empty file
 
         return tmp_path
 
@@ -50,10 +64,11 @@ class TestModelManager:
         # Set up test directory structure
         test_dir = self.setup_test_models(tmp_path)
 
+        # Use os.path.join for cross-platform compatibility
+        init_file = os.path.join(str(test_dir), "__init__.py")
+
         # Patch the model manager's directory to use our test directory
-        with patch(
-            "macrostat.models.model_manager.__file__", str(test_dir / "__init__.py")
-        ):
+        with patch("macrostat.models.model_manager.__file__", init_file):
             models = get_available_models()
             assert set(models) == {"ModelA", "ModelB"}
 
