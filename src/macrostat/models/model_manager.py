@@ -23,7 +23,7 @@ class ModelClasses(NamedTuple):
     Model: Type[Model]
 
 
-def get_model(modelname: str):
+def get_model(modelname: str, model_directory=None):
     """Get a model from the models directory.
 
     Parameters
@@ -43,7 +43,7 @@ def get_model(modelname: str):
     ImportError
         If there are problems importing the model components
     """
-    available = get_available_models()
+    available = get_available_models(model_directory)
     if modelname not in available:
         raise ValueError(
             f"Invalid or unavailable model: {modelname}\n"
@@ -63,7 +63,7 @@ def get_model(modelname: str):
         raise ImportError(f"Could not import model {modelname}: {str(e)}")
 
 
-def get_model_classes(modelname: str):
+def get_model_classes(modelname: str, model_directory=None):
     """Get a model from the models directory.
 
     Parameters
@@ -83,7 +83,7 @@ def get_model_classes(modelname: str):
     ImportError
         If there are problems importing the model components
     """
-    available = get_available_models()
+    available = get_available_models(model_directory)
     if modelname not in available:
         raise ValueError(
             f"Invalid or unavailable model: {modelname}\n"
@@ -119,7 +119,7 @@ def get_model_classes(modelname: str):
         raise ImportError(f"Could not import model {modelname}: {str(e)}")
 
 
-def get_available_models(models_dir=None):
+def get_available_models(model_directory=None):
     """Get all available models in the models directory.
 
     Parse the models directory and return a list of all available models,
@@ -129,7 +129,7 @@ def get_available_models(models_dir=None):
 
     Parameters
     ----------
-    models_dir : str, optional
+    model_directory : str, optional
         The directory to look for models in. If None, uses the directory of this file.
 
     Returns
@@ -137,12 +137,12 @@ def get_available_models(models_dir=None):
     list
         A list of all available models.
     """
-    if models_dir is None:
-        models_dir = os.path.dirname(__file__)
+    if model_directory is None:
+        model_directory = os.path.dirname(__file__)
 
     models = []
-    for file in os.listdir(models_dir):
-        path = os.path.join(models_dir, file)
+    for file in os.listdir(model_directory):
+        path = os.path.join(model_directory, file)
         if os.path.isdir(path):
             # Check if the file is a valid model (has all the required files)
             files = [
