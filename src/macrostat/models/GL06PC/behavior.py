@@ -99,7 +99,6 @@ class BehaviorGL06PC(Behavior):
         - ConsumptionGovernment
         - NationalIncome
         - InterestEarnedOnBillsHousehold
-        - InterestEarnedOnBillsCentralBank
         - CentralBankProfits
         - Taxes
         - HouseholdMoneyStock
@@ -116,7 +115,6 @@ class BehaviorGL06PC(Behavior):
         self.state["ConsumptionGovernment"] = torch.zeros(1)
         self.state["NationalIncome"] = torch.zeros(1)
         self.state["InterestEarnedOnBillsHousehold"] = torch.zeros(1)
-        self.state["InterestEarnedOnBillsCentralBank"] = torch.zeros(1)
         self.state["CentralBankProfits"] = torch.zeros(1)
         self.state["Taxes"] = torch.zeros(1)
         self.state["HouseholdMoneyStock"] = torch.zeros(1)
@@ -137,7 +135,6 @@ class BehaviorGL06PC(Behavior):
 
         # Items based on prior
         self.interest_earned_on_bills_household(**kwargs)
-        self.interest_earned_on_bills_central_bank(**kwargs)
 
         # Solution of the step
         self.national_income(**kwargs)
@@ -239,42 +236,6 @@ class BehaviorGL06PC(Behavior):
         """
         self.state["InterestEarnedOnBillsHousehold"] = (
             self.prior["InterestRate"] * self.prior["HouseholdBillStock"]
-        )
-
-    def interest_earned_on_bills_central_bank(
-        self, t: int, scenario: dict, params: dict | None = None, **kwargs
-    ):
-        r"""Calculate the interest earned on bills by the central bank.
-
-        Parameters
-        ----------
-        t: int
-            The time step.
-        scenario: dict
-            The scenario.
-        params: dict | None
-            The parameters.
-
-        Equations
-        ---------
-        .. math::
-            :nowrap:
-
-            \begin{align}
-                r(t-1)B_{CB}(t-1)
-            \end{align}
-
-        Dependency
-        ----------
-        - prior: InterestRate
-        - prior: CentralBankBillStock
-
-        Sets
-        -----
-        - InterestEarnedOnBillsCentralBank
-        """
-        self.state["InterestEarnedOnBillsCentralBank"] = (
-            self.prior["InterestRate"] * self.prior["CentralBankBillStock"]
         )
 
     def national_income(
@@ -627,7 +588,6 @@ class BehaviorGL06PC(Behavior):
         - state: GovernmentDemand
         - state: Taxes
         - state: CentralBankProfits
-        - state: InterestEarnedOnBillsCentralBank
 
         Sets
         -----
@@ -753,13 +713,13 @@ class BehaviorGL06PC(Behavior):
             G^\star(t) &= G(t)\\
             r^\star(t) &= r(t)\\
             \alpha_3 &= \frac{1-\alpha_1}{\alpha_2}\\
-            YD^\star(t) = YD^{e\star}(t) &= \frac{G^\star(t)}{\frac{\theta}{1-\theta} - r^\star(t)\cdot\left(\left(\lambda_0 + \lambda_1 r^\star(t) \right)\alpha_3 - \lambda_2\right)}\\
+            YD^\star(t) &= \frac{G^\star(t)}{\frac{\theta}{1-\theta} - r^\star(t)\cdot\left(\left(\lambda_0 + \lambda_1 r^\star(t) \right)\alpha_3 - \lambda_2\right)}\\
             C^\star(t) &= YD^\star(t)\\
             Y^\star(t) &= C^\star(t) + G^\star(t)\\
-            V^\star(t) = V^{e\star}(t) &= \alpha_3 YD^\star(t)\\
-            B_d^\star(t) = B_h^\star(t) &= \left(\left(\lambda_0 + \lambda_1 r^\star(t) \right)\alpha_3 - \lambda_2\right)\cdot YD^\star(t)\\
+            V^\star(t) &= \alpha_3 YD^\star(t)\\
+            B_h^\star(t) &= \left(\left(\lambda_0 + \lambda_1 r^\star(t) \right)\alpha_3 - \lambda_2\right)\cdot YD^\star(t)\\
             T^\star(t) &= \theta\cdot \left(Y^\star(t) + r^\star(t) B_h^\star(t)\right)\\
-            H_h^\star(t) &= V^{e\star}(t) - B_h^\star(t)\\
+            H_h^\star(t) &= V^{\star}(t) - B_h^\star(t)\\
             B_s^\star(t) &= \frac{r^\star(t) B_{CB}^\star(t) + T^\star(t) - G^\star(t)}{r^\star(t)}\\
             B_{CB}^\star(t) &= B_s^\star(t) - B_h^\star(t)\\
             H_s^\star(t) &= H_{s}(t-1) + (B_{CB}(t) - B_{CB}(t-1))
