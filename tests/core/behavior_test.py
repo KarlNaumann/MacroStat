@@ -37,6 +37,41 @@ class TestBehavior:
             scenario=0,
         )
 
+    @pytest.fixture
+    def behavior_instance_simple(self):
+        """Create a basic behavior instance for testing"""
+
+        parameters = Parameters(
+            {
+                "alpha": {"value": 1.0, "lower bound": 0.0, "upper bound": 2.0},
+                "beta": {"value": 2.0, "lower bound": 0.0, "upper bound": 4.0},
+            }
+        )
+        scenarios = Scenarios(parameters=parameters)
+
+        class SimpleVariables(Variables):
+            def get_default_variables(self):
+                v = super().get_default_variables()
+                v["var1"] = {}
+                v["var2"] = {}
+                return v
+
+        class SimpleBehavior(Behavior):
+            def initialize(self):
+                self.state["var1"] = torch.tensor(0.0)
+                self.state["var2"] = torch.tensor(0.0)
+
+            def compute_theoretical_steady_state_per_step(self, **kwargs):
+                self.state["var1"] = torch.tensor(1.0)
+                self.state["var2"] = torch.tensor(2.0)
+
+        return SimpleBehavior(
+            parameters=parameters,
+            scenarios=scenarios,
+            variables=SimpleVariables(parameters=parameters),
+            scenario=0,
+        )
+
     def test_init(self, behavior_instance):
         """Test initialization of Behavior class"""
         assert isinstance(behavior_instance, Behavior)
@@ -185,8 +220,17 @@ class TestBehavior:
 
     def test_compute_theoretical_steady_state(self, behavior_instance):
         """Test the compute_theoretical_steady_state method"""
+        behavior_instance.initialize = lambda: None
         with pytest.raises(NotImplementedError):
             behavior_instance.compute_theoretical_steady_state()
+
+    def test_compute_theoretical_steady_state_none_function(
+        self, behavior_instance_simple
+    ):
+        """Test the compute_theoretical_steady_state_per_step method"""
+        behavior_instance_simple.compute_theoretical_steady_state()
+        assert behavior_instance_simple.state["var1"] == 1.0
+        assert behavior_instance_simple.state["var2"] == 2.0
 
     def test_diffwhere(self, behavior_instance):
         """Test the differentiable where function"""
