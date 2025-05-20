@@ -70,19 +70,6 @@ class TestModelManager:
         # Set up test directory structure
         self.setup_test_models(tmp_path, monkeypatch)
 
-        # Debug for CI: Print the directory structure
-        print(f"Current working directory: {os.getcwd()}")
-        print("\nTest directory structure:")
-        for root, dirs, files in os.walk("."):
-            print(f"\nDirectory: {root}")
-            print(f"Subdirectories: {dirs}")
-            print(f"Files: {files}")
-        print("\nTest directory structure v2:")
-        for root, dirs, files in os.walk(os.getcwd()):
-            print(f"\nDirectory: {root}")
-            print(f"Subdirectories: {dirs}")
-            print(f"Files: {files}")
-
         models = get_available_models(model_directory=os.getcwd())
         assert set(models) == {"ModelA", "ModelB"}
 

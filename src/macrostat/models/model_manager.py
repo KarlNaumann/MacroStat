@@ -140,14 +140,10 @@ def get_available_models(model_directory=None):
     if model_directory is None:
         model_directory = os.path.dirname(__file__)
 
-    print(f"\nSearching for models in: {model_directory}")
-    print(f"Directory contents: {os.listdir(model_directory)}")
-
     models = []
     for file in os.listdir(model_directory):
         path = os.path.join(model_directory, file)
         if os.path.isdir(path):
-            print(f"\nChecking directory: {path}")
             # Check if the file is a valid model (has all the required files)
             required_files = [
                 "__init__.py",
@@ -163,14 +159,11 @@ def get_available_models(model_directory=None):
             for req_file in required_files:
                 file_path = os.path.join(path, req_file)
                 exists = os.path.exists(file_path)
-                print(f"Checking {req_file}: {exists} at {file_path}")
                 if not exists:
                     all_files_exist = False
                     break
 
             if all_files_exist:
                 models.append(file)
-                print(f"Added model: {file}")
 
-    print(f"\nFound models: {models}")
     return models
