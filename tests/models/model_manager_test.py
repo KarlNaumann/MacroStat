@@ -67,10 +67,15 @@ class TestModelManager:
         # Use os.path.join for cross-platform compatibility
         init_file = os.path.join(str(test_dir), "__init__.py")
 
+        # Ensure the directory exists and is accessible
+        assert os.path.exists(
+            init_file
+        ), f"Test directory not properly set up at {init_file}"
+
         # Patch the model manager's directory to use our test directory
-        with patch("macrostat.models.model_manager.__file__", init_file):
-            models = get_available_models()
-            assert set(models) == {"ModelA", "ModelB"}
+        # with patch("macrostat.models.model_manager.__file__", init_file):
+        models = get_available_models(test_dir)
+        assert set(models) == {"ModelA", "ModelB"}
 
     def test_get_model_invalid_model(self):
         """Test getting an invalid model."""
@@ -93,7 +98,8 @@ class TestModelManager:
             return mock_module
 
         with patch(
-            "macrostat.models.model_manager.__file__", str(test_dir / "__init__.py")
+            "macrostat.models.model_manager.get_available_models",
+            return_value=get_available_models(test_dir),
         ), patch("builtins.__import__", side_effect=mock_import):
             result = get_model("ModelA")
             assert result == mock_class
@@ -104,17 +110,25 @@ class TestModelManager:
         test_dir = self.setup_test_models(tmp_path)
 
         with patch(
+            "macrostat.models.model_manager.get_available_models",
+            return_value=get_available_models(test_dir),
+        ), patch(
             "macrostat.models.model_manager.__file__", str(test_dir / "__init__.py")
         ):
             with pytest.raises(ImportError) as exc_info:
                 get_model("ModelA")
             assert "Could not import model ModelA" in str(exc_info.value)
 
-    def test_get_model_classes_invalid_model(self):
+    def test_get_model_classes_invalid_model(self, tmp_path):
         """Test getting classes for an invalid model."""
-        with pytest.raises(ValueError) as exc_info:
-            get_model_classes("InvalidModel")
-        assert "Invalid or unavailable model" in str(exc_info.value)
+        test_dir = self.setup_test_models(tmp_path)
+        with patch(
+            "macrostat.models.model_manager.get_available_models",
+            return_value=get_available_models(test_dir),
+        ):
+            with pytest.raises(ValueError) as exc_info:
+                get_model_classes("InvalidModel")
+            assert "Invalid or unavailable model" in str(exc_info.value)
 
     def test_get_model_classes_success(self, tmp_path):
         """Test successful retrieval of model classes."""
@@ -142,7 +156,8 @@ class TestModelManager:
             return mock_module
 
         with patch(
-            "macrostat.models.model_manager.__file__", str(test_dir / "__init__.py")
+            "macrostat.models.model_manager.get_available_models",
+            return_value=get_available_models(test_dir),
         ), patch("builtins.__import__", side_effect=mock_import):
             result = get_model_classes("ModelA")
 
@@ -157,7 +172,8 @@ class TestModelManager:
         # Set up test directory structure
         test_dir = self.setup_test_models(tmp_path)
         with patch(
-            "macrostat.models.model_manager.__file__", str(test_dir / "__init__.py")
+            "macrostat.models.model_manager.get_available_models",
+            return_value=get_available_models(test_dir),
         ):
             with pytest.raises(ImportError) as exc_info:
                 get_model_classes("ModelA")

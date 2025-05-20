@@ -119,7 +119,7 @@ def get_model_classes(modelname: str):
         raise ImportError(f"Could not import model {modelname}: {str(e)}")
 
 
-def get_available_models():
+def get_available_models(models_dir=None):
     """Get all available models in the models directory.
 
     Parse the models directory and return a list of all available models,
@@ -127,14 +127,22 @@ def get_available_models():
     They are valid when they contain a __init__.py, parameters.py, variables.py,
     scenarios.py, behavior.py file.
 
+    Parameters
+    ----------
+    models_dir : str, optional
+        The directory to look for models in. If None, uses the directory of this file.
+
     Returns
     -------
     list
         A list of all available models.
     """
+    if models_dir is None:
+        models_dir = os.path.dirname(__file__)
+
     models = []
-    for file in os.listdir(os.path.dirname(__file__)):
-        path = os.path.join(os.path.dirname(__file__), file)
+    for file in os.listdir(models_dir):
+        path = os.path.join(models_dir, file)
         if os.path.isdir(path):
             # Check if the file is a valid model (has all the required files)
             files = [
