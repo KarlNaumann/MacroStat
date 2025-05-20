@@ -78,14 +78,14 @@ class TestModelManager:
             print(f"Subdirectories: {dirs}")
             print(f"Files: {files}")
 
-        models = get_available_models()
+        models = get_available_models(model_directory=".")
         assert set(models) == {"ModelA", "ModelB"}
 
     def test_get_model_invalid_model(self, tmp_path, monkeypatch):
         """Test getting an invalid model."""
         self.setup_test_models(tmp_path, monkeypatch)
         with pytest.raises(ValueError) as exc_info:
-            get_model("InvalidModel")
+            get_model("InvalidModel", model_directory=".")
         assert "Invalid or unavailable model" in str(exc_info.value)
 
     def test_get_model_success(self, tmp_path, monkeypatch):
@@ -103,7 +103,7 @@ class TestModelManager:
             return mock_module
 
         with patch("builtins.__import__", side_effect=mock_import):
-            result = get_model("ModelA")
+            result = get_model("ModelA", model_directory=".")
             assert result == mock_class
 
     def test_get_model_import_error(self, tmp_path, monkeypatch):
@@ -112,14 +112,14 @@ class TestModelManager:
         self.setup_test_models(tmp_path, monkeypatch)
 
         with pytest.raises(ImportError) as exc_info:
-            get_model("ModelA")
+            get_model("ModelA", model_directory=".")
         assert "Could not import model ModelA" in str(exc_info.value)
 
     def test_get_model_classes_invalid_model(self, tmp_path, monkeypatch):
         """Test getting classes for an invalid model."""
         self.setup_test_models(tmp_path, monkeypatch)
         with pytest.raises(ValueError) as exc_info:
-            get_model_classes("InvalidModel")
+            get_model_classes("InvalidModel", model_directory=".")
             assert "Invalid or unavailable model" in str(exc_info.value)
 
     def test_get_model_classes_success(self, tmp_path, monkeypatch):
@@ -148,7 +148,7 @@ class TestModelManager:
             return mock_module
 
         with patch("builtins.__import__", side_effect=mock_import):
-            result = get_model_classes("ModelA")
+            result = get_model_classes("ModelA", model_directory=".")
 
             assert isinstance(result, ModelClasses)
             assert result.Behavior == mock_classes["Behavior"]
@@ -161,5 +161,5 @@ class TestModelManager:
         # Set up test directory structure
         self.setup_test_models(tmp_path, monkeypatch)
         with pytest.raises(ImportError) as exc_info:
-            get_model_classes("ModelA")
+            get_model_classes("ModelA", model_directory=".")
         assert "Could not import model ModelA" in str(exc_info.value)

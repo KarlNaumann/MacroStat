@@ -140,6 +140,8 @@ def get_available_models(model_directory=None):
     if model_directory is None:
         model_directory = os.path.dirname(__file__)
 
+    print(f"\nSearching for models in: {model_directory}")
+
     models = []
     for file in os.listdir(model_directory):
         path = os.path.join(model_directory, file)
