@@ -551,7 +551,7 @@ class Variables:
                     continue
                 else:
                     return False
-            elif isinstance(v["sfc"], list):
+            else:  # isinstance(v["sfc"], list):
                 for sfc in v["sfc"]:
                     if self._verify_sfc_item(sfc, k):
                         continue
