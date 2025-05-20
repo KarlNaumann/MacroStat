@@ -183,6 +183,11 @@ class TestBehavior:
         assert params["alpha"] == 3.0
         assert params["beta"] == 5.0
 
+    def test_compute_theoretical_steady_state(self, behavior_instance):
+        """Test the compute_theoretical_steady_state method"""
+        with pytest.raises(NotImplementedError):
+            behavior_instance.compute_theoretical_steady_state()
+
     def test_diffwhere(self, behavior_instance):
         """Test the differentiable where function"""
         x1 = torch.tensor([1.0, 2.0, 3.0])

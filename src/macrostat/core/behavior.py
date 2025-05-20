@@ -63,6 +63,10 @@ class Behavior(torch.nn.Module):
         self.differentiable = differentiable
         self.debug = debug
 
+    ############################################################################
+    # Simulation of the model
+    ############################################################################
+
     def forward(self):
         """Forward pass of the behavior.
 
@@ -192,7 +196,19 @@ class Behavior(torch.nn.Module):
 
         return params
 
+    ############################################################################
+    # Steady State
+    ############################################################################
+
+    def compute_theoretical_steady_state(self, **kwargs):
+        """Compute the theoretical steady state of the model."""
+        raise NotImplementedError(
+            "Behavior.compute_theoretical_steady_state() to be implemented by model"
+        )
+
+    ############################################################################
     # Some Differentiable PyTorch Alternatives
+    ############################################################################
 
     def diffwhere(self, condition, x1, x2):
         """Where condition that is differentiable with respect to the condition.
