@@ -4,7 +4,6 @@ Consumption Household,$-C(t)$,$+C(t)$,,,,$0$
 Consumption Government,,$+G(t)$,$-G(t)$,,,$0$
 National Income,$+Y(t)$,$-Y(t)$,,,,$0$
 Interest Earned On Bills Household,$+r(t-1)\cdot B_h(t-1)$,,$-r(t-1)\cdot B_h(t-1)$,,,$0$
-Interest Earned On Bills Central Bank,,,$-r(t-1)\cdot B_{CB}(t-1)$,$+r(t-1)\cdot B_{CB}(t-1)$,,$0$
 Central Bank Profits,,,$+r(t-1)\cdot B_{CB}(t-1)$,$-r(t-1)\cdot B_{CB}(t-1)$,,$0$
 Taxes,$-T(t)$,,$+T(t)$,,,$0$
 Change in Money Stock,$+H_h(t)$,,,,$-H_{s}(t)$,$0$

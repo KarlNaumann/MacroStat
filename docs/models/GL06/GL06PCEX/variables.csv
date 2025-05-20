@@ -3,7 +3,6 @@ ConsumptionHousehold,:math:`C(t)`,USD,0,Household,"[('Inflow', 'Production'), ('
 ConsumptionGovernment,:math:`G(t)`,USD,0,Government,"[('Inflow', 'Production'), ('Outflow', 'Government')]"
 NationalIncome,:math:`Y(t)`,USD,0,Macroeconomy,"[('Outflow', 'Production'), ('Inflow', 'Household')]"
 InterestEarnedOnBillsHousehold,:math:`r(t-1)\cdot B_h(t-1)`,USD,0,Household,"[('Inflow', 'Household'), ('Outflow', 'Government')]"
-InterestEarnedOnBillsCentralBank,:math:`r(t-1)\cdot B_{CB}(t-1)`,USD,0,CentralBank,"[('Inflow', 'CentralBank'), ('Outflow', 'Government')]"
 CentralBankProfits,:math:`r(t-1)\cdot B_{CB}(t-1)`,USD,0,CentralBank,"[('Inflow', 'Government'), ('Outflow', 'CentralBank')]"
 Taxes,:math:`T(t)`,USD,0,Household,"[('Outflow', 'Household'), ('Inflow', 'Government')]"
 HouseholdMoneyStock,:math:`H_h(t)`,USD,0,Household,"[('Asset', 'Household')]"

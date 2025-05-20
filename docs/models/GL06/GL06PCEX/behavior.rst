@@ -75,3 +75,9 @@ Solution of the step
 
 .. autofunction:: macrostat.models.GL06PCEX.behavior.BehaviorGL06PCEX.central_bank_money_stock
     :noindex:
+
+Theoretical Steady State Solution
+=================================
+
+.. autofunction:: macrostat.models.GL06PCEX.behavior.BehaviorGL06PCEX.compute_theoretical_steady_state_per_step
+    :noindex:
