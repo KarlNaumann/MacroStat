@@ -31,9 +31,6 @@ Variables based on prior steps
 .. autofunction:: macrostat.models.GL06PCEX.behavior.BehaviorGL06PCEX.interest_earned_on_bills_household
     :noindex:
 
-.. autofunction:: macrostat.models.GL06PCEX.behavior.BehaviorGL06PCEX.interest_earned_on_bills_central_bank
-    :noindex:
-
 .. autofunction:: macrostat.models.GL06PCEX.behavior.BehaviorGL06PCEX.expected_disposable_income
     :noindex:
 

@@ -135,13 +135,6 @@ class VariablesGL06PCEX(Variables):
                 "sectors": ["Household"],
                 "sfc": [("Inflow", "Household"), ("Outflow", "Government")],
             },
-            "InterestEarnedOnBillsCentralBank": {
-                "notation": r"r(t-1)\cdot B_{CB}(t-1)",
-                "unit": "USD",
-                "history": 0,
-                "sectors": ["CentralBank"],
-                "sfc": [("Inflow", "CentralBank"), ("Outflow", "Government")],
-            },
             "CentralBankProfits": {
                 "notation": r"r(t-1)\cdot B_{CB}(t-1)",
                 "unit": "USD",

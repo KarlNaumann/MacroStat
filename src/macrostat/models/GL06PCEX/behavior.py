@@ -63,6 +63,10 @@ class BehaviorGL06PCEX(Behavior):
             debug=debug,
         )
 
+    ############################################################################
+    # Initialization
+    ############################################################################
+
     def initialize(self):
         r"""Initialize the behavior of the Godley-Lavoie 2006 PCEX model.
 
@@ -99,7 +103,6 @@ class BehaviorGL06PCEX(Behavior):
         - ConsumptionGovernment
         - NationalIncome
         - InterestEarnedOnBillsHousehold
-        - InterestEarnedOnBillsCentralBank
         - CentralBankProfits
         - Taxes
         - HouseholdMoneyStock
@@ -117,7 +120,6 @@ class BehaviorGL06PCEX(Behavior):
         self.state["ConsumptionGovernment"] = torch.zeros(1)
         self.state["NationalIncome"] = torch.zeros(1)
         self.state["InterestEarnedOnBillsHousehold"] = torch.zeros(1)
-        self.state["InterestEarnedOnBillsCentralBank"] = torch.zeros(1)
         self.state["CentralBankProfits"] = torch.zeros(1)
         self.state["Taxes"] = torch.zeros(1)
         # Stocks
@@ -134,6 +136,10 @@ class BehaviorGL06PCEX(Behavior):
         self.state["ExpectedWealth"] = torch.zeros(1)
         self.state["HouseholdBillDemand"] = torch.zeros(1)
 
+    ############################################################################
+    # Step
+    ############################################################################
+
     def step(self, **kwargs):
         """Step function of the Godley-Lavoie 2006 PC model."""
 
@@ -143,7 +149,6 @@ class BehaviorGL06PCEX(Behavior):
 
         # Items based on prior
         self.interest_earned_on_bills_household(**kwargs)
-        self.interest_earned_on_bills_central_bank(**kwargs)
         self.expected_disposable_income(**kwargs)
 
         # Solution of the step
@@ -248,42 +253,6 @@ class BehaviorGL06PCEX(Behavior):
         """
         self.state["InterestEarnedOnBillsHousehold"] = (
             self.prior["InterestRate"] * self.prior["HouseholdBillStock"]
-        )
-
-    def interest_earned_on_bills_central_bank(
-        self, t: int, scenario: dict, params: dict | None = None, **kwargs
-    ):
-        r"""Calculate the interest earned on bills by the central bank.
-
-        Parameters
-        ----------
-        t: int
-            The time step.
-        scenario: dict
-            The scenario.
-        params: dict | None
-            The parameters.
-
-        Equations
-        ---------
-        .. math::
-            :nowrap:
-
-            \begin{align}
-                r(t-1)B_{CB}(t-1)
-            \end{align}
-
-        Dependency
-        ----------
-        - prior: InterestRate
-        - prior: CentralBankBillStock
-
-        Sets
-        -----
-        - InterestEarnedOnBillsCentralBank
-        """
-        self.state["InterestEarnedOnBillsCentralBank"] = (
-            self.prior["InterestRate"] * self.prior["CentralBankBillStock"]
         )
 
     def expected_disposable_income(
@@ -724,7 +693,6 @@ class BehaviorGL06PCEX(Behavior):
         - state: GovernmentDemand
         - state: Taxes
         - state: CentralBankProfits
-        - state: InterestEarnedOnBillsCentralBank
 
         Sets
         -----
@@ -820,3 +788,102 @@ class BehaviorGL06PCEX(Behavior):
             + self.state["CentralBankBillStock"]
             - self.prior["CentralBankBillStock"]
         )
+
+    ############################################################################
+    # Steady State
+    ############################################################################
+
+    def compute_theoretical_steady_state_per_step(
+        self, t: int, params: dict, scenario: dict
+    ):
+        r"""Compute the theoretical steady state of the model for each given
+        period. This is done per-period as there are parameters and scenarios
+        that may be time-varying, so the interpretation is a timeseries of the
+        theoretical steady state at a given period based on the parameters and
+        scenarios at that period.
+
+        Parameters
+        ----------
+        params: dict
+            The parameters at the given period
+        scenario: dict
+            The scenarios at the given period
+
+        Equations
+        ---------
+        .. math::
+            :nowrap:
+
+            \begin{align}
+            G^\star(t) &= G(t)\\
+            r^\star(t) &= r(t)\\
+            \alpha_3 &= \frac{1-\alpha_1}{\alpha_2}\\
+            YD^\star(t) = YD^{e\star}(t) &= \frac{G^\star(t)}{\frac{\theta}{1-\theta} - r^\star(t)\cdot\left(\left(\lambda_0 + \lambda_1 r^\star(t) \right)\alpha_3 - \lambda_2\right)}\\
+            C^\star(t) &= YD^\star(t)\\
+            Y^\star(t) &= C^\star(t) + G^\star(t)\\
+            V^\star(t) = V^{e\star}(t) &= \alpha_3 YD^\star(t)\\
+            B_d^\star(t) = B_h^\star(t) &= \left(\left(\lambda_0 + \lambda_1 r^\star(t) \right)\alpha_3 - \lambda_2\right)\cdot YD^\star(t)\\
+            T^\star(t) &= \theta\cdot \left(Y^\star(t) + r^\star(t) B_h^\star(t)\right)\\
+            H_h^\star(t) &= V^{e\star}(t) - B_h^\star(t)\\
+            B_s^\star(t) &= \frac{r^\star(t) B_{CB}^\star(t) + T^\star(t) - G^\star(t)}{r^\star(t)}\\
+            B_{CB}^\star(t) &= B_s^\star(t) - B_h^\star(t)\\
+            H_s^\star(t) &= H_{s}(t-1) + (B_{CB}(t) - B_{CB}(t-1))
+            \end{align}
+        """
+        kwargs = dict(t=t, params=params, scenario=scenario)
+        # Scenario specific items, as in normal step()
+        self.consumption_government(**kwargs)
+        self.set_interest_rate(**kwargs)
+
+        # Compute the steady state disposable income and consumption
+        alpha3 = (1 - params["PropensityToConsumeIncome"]) / params[
+            "PropensityToConsumeSavings"
+        ]
+        self.state["DisposableIncome"] = scenario["GovernmentDemand"] / (
+            (params["TaxRate"] / (1 - params["TaxRate"]))
+            - self.state["InterestRate"]
+            * (
+                (
+                    params["WealthShareBills_Constant"]
+                    + params["WealthShareBills_InterestRate"]
+                    * self.state["InterestRate"]
+                )
+                * alpha3
+                - params["WealthShareBills_Income"]
+            )
+        )
+        self.state["ExpectedDisposableIncome"] = self.state["DisposableIncome"]
+        self.state["ConsumptionHousehold"] = self.state["DisposableIncome"]
+        self.national_income(**kwargs)
+
+        # Compute the steady state wealth
+        self.state["Wealth"] = self.state["DisposableIncome"] * alpha3
+        self.state["ExpectedWealth"] = self.state["Wealth"]
+
+        # Compute the steady state bill holdings
+        self.state["HouseholdBillDemand"] = (
+            (
+                params["WealthShareBills_Constant"]
+                + params["WealthShareBills_InterestRate"] * self.state["InterestRate"]
+            )
+            * alpha3
+            - params["WealthShareBills_Income"]
+        ) * self.state["DisposableIncome"]
+        self.state["HouseholdBillStock"] = self.state["HouseholdBillDemand"]
+        self.state["InterestEarnedOnBillsHousehold"] = (
+            self.state["InterestRate"] * self.state["HouseholdBillStock"]
+        )
+
+        # Compute remaining variables, using the step functions where possible
+        self.taxes(**kwargs)
+        self.household_money_stock(**kwargs)
+        self.state["CentralBankProfits"] = (
+            self.state["InterestRate"] * self.state["CentralBankBillStock"]
+        )
+        self.state["GovernmentBillStock"] = (
+            self.state["Taxes"]
+            + self.state["CentralBankProfits"]
+            - self.state["ConsumptionGovernment"]
+        ) / self.state["InterestRate"]
+        # Via the redundant equation
+        self.state["CentralBankMoneyStock"] = self.state["HouseholdMoneyStock"]
