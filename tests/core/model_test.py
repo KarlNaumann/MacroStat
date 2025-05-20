@@ -146,6 +146,23 @@ class TestModel:
         with pytest.raises(NotImplementedError):
             model.simulate(scenario="test_scenario")
 
+    def test_compute_theoretical_steady_state(self):
+        """Test model compute_theoretical_steady_state functionality"""
+        model = Model(parameters=self.params, hyperparameters=self.hyper)
+        with pytest.raises(NotImplementedError):
+            model.compute_theoretical_steady_state()
+
+    def test_compute_theoretical_steady_state_named_scenario(self):
+        """Test model compute_theoretical_steady_state functionality with named scenario"""
+        model = Model(
+            parameters=self.params,
+            hyperparameters=self.hyper,
+            scenarios=self.scenarios,
+            variables=self.variables,
+        )
+        with pytest.raises(NotImplementedError):
+            model.compute_theoretical_steady_state(scenario="test_scenario")
+
     def test_to_json(self, tmp_path):
         """Test model to_json functionality"""
         model = Model(

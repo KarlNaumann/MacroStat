@@ -47,12 +47,33 @@ class TestVariables:
             "notation": "B_h",
             "sfc": [("asset", ["Household", "Current"])],
         },
+        "firmBillStock": {
+            "sectors": ["Firm"],
+            "history": 0,
+            "unit": "currency",
+            "notation": "B_f",
+            "sfc": [("asset", ["Firm", "Current"])],
+        },
         "householdConsumption": {
             "sectors": ["Household"],
             "history": 2,
             "unit": "currency/period",
             "notation": "C",
             "sfc": [("outflow", "Household")],
+        },
+        "foreignConsumption": {
+            "sectors": ["Foreign"],
+            "history": 2,
+            "unit": "currency/period",
+            "notation": "C_f",
+            "sfc": [("outflow", "Foreign")],
+        },
+        "governmentConsumption": {
+            "sectors": ["Government"],
+            "history": 2,
+            "unit": "currency/period",
+            "notation": "C_g",
+            "sfc": [("outflow", "Government")],
         },
         "firmProfit": {
             "sectors": ["Firm"],
@@ -526,6 +547,27 @@ class TestVariables:
         v = Variables(variable_info=info, parameters=self.params)
 
         assert v.verify_sfc_info()
+
+    def test_verify_sfc_info_correct_tuple(self):
+        """Test verification of SFC info: list of tuples"""
+        info = copy.deepcopy(self.variable_info)
+        info["householdMoneyStock"]["sfc"] = ("asset", "Household")
+        v = Variables(variable_info=info, parameters=self.params)
+
+        assert v.verify_sfc_info()
+
+    def test_verify_sfc_info_incorrect_list(self):
+        """Test verification of SFC info: list of tuples"""
+        info = copy.deepcopy(self.variable_info)
+        info["householdMoneyStock"]["sfc"] = np.array(
+            [
+                ("asset", "Household"),
+                ("liability", "Firm"),
+            ]
+        )
+        v = Variables(variable_info=info, parameters=self.params)
+
+        assert not v.verify_sfc_info()
 
     def test_verify_sfc_info_missing_sfc(self, caplog):
         """Test verification of SFC info: missing SFC info"""

@@ -196,6 +196,39 @@ class Model:
         with torch.no_grad():
             return behavior.forward(*args, **kwargs)
 
+    def compute_theoretical_steady_state(
+        self, scenario: int | str = 0, *args, **kwargs
+    ):
+        """Compute the theoretical steady state of the model.
+
+        This process generally follows the structure of the forward() function,
+        but instead of simulating the model, the steady state is computed at
+        each timestep. Therefore, (1) the model is initialized, and (2) for
+        each timestep the parameter and scenario information is passed to the
+        compute_theoretical_steady_state_per_step() function that computes the
+        steady state at that timestep.
+
+        Parameters
+        ----------
+        scenario: int (optional)
+            The scenario to use for the model run, defaults to 0, which
+            represents the default scenario (no shocks).
+        """
+        if isinstance(scenario, str):
+            scenario = self.scenarios.get_scenario_index(scenario)
+
+        logging.info(f"Computing theoretical steady state. Scenario: {scenario}")
+        behavior = self.behavior(
+            self.parameters,
+            self.scenarios,
+            self.variables,
+            scenario=scenario,
+            *args,
+            **kwargs,
+        )
+        with torch.no_grad():
+            return behavior.compute_theoretical_steady_state(*args, **kwargs)
+
     def to_json(self, file_path: os.PathLike, *args, **kwargs):
         """Convert the model to a JSON file split into parameters, scenarios,
         and variables.

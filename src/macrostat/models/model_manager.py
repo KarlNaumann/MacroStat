@@ -23,7 +23,7 @@ class ModelClasses(NamedTuple):
     Model: Type[Model]
 
 
-def get_model(modelname: str):
+def get_model(modelname: str, model_directory=None):
     """Get a model from the models directory.
 
     Parameters
@@ -43,7 +43,7 @@ def get_model(modelname: str):
     ImportError
         If there are problems importing the model components
     """
-    available = get_available_models()
+    available = get_available_models(model_directory)
     if modelname not in available:
         raise ValueError(
             f"Invalid or unavailable model: {modelname}\n"
@@ -63,7 +63,7 @@ def get_model(modelname: str):
         raise ImportError(f"Could not import model {modelname}: {str(e)}")
 
 
-def get_model_classes(modelname: str):
+def get_model_classes(modelname: str, model_directory=None):
     """Get a model from the models directory.
 
     Parameters
@@ -83,7 +83,7 @@ def get_model_classes(modelname: str):
     ImportError
         If there are problems importing the model components
     """
-    available = get_available_models()
+    available = get_available_models(model_directory)
     if modelname not in available:
         raise ValueError(
             f"Invalid or unavailable model: {modelname}\n"
@@ -119,7 +119,7 @@ def get_model_classes(modelname: str):
         raise ImportError(f"Could not import model {modelname}: {str(e)}")
 
 
-def get_available_models():
+def get_available_models(model_directory=None):
     """Get all available models in the models directory.
 
     Parse the models directory and return a list of all available models,
@@ -127,28 +127,43 @@ def get_available_models():
     They are valid when they contain a __init__.py, parameters.py, variables.py,
     scenarios.py, behavior.py file.
 
+    Parameters
+    ----------
+    model_directory : str, optional
+        The directory to look for models in. If None, uses the directory of this file.
+
     Returns
     -------
     list
         A list of all available models.
     """
+    if model_directory is None:
+        model_directory = os.path.dirname(__file__)
+
     models = []
-    for file in os.listdir(os.path.dirname(__file__)):
-        path = os.path.join(os.path.dirname(__file__), file)
+    for file in os.listdir(model_directory):
+        path = os.path.join(model_directory, file)
         if os.path.isdir(path):
             # Check if the file is a valid model (has all the required files)
-            files = [
-                os.path.join(path, i)
-                for i in [
-                    "__init__.py",
-                    "parameters.py",
-                    "variables.py",
-                    "scenarios.py",
-                    "behavior.py",
-                    f"{file}.py",
-                ]
+            required_files = [
+                "__init__.py",
+                "parameters.py",
+                "variables.py",
+                "scenarios.py",
+                "behavior.py",
+                f"{file.lower()}.py",
             ]
-            if all(os.path.exists(f) for f in files):
+
+            # Check each file individually
+            all_files_exist = True
+            for req_file in required_files:
+                file_path = os.path.join(path, req_file)
+                exists = os.path.exists(file_path)
+                if not exists:
+                    all_files_exist = False
+                    break
+
+            if all_files_exist:
                 models.append(file)
 
     return models

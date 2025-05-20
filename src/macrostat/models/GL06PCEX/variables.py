@@ -12,28 +12,28 @@ import logging
 import numpy as np
 
 from macrostat.core.variables import Variables
-from macrostat.models.GL06PC.parameters import ParametersGL06PC
+from macrostat.models.GL06PCEX.parameters import ParametersGL06PCEX
 
 logger = logging.getLogger(__name__)
 
 
-class VariablesGL06PC(Variables):
+class VariablesGL06PCEX(Variables):
     """Variables class for the Godley-Lavoie 2006 PC model."""
 
-    version = "GL06PC"
+    version = "GL06PCEX"
 
     def __init__(
         self,
         variable_info: dict | None = None,
         timeseries: dict | None = None,
-        parameters: ParametersGL06PC | None = None,
+        parameters: ParametersGL06PCEX | None = None,
         *args,
         **kwargs,
     ):
         """Initialize the variables of the Godley-Lavoie 2006 PC model."""
 
         if parameters is None:
-            parameters = ParametersGL06PC()
+            parameters = ParametersGL06PCEX()
 
         super().__init__(
             variable_info=variable_info,
@@ -202,6 +202,27 @@ class VariablesGL06PC(Variables):
             },
             "DisposableIncome": {
                 "notation": r"YD(t)",
+                "unit": "USD",
+                "history": 0,
+                "sectors": ["Household"],
+                "sfc": [("Index", "Household")],
+            },
+            "ExpectedDisposableIncome": {
+                "notation": r"YD^e(t)",
+                "unit": "USD",
+                "history": 0,
+                "sectors": ["Household"],
+                "sfc": [("Index", "Household")],
+            },
+            "ExpectedWealth": {
+                "notation": r"V^e(t)",
+                "unit": "USD",
+                "history": 0,
+                "sectors": ["Household"],
+                "sfc": [("Index", "Household")],
+            },
+            "HouseholdBillDemand": {
+                "notation": r"B_d(t)",
                 "unit": "USD",
                 "history": 0,
                 "sectors": ["Household"],

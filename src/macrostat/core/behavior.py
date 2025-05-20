@@ -63,6 +63,10 @@ class Behavior(torch.nn.Module):
         self.differentiable = differentiable
         self.debug = debug
 
+    ############################################################################
+    # Simulation of the model
+    ############################################################################
+
     def forward(self):
         """Forward pass of the behavior.
 
@@ -72,7 +76,6 @@ class Behavior(torch.nn.Module):
 
         If there are additional steps necessary, users may wish to overwrite this function.
         """
-
         # Set the seed
         torch.manual_seed(self.hyper["seed"])
 
@@ -98,7 +101,6 @@ class Behavior(torch.nn.Module):
 
         # Initialize the prior and state
         self.prior = self.state
-        self.state = self.variables.new_state()
 
         # Run the model for the remaining timesteps
         logger.debug(
@@ -108,6 +110,7 @@ class Behavior(torch.nn.Module):
         for t in range(
             self.hyper["timesteps_initialization"] + 1, self.hyper["timesteps"]
         ):
+            self.state = self.variables.new_state()
             # Get scenario series for this point in time
             idx = torch.where(
                 torch.arange(self.hyper["timesteps"]) == t,
@@ -126,7 +129,6 @@ class Behavior(torch.nn.Module):
             self.variables.record_state(t, self.state)
             self.history = self.variables.update_history(self.state)
             self.prior = self.state
-            self.state = self.variables.new_state()
 
         return None
 
@@ -192,7 +194,83 @@ class Behavior(torch.nn.Module):
 
         return params
 
+    ############################################################################
+    # Steady State
+    ############################################################################
+
+    def compute_theoretical_steady_state(self, **kwargs):
+        """Compute the theoretical steady state of the model.
+
+        This process generally follows the structure of the forward() function,
+        but instead of simulating the model, the steady state is computed at
+        each timestep. Therefore, (1) the model is initialized, and (2) for
+        each timestep the parameter and scenario information is passed to the
+        compute_theoretical_steady_state_per_step() function that computes the
+        steady state at that timestep.
+
+        Parameters
+        ----------
+        **kwargs: dict
+            Additional keyword arguments.
+        """
+        # Set the seed
+        torch.manual_seed(self.hyper["seed"])
+
+        # Initialize the output tensors
+        self.state, _ = self.variables.initialize_tensors(
+            t=self.hyper["timesteps"],
+            dtype=torch.float32,
+            requires_grad=self.hyper["requires_grad"],
+            device=self.hyper["device"],
+        )
+
+        # Initialize the model
+        info = f"(t=0...{self.hyper['timesteps_initialization']})"
+        logger.debug(f"Initializing model {info}")
+        self.initialize()
+
+        for t in range(self.hyper["timesteps_initialization"]):
+            self.variables.record_state(t, self.state)
+
+        # Compute the steady state
+        info = f"(t={self.hyper['timesteps_initialization'] + 1}...{self.hyper['timesteps']})"
+        logger.debug(f"Computing theoretical steady state {info}")
+
+        for t in range(
+            self.hyper["timesteps_initialization"] + 1, self.hyper["timesteps"]
+        ):
+            self.state = self.variables.new_state()
+
+            # Get scenario series for this point in time
+            idx = torch.where(
+                torch.arange(self.hyper["timesteps"]) == t,
+                torch.ones(1),
+                torch.zeros(1),
+            )
+            scenario = {k: idx @ v for k, v in self.scenarios.items()}
+
+            # Apply parameter shocks
+            params = self.apply_parameter_shocks(t, scenario)
+
+            # Compute the steady state
+            self.compute_theoretical_steady_state_per_step(
+                t=t, params=params, scenario=scenario
+            )
+
+            # Store the outputs
+            self.variables.record_state(t, self.state)
+
+        return None
+
+    def compute_theoretical_steady_state_per_step(self, **kwargs):
+        """Compute the theoretical steady state of the model per step."""
+        raise NotImplementedError(
+            "Behavior.compute_theoretical_steady_state_per_step() to be implemented by model"
+        )
+
+    ############################################################################
     # Some Differentiable PyTorch Alternatives
+    ############################################################################
 
     def diffwhere(self, condition, x1, x2):
         """Where condition that is differentiable with respect to the condition.

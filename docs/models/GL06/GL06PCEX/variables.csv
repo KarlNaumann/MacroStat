@@ -13,3 +13,6 @@ CentralBankBillStock,:math:`B_{CB}(t)`,USD,0,CentralBank,"[('Asset', ['CentralBa
 Wealth,:math:`V(t)`,USD,0,Household,"[('Liability', 'Household'), ('Asset', 'Government')]"
 InterestRate,:math:`r(t)`,.,0,Macroeconomy,"[('Index', 'Macroeconomy')]"
 DisposableIncome,:math:`YD(t)`,USD,0,Household,"[('Index', 'Household')]"
+ExpectedDisposableIncome,:math:`YD^e(t)`,USD,0,Household,"[('Index', 'Household')]"
+ExpectedWealth,:math:`V^e(t)`,USD,0,Household,"[('Index', 'Household')]"
+HouseholdBillDemand,:math:`B_d(t)`,USD,0,Household,"[('Index', 'Household')]"

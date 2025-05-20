@@ -1,5 +1,5 @@
 """
-This module will define the forward and simulate behavior of the Godley-Lavoie 2006 PC model.
+This module will define the forward and simulate behavior of the Godley-Lavoie 2006 PCEX model.
 """
 
 __author__ = ["Karl Naumann-Woleske"]
@@ -12,35 +12,35 @@ import logging
 import torch
 
 from macrostat.core.behavior import Behavior
-from macrostat.models.GL06PC.parameters import ParametersGL06PC
-from macrostat.models.GL06PC.scenarios import ScenariosGL06PC
-from macrostat.models.GL06PC.variables import VariablesGL06PC
+from macrostat.models.GL06PCEX.parameters import ParametersGL06PCEX
+from macrostat.models.GL06PCEX.scenarios import ScenariosGL06PCEX
+from macrostat.models.GL06PCEX.variables import VariablesGL06PCEX
 
 logger = logging.getLogger(__name__)
 
 
-class BehaviorGL06PC(Behavior):
-    """Behavior class for the Godley-Lavoie 2006 PC model."""
+class BehaviorGL06PCEX(Behavior):
+    """Behavior class for the Godley-Lavoie 2006 PCEX model."""
 
-    version = "GL06PC"
+    version = "GL06PCEX"
 
     def __init__(
         self,
-        parameters: ParametersGL06PC | None = None,
-        scenarios: ScenariosGL06PC | None = None,
-        variables: VariablesGL06PC | None = None,
+        parameters: ParametersGL06PCEX | None = None,
+        scenarios: ScenariosGL06PCEX | None = None,
+        variables: VariablesGL06PCEX | None = None,
         scenario: int = 0,
         debug: bool = False,
     ):
-        """Initialize the behavior of the Godley-Lavoie 2006 SIM model.
+        """Initialize the behavior of the Godley-Lavoie 2006 PCEX model.
 
         Parameters
         ----------
-        parameters: ParametersGL06PC | None
+        parameters: ParametersGL06PCEX | None
             The parameters of the model.
-        scenarios: ScenariosGL06PC | None
+        scenarios: ScenariosGL06PCEX | None
             The scenarios of the model.
-        variables: VariablesGL06PC | None
+        variables: VariablesGL06PCEX | None
             The variables of the model.
         record: bool
             Whether to record the model output.
@@ -49,11 +49,11 @@ class BehaviorGL06PC(Behavior):
         """
 
         if parameters is None:
-            parameters = ParametersGL06PC()
+            parameters = ParametersGL06PCEX()
         if scenarios is None:
-            scenarios = ScenariosGL06PC()
+            scenarios = ScenariosGL06PCEX()
         if variables is None:
-            variables = VariablesGL06PC()
+            variables = VariablesGL06PCEX()
 
         super().__init__(
             parameters=parameters,
@@ -63,8 +63,12 @@ class BehaviorGL06PC(Behavior):
             debug=debug,
         )
 
+    ############################################################################
+    # Initialization
+    ############################################################################
+
     def initialize(self):
-        r"""Initialize the behavior of the Godley-Lavoie 2006 PC model.
+        r"""Initialize the behavior of the Godley-Lavoie 2006 PCEX model.
 
         Within the book the initialization is generally to set all non-scenario
         variables to zero. Accordingly
@@ -111,20 +115,30 @@ class BehaviorGL06PC(Behavior):
         - DisposableIncome
 
         """
+        # Flows
         self.state["ConsumptionHousehold"] = torch.zeros(1)
         self.state["ConsumptionGovernment"] = torch.zeros(1)
         self.state["NationalIncome"] = torch.zeros(1)
         self.state["InterestEarnedOnBillsHousehold"] = torch.zeros(1)
         self.state["CentralBankProfits"] = torch.zeros(1)
         self.state["Taxes"] = torch.zeros(1)
+        # Stocks
         self.state["HouseholdMoneyStock"] = torch.zeros(1)
         self.state["CentralBankMoneyStock"] = torch.zeros(1)
         self.state["HouseholdBillStock"] = torch.zeros(1)
         self.state["GovernmentBillStock"] = torch.zeros(1)
         self.state["CentralBankBillStock"] = torch.zeros(1)
         self.state["Wealth"] = torch.zeros(1)
+        # Indices
         self.state["InterestRate"] = torch.zeros(1)
         self.state["DisposableIncome"] = torch.zeros(1)
+        self.state["ExpectedDisposableIncome"] = torch.zeros(1)
+        self.state["ExpectedWealth"] = torch.zeros(1)
+        self.state["HouseholdBillDemand"] = torch.zeros(1)
+
+    ############################################################################
+    # Step
+    ############################################################################
 
     def step(self, **kwargs):
         """Step function of the Godley-Lavoie 2006 PC model."""
@@ -135,13 +149,16 @@ class BehaviorGL06PC(Behavior):
 
         # Items based on prior
         self.interest_earned_on_bills_household(**kwargs)
+        self.expected_disposable_income(**kwargs)
 
         # Solution of the step
+        self.consumption(**kwargs)
         self.national_income(**kwargs)
         self.taxes(**kwargs)
         self.disposable_income(**kwargs)
-        self.consumption(**kwargs)
         self.wealth(**kwargs)
+        self.expected_wealth(**kwargs)
+        self.household_bill_demand(**kwargs)
         self.household_bill_holdings(**kwargs)
         self.household_money_stock(**kwargs)
         self.central_bank_profits(**kwargs)
@@ -238,6 +255,70 @@ class BehaviorGL06PC(Behavior):
             self.prior["InterestRate"] * self.prior["HouseholdBillStock"]
         )
 
+    def expected_disposable_income(
+        self, t: torch.tensor, scenario: dict, params: dict | None = None
+    ):
+        r"""The expected disposable income is simply the prior period's
+        disposable income. Equation (3.20) in the book.
+
+        Parameters
+        ----------
+        t : torch.tensor
+            Current time step
+        scenario : dict
+
+        Equations
+        ---------
+        .. math::
+            YD^e(t) = YD(t-1)
+
+        Dependency
+        ----------
+        - prior: DisposableIncome
+
+        Sets
+        -----
+        - ExpectedDisposableIncome
+        """
+        self.state["ExpectedDisposableIncome"] = self.prior["DisposableIncome"]
+
+    def consumption(self, t: int, scenario: dict, params: dict | None = None, **kwargs):
+        r"""Calculate the consumption.
+
+        Parameters
+        ----------
+        t: int
+            The time step.
+        scenario: dict
+            The scenario.
+        params: dict | None
+            The parameters.
+
+        Equations
+        ---------
+        .. math::
+            :nowrap:
+
+            \begin{align}
+                C(t) = \alpha_1 YD^e(t) + \alpha_2 V(t-1)
+            \end{align}
+
+        Dependency
+        ----------
+        - state: ExpectedDisposableIncome
+        - prior: Wealth
+        - params: PropensityToConsumeIncome
+        - params: PropensityToConsumeSavings
+
+        Sets
+        -----
+        - ConsumptionHousehold
+        """
+        self.state["ConsumptionHousehold"] = (
+            params["PropensityToConsumeIncome"] * self.state["ExpectedDisposableIncome"]
+            + params["PropensityToConsumeSavings"] * self.prior["Wealth"]
+        )
+
     def national_income(
         self, t: int, scenario: dict, params: dict | None = None, **kwargs
     ):
@@ -261,16 +342,12 @@ class BehaviorGL06PC(Behavior):
             :nowrap:
 
             \begin{align}
-                Y(t) = \frac{\alpha_1(1-\theta)r(t-1)B_h(t-1) + \alpha_2 V(t-1) + G(t)}{1 - \alpha_1(1-\theta)}
+                Y(t) = C(t) + G(t)
             \end{align}
 
         Dependency
         ----------
-        - params: PropensityToConsumeIncome
-        - params: TaxRate
-        - state: InterestEarnedOnBillsHousehold
-        - params: PropensityToConsumeSavings
-        - prior: Wealth
+        - state: ConsumptionHousehold
         - state: ConsumptionGovernment
 
         Sets
@@ -278,18 +355,7 @@ class BehaviorGL06PC(Behavior):
         - NationalIncome
         """
         self.state["NationalIncome"] = (
-            # Spending out of bond income
-            params["PropensityToConsumeIncome"]
-            * (1 - params["TaxRate"])
-            * self.state["InterestEarnedOnBillsHousehold"]
-            # Spending out of wealth
-            + params["PropensityToConsumeSavings"] * self.prior["Wealth"]
-            # Government spending
-            + self.state["ConsumptionGovernment"]
-        ) / (
-            # Multiplier
-            1
-            - params["PropensityToConsumeIncome"] * (1 - params["TaxRate"])
+            self.state["ConsumptionHousehold"] + self.state["ConsumptionGovernment"]
         )
 
     def taxes(self, t: int, scenario: dict, params: dict | None = None, **kwargs):
@@ -366,43 +432,6 @@ class BehaviorGL06PC(Behavior):
             + self.state["InterestEarnedOnBillsHousehold"]
         )
 
-    def consumption(self, t: int, scenario: dict, params: dict | None = None, **kwargs):
-        r"""Calculate the consumption.
-
-        Parameters
-        ----------
-        t: int
-            The time step.
-        scenario: dict
-            The scenario.
-        params: dict | None
-            The parameters.
-
-        Equations
-        ---------
-        .. math::
-            :nowrap:
-
-            \begin{align}
-                C(t) = \alpha_1 YD(t) + \alpha_2 V(t-1)
-            \end{align}
-
-        Dependency
-        ----------
-        - state: DisposableIncome
-        - prior: Wealth
-        - params: PropensityToConsumeIncome
-        - params: PropensityToConsumeSavings
-
-        Sets
-        -----
-        - ConsumptionHousehold
-        """
-        self.state["ConsumptionHousehold"] = (
-            params["PropensityToConsumeIncome"] * self.state["DisposableIncome"]
-            + params["PropensityToConsumeSavings"] * self.prior["Wealth"]
-        )
-
     def wealth(self, t: int, scenario: dict, params: dict | None = None, **kwargs):
         r"""Calculate the wealth.
 
@@ -440,6 +469,95 @@ class BehaviorGL06PC(Behavior):
             - self.state["ConsumptionHousehold"]
         )
 
+    def expected_wealth(
+        self, t: int, scenario: dict, params: dict | None = None, **kwargs
+    ):
+        r"""Calculate the expected wealth.
+
+        Parameters
+        ----------
+        t: int
+            The time step.
+        scenario: dict
+            The scenario.
+        params: dict | None
+            The parameters.
+
+        Equations
+        ---------
+        .. math::
+            :nowrap:
+
+            \begin{align}
+                V^e(t) = V(t-1) + YD^e(t) - C(t)
+            \end{align}
+
+        Dependency
+        ----------
+        - state: ExpectedDisposableIncome
+        - state: ConsumptionHousehold
+        - prior: Wealth
+
+        Sets
+        -----
+        - ExpectedWealth
+        """
+        self.state["ExpectedWealth"] = (
+            self.prior["Wealth"]
+            + self.state["ExpectedDisposableIncome"]
+            - self.state["ConsumptionHousehold"]
+        )
+
+    def household_bill_demand(
+        self, t: int, scenario: dict, params: dict | None = None, **kwargs
+    ):
+        r"""Calculate the household bill demand.
+
+        Parameters
+        ----------
+        t: int
+            The time step.
+        scenario: dict
+            The scenario.
+        params: dict | None
+            The parameters.
+
+        Equations
+        ---------
+        .. math::
+            :nowrap:
+
+            \begin{align}
+                \frac{B_h(t)}{V^e(t)} = \lambda_0 + \lambda_1 r(t) - \lambda_2 \frac{YD^e(t)}{V^e(t)}
+            \end{align}
+
+        Dependency
+        ----------
+        - state: ExpectedWealth
+        - state: ExpectedDisposableIncome
+        - state: InterestRate
+        - params: WealthShareBills_Constant
+        - params: WealthShareBills_InterestRate
+        - params: WealthShareBills_Income
+
+        Sets
+        -----
+        - HouseholdBillDemand
+        """
+        self.state["HouseholdBillDemand"] = self.state["ExpectedWealth"] * (
+            # Baseline share
+            params["WealthShareBills_Constant"]
+            # Interest rate effect
+            + params["WealthShareBills_InterestRate"] * self.state["InterestRate"]
+            # Income-to-wealth ratio effect
+            - params["WealthShareBills_Income"]
+            * torch.where(
+                self.state["ExpectedWealth"] > 0,
+                self.state["ExpectedDisposableIncome"] / self.state["ExpectedWealth"],
+                torch.zeros_like(self.state["ExpectedDisposableIncome"]),
+            )
+        )
+
     def household_bill_holdings(
         self, t: int, scenario: dict, params: dict | None = None, **kwargs
     ):
@@ -460,32 +578,19 @@ class BehaviorGL06PC(Behavior):
             :nowrap:
 
             \begin{align}
-                \frac{B_h(t)}{V(t)} = \lambda_0 + \lambda_1 r(t) - \lambda_2 \frac{YD(t)}{V(t)}
+                B_h(t) = B_h(t-1) + (B_h^d(t) - B_h(t-1))
             \end{align}
 
         Dependency
         ----------
-        - state: Wealth
-        - state: DisposableIncome
-        - state: InterestRate
-        - params: WealthShareBills_Constant
-        - params: WealthShareBills_InterestRate
-        - params: WealthShareBills_Income
+        - state: HouseholdBillDemand
+        - prior: HouseholdBillStock
 
         Sets
         -----
         - HouseholdBillStock
         """
-        self.state["HouseholdBillStock"] = self.state["Wealth"] * (
-            # Baseline share
-            params["WealthShareBills_Constant"]
-            # Interest rate effect
-            + params["WealthShareBills_InterestRate"] * self.state["InterestRate"]
-            # Income-to-wealth ratio effect
-            - params["WealthShareBills_Income"]
-            * self.state["DisposableIncome"]
-            / self.state["Wealth"]
-        )
+        self.state["HouseholdBillStock"] = self.state["HouseholdBillDemand"]
 
     def household_money_stock(
         self, t: int, scenario: dict, params: dict | None = None, **kwargs
@@ -713,13 +818,13 @@ class BehaviorGL06PC(Behavior):
             G^\star(t) &= G(t)\\
             r^\star(t) &= r(t)\\
             \alpha_3 &= \frac{1-\alpha_1}{\alpha_2}\\
-            YD^\star(t) &= \frac{G^\star(t)}{\frac{\theta}{1-\theta} - r^\star(t)\cdot\left(\left(\lambda_0 + \lambda_1 r^\star(t) \right)\alpha_3 - \lambda_2\right)}\\
+            YD^\star(t) = YD^{e\star}(t) &= \frac{G^\star(t)}{\frac{\theta}{1-\theta} - r^\star(t)\cdot\left(\left(\lambda_0 + \lambda_1 r^\star(t) \right)\alpha_3 - \lambda_2\right)}\\
             C^\star(t) &= YD^\star(t)\\
             Y^\star(t) &= C^\star(t) + G^\star(t)\\
-            V^\star(t) &= \alpha_3 YD^\star(t)\\
-            B_h^\star(t) &= \left(\left(\lambda_0 + \lambda_1 r^\star(t) \right)\alpha_3 - \lambda_2\right)\cdot YD^\star(t)\\
+            V^\star(t) = V^{e\star}(t) &= \alpha_3 YD^\star(t)\\
+            B_d^\star(t) = B_h^\star(t) &= \left(\left(\lambda_0 + \lambda_1 r^\star(t) \right)\alpha_3 - \lambda_2\right)\cdot YD^\star(t)\\
             T^\star(t) &= \theta\cdot \left(Y^\star(t) + r^\star(t) B_h^\star(t)\right)\\
-            H_h^\star(t) &= V^{\star}(t) - B_h^\star(t)\\
+            H_h^\star(t) &= V^{e\star}(t) - B_h^\star(t)\\
             B_s^\star(t) &= \frac{r^\star(t) B_{CB}^\star(t) + T^\star(t) - G^\star(t)}{r^\star(t)}\\
             B_{CB}^\star(t) &= B_s^\star(t) - B_h^\star(t)\\
             H_s^\star(t) &= H_{s}(t-1) + (B_{CB}(t) - B_{CB}(t-1))
@@ -747,16 +852,16 @@ class BehaviorGL06PC(Behavior):
                 - params["WealthShareBills_Income"]
             )
         )
+        self.state["ExpectedDisposableIncome"] = self.state["DisposableIncome"]
         self.state["ConsumptionHousehold"] = self.state["DisposableIncome"]
-        self.state["NationalIncome"] = (
-            self.state["ConsumptionHousehold"] + self.state["ConsumptionGovernment"]
-        )
+        self.national_income(**kwargs)
 
         # Compute the steady state wealth
         self.state["Wealth"] = self.state["DisposableIncome"] * alpha3
+        self.state["ExpectedWealth"] = self.state["Wealth"]
 
         # Compute the steady state bill holdings
-        self.state["HouseholdBillStock"] = (
+        self.state["HouseholdBillDemand"] = (
             (
                 params["WealthShareBills_Constant"]
                 + params["WealthShareBills_InterestRate"] * self.state["InterestRate"]
@@ -764,6 +869,7 @@ class BehaviorGL06PC(Behavior):
             * alpha3
             - params["WealthShareBills_Income"]
         ) * self.state["DisposableIncome"]
+        self.state["HouseholdBillStock"] = self.state["HouseholdBillDemand"]
         self.state["InterestEarnedOnBillsHousehold"] = (
             self.state["InterestRate"] * self.state["HouseholdBillStock"]
         )
