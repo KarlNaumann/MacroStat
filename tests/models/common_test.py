@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import List, Tuple, Type
 
 import numpy
+import pytest
 import torch
 
 from macrostat.core.behavior import Behavior
@@ -199,6 +200,22 @@ class BaseModelTest:
         assert self.model.behavior == self.classes["behavior"]
         assert self.model_default.behavior == self.classes["behavior"]
 
+    @pytest.mark.slow
+    def test_default_simulation_is_healthy(self):
+        """Test that default simulation is healthy"""
+        self.model.simulate()
+        assert self.model.variables.check_health()
+
+    @pytest.mark.slow
+    def test_theoretical_steadystate_is_healthy(self):
+        """Test that theoretical steadystate is healthy"""
+        try:
+            self.model.compute_theoretical_steady_state()
+        except NotImplementedError:
+            pass
+        else:
+            assert self.model.variables.check_health()
+
     ##############################################################
     # Tests on the parameters level
     ##############################################################
@@ -288,6 +305,21 @@ class BaseModelTest:
     def test_behavior_default_initialization(self):
         """Test that default behavior is not empty"""
         default_behavior = self.behavior_class()
+        assert default_behavior is not None
+        assert isinstance(default_behavior.params, torch.nn.ParameterDict)
+        assert isinstance(default_behavior.scenarios, torch.nn.ParameterDict)
+        assert isinstance(default_behavior.variables, self.classes["variables"])
+
+    def test_behavior_default_initialization_with_kwargs(self):
+        """Test that default behavior is not empty"""
+        default_params = self.params_class()
+        default_scenarios = self.scenarios_class()
+        default_variables = self.vars_class()
+        default_behavior = self.behavior_class(
+            parameters=default_params,
+            scenarios=default_scenarios,
+            variables=default_variables,
+        )
         assert default_behavior is not None
         assert isinstance(default_behavior.params, torch.nn.ParameterDict)
         assert isinstance(default_behavior.scenarios, torch.nn.ParameterDict)
