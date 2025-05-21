@@ -877,6 +877,7 @@ class BehaviorGL06PCEX(Behavior):
         # Compute remaining variables, using the step functions where possible
         self.taxes(**kwargs)
         self.household_money_stock(**kwargs)
+        self.state["CentralBankBillStock"] = self.state["HouseholdMoneyStock"]
         self.state["CentralBankProfits"] = (
             self.state["InterestRate"] * self.state["CentralBankBillStock"]
         )
