@@ -2,7 +2,7 @@
 [run]
 branch = True
 source = macrostat
-# omit = bad_file.py
+omit = */models/*/behavior.py, */models/*/behavior/*.py
 
 [paths]
 source =
