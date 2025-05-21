@@ -1,5 +1,5 @@
 """
-This module will define the forward and simulate behavior of the Godley-Lavoie 2006 PCEX model.
+This module will define the forward and simulate behavior of the Godley-Lavoie 2006 PCEX2 model.
 """
 
 __author__ = ["Karl Naumann-Woleske"]
@@ -12,35 +12,35 @@ import logging
 import torch
 
 from macrostat.core.behavior import Behavior
-from macrostat.models.GL06PCEX.parameters import ParametersGL06PCEX
-from macrostat.models.GL06PCEX.scenarios import ScenariosGL06PCEX
-from macrostat.models.GL06PCEX.variables import VariablesGL06PCEX
+from macrostat.models.GL06PCEX2.parameters import ParametersGL06PCEX2
+from macrostat.models.GL06PCEX2.scenarios import ScenariosGL06PCEX2
+from macrostat.models.GL06PCEX2.variables import VariablesGL06PCEX2
 
 logger = logging.getLogger(__name__)
 
 
-class BehaviorGL06PCEX(Behavior):
-    """Behavior class for the Godley-Lavoie 2006 PCEX model."""
+class BehaviorGL06PCEX2(Behavior):
+    """Behavior class for the Godley-Lavoie 2006 PCEX2 model."""
 
-    version = "GL06PCEX"
+    version = "GL06PCEX2"
 
     def __init__(
         self,
-        parameters: ParametersGL06PCEX | None = None,
-        scenarios: ScenariosGL06PCEX | None = None,
-        variables: VariablesGL06PCEX | None = None,
+        parameters: ParametersGL06PCEX2 | None = None,
+        scenarios: ScenariosGL06PCEX2 | None = None,
+        variables: VariablesGL06PCEX2 | None = None,
         scenario: int = 0,
         debug: bool = False,
     ):
-        """Initialize the behavior of the Godley-Lavoie 2006 PCEX model.
+        """Initialize the behavior of the Godley-Lavoie 2006 PCEX2 model.
 
         Parameters
         ----------
-        parameters: ParametersGL06PCEX | None
+        parameters: ParametersGL06PCEX2 | None
             The parameters of the model.
-        scenarios: ScenariosGL06PCEX | None
+        scenarios: ScenariosGL06PCEX2 | None
             The scenarios of the model.
-        variables: VariablesGL06PCEX | None
+        variables: VariablesGL06PCEX2 | None
             The variables of the model.
         record: bool
             Whether to record the model output.
@@ -49,11 +49,11 @@ class BehaviorGL06PCEX(Behavior):
         """
 
         if parameters is None:
-            parameters = ParametersGL06PCEX()
+            parameters = ParametersGL06PCEX2()
         if scenarios is None:
-            scenarios = ScenariosGL06PCEX()
+            scenarios = ScenariosGL06PCEX2()
         if variables is None:
-            variables = VariablesGL06PCEX()
+            variables = VariablesGL06PCEX2()
 
         super().__init__(
             parameters=parameters,
@@ -68,7 +68,7 @@ class BehaviorGL06PCEX(Behavior):
     ############################################################################
 
     def initialize(self):
-        r"""Initialize the behavior of the Godley-Lavoie 2006 PCEX model.
+        r"""Initialize the behavior of the Godley-Lavoie 2006 PCEX2 model.
 
         Within the book the initialization is generally to set all non-scenario
         variables to zero. Accordingly
@@ -300,22 +300,27 @@ class BehaviorGL06PCEX(Behavior):
             :nowrap:
 
             \begin{align}
-                C(t) = \alpha_1 YD^e(t) + \alpha_2 V(t-1)
+                C(t) = (\alpha_{10} - \iota r(t-1)) YD^e(t) + \alpha_2 V(t-1)
             \end{align}
 
         Dependency
         ----------
         - state: ExpectedDisposableIncome
         - prior: Wealth
-        - params: PropensityToConsumeIncome
+        - params: PropensityToConsumeIncomeBase
+        - params: PropensityToConsumeIncomeInterest
         - params: PropensityToConsumeSavings
 
         Sets
         -----
         - ConsumptionHousehold
         """
+        propensity_to_consume_income = (
+            params["PropensityToConsumeIncomeBase"]
+            - params["PropensityToConsumeIncomeInterest"] * self.prior["InterestRate"]
+        )
         self.state["ConsumptionHousehold"] = (
-            params["PropensityToConsumeIncome"] * self.state["ExpectedDisposableIncome"]
+            propensity_to_consume_income * self.state["ExpectedDisposableIncome"]
             + params["PropensityToConsumeSavings"] * self.prior["Wealth"]
         )
 
@@ -836,9 +841,11 @@ class BehaviorGL06PCEX(Behavior):
         self.set_interest_rate(**kwargs)
 
         # Compute the steady state disposable income and consumption
-        alpha3 = (1 - params["PropensityToConsumeIncome"]) / params[
-            "PropensityToConsumeSavings"
-        ]
+        alpha1 = (
+            params["PropensityToConsumeIncomeBase"]
+            - params["PropensityToConsumeIncomeInterest"] * self.state["InterestRate"]
+        )
+        alpha3 = (1 - alpha1) / params["PropensityToConsumeSavings"]
         self.state["DisposableIncome"] = scenario["GovernmentDemand"] / (
             (params["TaxRate"] / (1 - params["TaxRate"]))
             - self.state["InterestRate"]
