@@ -177,15 +177,16 @@ class DocstringCausalityAnalyzer(CausalityAnalyzer):
                 set_columns.add(("state", name))
 
         # Build the adjacency matrix
-        self.adjacency_matrix = (
-            pd.DataFrame(
-                data=0,
-                index=pd.MultiIndex.from_tuples(dependency_rows),
-                columns=pd.MultiIndex.from_tuples(set_columns),
-            )
-            .sort_index(axis=0)
-            .sort_index(axis=1)
-        )
+        self.adjacency_matrix = pd.DataFrame(
+            index=pd.MultiIndex.from_tuples(
+                dependency_rows, names=["source_type", "source_name"]
+            ),
+            columns=pd.MultiIndex.from_tuples(
+                set_columns, names=["target_type", "target_name"]
+            ),
+        ).fillna(0)
+        self.adjacency_matrix.sort_index(axis=0, inplace=True)
+        self.adjacency_matrix.sort_index(axis=1, inplace=True)
 
         for components in self._relations.values():
             for target in components["Sets"]["state"]:
