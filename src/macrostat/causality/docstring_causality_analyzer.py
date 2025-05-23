@@ -1,7 +1,7 @@
 import ast
 import inspect
 import logging
-from typing import Type
+from typing import Dict, Type
 
 import pandas as pd
 
@@ -17,7 +17,19 @@ class DocstringCausalityAnalyzer(CausalityAnalyzer):
 
     def analyze(self):
         """Analyze a model class and return dependency dictionary"""
+
+        # Gather the docstrings
         self._parse_behavior_docstrings()
+
+        # Parse the docstrings
+        self._relations = {
+            k: self._parse_docstring(v) for k, v in self._docstrings.items()
+        }
+
+        # Build the adjacency matrix
+        self._build_adjacency_matrix()
+
+        return self.adjacency_matrix
 
     def build_adjacency_matrix(self) -> pd.DataFrame:
         """Build adjacency matrix from dependencies"""
@@ -90,3 +102,97 @@ class DocstringCausalityAnalyzer(CausalityAnalyzer):
             doc = method.__doc__
             if doc and ("Dependency" in doc or "Sets" in doc):
                 self._docstrings[name] = doc
+
+    def _parse_docstring(self, docstring: str) -> Dict[str, Dict[str, str]]:
+        """Parse a docstring and return a dictionary of dependencies and sets
+
+        Docstring titles are "underlined" with a variable number of "-" characters.
+        We extract the Dependency and Sets sections. Then for each line in that section,
+        we extract the item type (pre-colon) and the item name (post-colon).
+
+        Returns
+        -------
+        Dict[str, Dict[str, str]]
+            Dictionary mapping item type to a dictionary mapping item name to the item value.
+        """
+        result = {"Dependency": {}, "Sets": {"state": []}}
+
+        if not docstring:
+            return result
+
+        # Split docstring into lines and remove empty lines
+        lines = [line.strip() for line in docstring.split("\n") if line.strip()]
+
+        current_section = None
+
+        for line in lines:
+            # Check if this is a section header
+            if line in ["Dependency", "Sets"]:
+                current_section = line
+                continue
+
+            # Skip lines that are just dashes (section underlines)
+            if line.replace("-", "").strip() == "":
+                continue
+
+            # Handle different sections differently
+            if current_section == "Dependency" and ":" in line:
+                # For Dependency section, parse type:value pairs
+                type_name, value = line.split(":", 1)
+                type_name = type_name.replace("-", "").strip()
+                value = value.strip()
+
+                if type_name and value:
+                    # Initialize list if this is the first value for this type
+                    if type_name not in result[current_section]:
+                        result[current_section][type_name] = []
+                    # Append the value to the list
+                    result[current_section][type_name].append(value)
+
+            elif current_section == "Sets":
+                # For Sets section, just add the state variable name
+                result[current_section]["state"].append(line.replace("-", "").strip())
+
+        return result
+
+    def _build_adjacency_matrix(self):
+        """Build adjacency matrix from dependencies
+
+        The adjacency matrix maps scenarios, state variables, and parameters to each other.
+        The rows represent the prior, scenario, parameters and state variables, i.e. the
+        dependency section of the docstring. The columns represent the state variables, i.e.
+        the sets section of the docstring.
+        """
+
+        dependency_rows, set_columns = set(), set()
+
+        for components in self._relations.values():
+            # Handle dependencies
+            for type_name, names in components["Dependency"].items():
+                for name in names:
+                    dependency_rows.add((type_name, name))
+
+            # Handle sets
+            for name in components["Sets"]["state"]:
+                set_columns.add(("state", name))
+
+        # Build the adjacency matrix
+        self.adjacency_matrix = (
+            pd.DataFrame(
+                data=0,
+                index=pd.MultiIndex.from_tuples(dependency_rows),
+                columns=pd.MultiIndex.from_tuples(set_columns),
+            )
+            .sort_index(axis=0)
+            .sort_index(axis=1)
+        )
+
+        for components in self._relations.values():
+            for target in components["Sets"]["state"]:
+                for type_name, names in components["Dependency"].items():
+                    for name in names:
+                        self.adjacency_matrix.loc[
+                            (type_name, name), ("state", target)
+                        ] = 1
+
+        return self.adjacency_matrix
