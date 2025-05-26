@@ -1,6 +1,8 @@
-========
-Models
-========
+.. _model_library:
+
+=============
+Model Library
+=============
 
 This section contains the documentation of the models available in MacroStat.
 
