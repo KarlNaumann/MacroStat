@@ -38,55 +38,6 @@ class SobolSampler(BaseSampler):
     transforming the sequence to the desired parameter ranges and creating model
     instances with the sampled parameters.
 
-    Attributes
-    ----------
-    model: Model
-        Model instance to be sampled
-    modelclass: type
-        Class of the model being sampled
-    base_parameters: dict
-        Copy of the model's initial parameters
-    bounds: dict[str, tuple]
-        Dictionary containing parameter bounds as (lower, upper) tuples
-    logspace: bool
-        Whether to sample parameters in log space
-    sample_power: int
-        Power of 2 determining number of samples (2**sample_power)
-    sobol_seed: int
-        Seed for the Sobol sequence generator
-    worker_function: callable
-        Function used for parallel processing
-    simulation_args: tuple
-        Additional arguments passed to model.simulate()
-    output_folder: Path
-        Directory where output files are saved
-    cpu_count: int
-        Number of CPUs to use for parallel processing
-    batchsize: int | None
-        Size of batches for parallel processing
-    output_filetype: str
-        Format for saving outputs ('csv' or 'parquet')
-    output_compression: str | None
-        Compression method for output files
-
-    Methods
-    -------
-    generate_tasks() -> list[tuple]
-        Generate tasks for parallel processing by sampling parameters using
-        Sobol sequences and creating corresponding model instances.
-
-    sample(tqdm_info: str = "Sampling") -> None
-        Run the sampling process, generating parameter sets and simulating
-        the model in parallel batches.
-
-    save_outputs(raw_outputs: list, batch: int) -> None
-        Save simulation outputs to disk in the specified format. This is
-        generally called by the sample method.
-
-    verify_bounds(bounds: dict) -> None
-        Verify that parameter bounds are valid for sampling. This is done
-        at initialization and can be called again to verify the bounds.
-
     Example
     -------
     >>> model = MyModel()
