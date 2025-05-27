@@ -231,6 +231,21 @@ class Parameters:
         """
         return {}
 
+    def get_bounds(self):
+        """Return the bounds for the parameters."""
+        return {
+            key: (info["lower bound"], info["upper bound"])
+            for key, info in self.values.items()
+        }
+
+    def get_values(self):
+        """Return the values for the parameters."""
+        return {key: info["value"] for key, info in self.values.items()}
+
+    def is_equal(self, other: "Parameters"):
+        """Compare the parameters to another Parameters object."""
+        return self.values == other.values and self.hyper == other.hyper
+
     def set_bound(self, key: str, value: tuple):
         """Set the bounds for a single parameter
 

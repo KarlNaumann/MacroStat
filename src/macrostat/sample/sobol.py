@@ -10,7 +10,6 @@ __version__ = "0.1.0"
 __maintainer__ = ["Karl Naumann-Woleske"]
 
 # Default libraries
-import copy
 import logging
 
 # Third-party libraries
@@ -18,42 +17,77 @@ import numpy as np
 import pandas as pd
 import scipy.stats as stats
 
-# Custom imports
-import macrostat.core.model as msmodel
-import macrostat.sample.sampler as mssampler
 import macrostat.util.batchprocessing as msbatchprocessing
+
+# Custom imports
+from macrostat.core.model import Model
+from macrostat.sample.sampler import BaseSampler
 
 logger = logging.getLogger(__name__)
 
 
-class SobolSampler(mssampler.Sampler):
+class SobolSampler(BaseSampler):
+    """A Sobol sequence sampler for efficient parameter space exploration.
+
+    The SobolSampler class implements quasi-random low-discrepancy sequence sampling
+    to systematically explore a model's parameter space. The benefit of Sobol
+    sequences is that even the sub-samples are uniform distributed, which is not
+    the case for random sampling from a uniform distribution.
+
+    The sampler works by generating a Sobol sequence in the unit hypercube [0,1]^d,
+    transforming the sequence to the desired parameter ranges and creating model
+    instances with the sampled parameters.
+
+    Example
+    -------
+    >>> model = MyModel()
+    >>> bounds = {
+    ...     'param1': (0.1, 1.0),
+    ...     'param2': (1.0, 10.0)
+    ... }
+    >>> sampler = SobolSampler(
+    ...     model=model,
+    ...     bounds=bounds,
+    ...     sample_power=8,  # 2^8 = 256 samples
+    ...     logspace=True,   # Sample in log space
+    ...     cpu_count=4      # Use 4 CPUs
+    ... )
+    >>> sampler.sample()
+    """
+
     def __init__(
         self,
-        model: msmodel.Model,
-        bounds: dict,
+        model: Model,
+        bounds: dict | None = None,
         sample_power: int = 10,
-        seed: int = 0,
+        sobol_seed: int = 0,
         logspace: bool = False,
         worker_function: callable = msbatchprocessing.timeseries_worker,
         simulation_args: tuple = (),
         output_folder: str = "sobol_samples",
         cpu_count: int = 1,
         batchsize: int = None,
+        output_filetype: str = "csv",
+        output_compression: str | None = None,
     ):
-        """Generalized class to facilitate the sampling of the model's
-        parameterspace using python's multiprocessing library.
+        """Initialize a Sobol sequence sampler.
+
+        For most initialization see the BaseSampler class, in addition, this method
+        stores the sobol_seed and sample_power attributes.
 
         Parameters
         ----------
         model: msmodel.Model
             Model to be sampled
-        bounds: dict[str, tuple]
-            Dictionary containing the bounds for each parameter to be sampled
+        bounds: dict[str, tuple] | None (default None)
+            Dictionary containing the bounds for each parameter to be sampled.
+            If None, the bounds are taken from the model's parameters and all
+            parameters are sampled.
         sample_power: int (default 10)
             A power of 2 to determine the number of samples to be generated,
             i.e. 2**sample_power samples will be generated
-        seed: int (default 0)
-            Seed for the random number generator
+        sobol_seed: int (default 0)
+            Seed for the Sobol sequence
         logspace: bool (default False)
             Whether to sample the parameters in logspace
         worker_function: callable (default batchprocessing.timeseries_worker)
@@ -70,99 +104,22 @@ class SobolSampler(mssampler.Sampler):
         """
         super().__init__(
             model=model,
+            bounds=bounds,
+            logspace=logspace,
             worker_function=worker_function,
+            simulation_args=simulation_args,
             output_folder=output_folder,
             cpu_count=cpu_count,
             batchsize=batchsize,
+            output_filetype=output_filetype,
+            output_compression=output_compression,
         )
 
-        # Boundaries for the parameters
-        self.logspace = logspace
-        self._verify_bounds(bounds)
-        self.bounds = bounds
-
         # Sampling parameters
+        self.sobol_seed = sobol_seed
         self.sample_power = sample_power
-        self.seed = seed
 
-        self.simulation_args = simulation_args
-
-    def generate_tasks(self):
-        """Generate tasks for the parallel processor based on the Sobol sequence
-        for the model's parameterspace using the bounds set in the class.
-
-        Here the scipy.stats.qmc.Sobol class is used to generate the Sobol sequence,
-        specifically the random_base2 method is used to generate the samples, as it
-        is has slightly better space filling properties than with a custom
-        number of samples.
-
-        Returns
-        -------
-        list[tuple]
-            List of tuples containing the model and the task to be processed
-        """
-        # Generate the Sobol points
-        points = self._generate_sobol_points()
-
-        tasks = []
-        for i in points.index:
-            # Copy base parameters to ensure a full set of parameters
-            newparams = copy.deepcopy(self.base_parameters)
-            for key in points.columns:
-                newparams[key] = points.loc[i, key]
-
-            # Generate the task to execute
-            newmodel = self.modelclass(parameters=newparams, **self.model_kwargs)
-            tasks.append((i, newmodel, *self.simulation_args))
-
-        return tasks
-
-    def _verify_bounds(self, bounds: dict) -> None:
-        """Verify that the bounds are correctly set, in particular
-        0. Check that the parameters are in the model
-        1. That there is a lower and upper bound for each parameter
-        2. That the lower bound is smaller than the upper bound
-        3. That the bounds are in the correct order
-        4. If the bounds are in logspace, that the bounds are either
-        both positive or both negative
-        5. If the bounds are in logspace, that either bound is not zero
-
-        Parameters
-        ----------
-        bounds: dict[str, tuple]
-            Dictionary containing the bounds for each parameter to be sampled
-        logspace: bool
-            Whether to sample the parameters in logspace
-
-        Returns
-        -------
-        None
-
-        Raises
-        ------
-        ValueError
-            If the bounds are not correctly set
-        """
-        # Check that the bounds are correctly set
-        for param, bound in bounds.items():
-            if param not in self.model.parameters:
-                raise ValueError(f"Parameter {param} not in the model's parameters")
-            if len(bound) != 2:
-                raise ValueError(
-                    f"Bounds should be a list-like of length 2. {param}: {bound}"
-                )
-            if self.logspace and (bound[0] < 0) != (bound[1] < 0):
-                msg = "Bounds should be either both positive or both negative"
-                raise ValueError(f"{msg}. {param}: {bound}")
-            if self.logspace and (bound[0] == 0 or bound[1] == 0):
-                raise ValueError(
-                    f"Bounds cannot be zero when using logspace. {param}: {bound}"
-                )
-            if bound[0] >= bound[1]:
-                msg = "Lower bound should be smaller than the upper bound"
-                raise ValueError(f"{msg}. {param}: {bound}")
-
-    def _generate_sobol_points(self):
+    def generate_parameters(self):
         """Generate points in the parameterspace for the parallel processor
         based on a Sobol sequence.
 
@@ -186,7 +143,7 @@ class SobolSampler(mssampler.Sampler):
             bounds_array = np.log(np.abs(bounds_array))
 
         # Generate the Sobol sequence
-        np.random.seed(self.seed)
+        np.random.seed(self.sobol_seed)
         sobol_sampler = stats.qmc.Sobol(len(self.bounds))
         sobol_sample = sobol_sampler.random_base2(self.sample_power)
         sample = stats.qmc.scale(sobol_sample, bounds_array[:, 0], bounds_array[:, 1])

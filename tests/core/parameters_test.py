@@ -17,6 +17,46 @@ import torch
 from macrostat.core import BoundaryError, Parameters
 
 
+@pytest.fixture
+def mock_parameters_dictionary():
+    return {
+        "param1": {
+            "value": 1.0,
+            "lower bound": 0.0,
+            "upper bound": 2.0,
+            "unit": "units",
+            "notation": "p_1",
+        },
+        "param2": {
+            "value": 2.0,
+            "lower bound": 1.0,
+            "upper bound": 3.0,
+            "unit": "units",
+            "notation": "p_2",
+        },
+    }
+
+
+@pytest.fixture
+def mock_hyperparameters():
+    return {
+        "timesteps": 100,
+        "timesteps_initialization": 10,
+        "scenario_trigger": 0,
+        "seed": 42,
+        "device": "cpu",
+        "requires_grad": False,
+    }
+
+
+@pytest.fixture
+def mock_parameters(mock_parameters_dictionary, mock_hyperparameters):
+    return Parameters(
+        parameters=mock_parameters_dictionary,
+        hyperparameters=mock_hyperparameters,
+    )
+
+
 class TestParameters:
     """Tests for the Parameters class found in core/parameters.py
 
@@ -61,11 +101,13 @@ class TestParameters:
             == "test Please check the Excel, JSON or default bounds."
         )
 
-    def test_init_with_params(self):
+    def test_init_with_params(self, mock_parameters):
         """Test initialization with parameters and hyperparameters provided"""
-        p = Parameters(parameters=self.params, hyperparameters=self.hyper)
-        assert p.values == self.params
-        assert p.hyper == self.hyper
+        p = Parameters(
+            parameters=mock_parameters.values, hyperparameters=mock_parameters.hyper
+        )
+        assert p.values == mock_parameters.values
+        assert p.hyper == mock_parameters.hyper
 
     def test_init_empty(self):
         """Test initialization with no parameters provided"""
@@ -267,3 +309,119 @@ class TestParameters:
         assert isinstance(pvectors, dict)
         assert len(pvectors) == len(self.params)
         assert isinstance(pvectors["param1"], torch.Tensor)
+
+    def test_get_bounds(self, mock_parameters):
+        """Test getting parameter bounds"""
+        bounds = mock_parameters.get_bounds()
+
+        # Check structure
+        assert isinstance(bounds, dict)
+        assert len(bounds) == len(self.params)
+
+        # Check values
+        assert bounds["param1"] == (0.0, 2.0)
+        assert bounds["param2"] == (1.0, 3.0)
+
+        # Check that bounds are tuples
+        assert isinstance(bounds["param1"], tuple)
+        assert isinstance(bounds["param2"], tuple)
+
+    def test_get_bounds_empty_parameters(self):
+        """Test getting bounds with no parameters"""
+        p = Parameters()
+        bounds = p.get_bounds()
+
+        # Check structure
+        assert isinstance(bounds, dict)
+        assert len(bounds) == 0
+
+    def test_get_values(self, mock_parameters):
+        """Test getting parameter values"""
+        values = mock_parameters.get_values()
+
+        # Check structure
+        assert isinstance(values, dict)
+        assert len(values) == len(self.params)
+
+        # Check values
+        assert values["param1"] == 1.0
+        assert values["param2"] == 2.0
+
+    def test_get_values_empty_parameters(self):
+        """Test getting values with no parameters"""
+        p = Parameters()
+        values = p.get_values()
+
+        # Check structure
+        assert isinstance(values, dict)
+        assert len(values) == 0
+
+    def test_get_values_after_modification(self, mock_parameters):
+        """Test getting values after modifying parameters"""
+        # Modify a parameter value
+        mock_parameters["param1"] = 1.5
+
+        # Get values and check
+        values = mock_parameters.get_values()
+        assert values["param1"] == 1.5
+        assert values["param2"] == 2.0  # Unchanged
+
+    def test_compare_same_parameters(self, mock_parameters):
+        """Test comparison with identical parameters"""
+        p2 = Parameters(
+            parameters=copy.deepcopy(mock_parameters.values),
+            hyperparameters=copy.deepcopy(mock_parameters.hyper),
+        )
+        assert mock_parameters.is_equal(p2)
+
+    def test_compare_different_values(
+        self, mock_parameters, mock_parameters_dictionary, mock_hyperparameters
+    ):
+        """Test comparison with different parameter values"""
+        p_alt = Parameters(
+            parameters=copy.deepcopy(mock_parameters_dictionary),
+            hyperparameters=copy.deepcopy(mock_hyperparameters),
+        )
+        p_alt["param1"] = 1.5  # Modify a value
+        assert not mock_parameters.is_equal(p_alt)
+
+    def test_compare_different_hyperparameters(
+        self, mock_parameters, mock_parameters_dictionary, mock_hyperparameters
+    ):
+        """Test comparison with different hyperparameters"""
+        p_alt = Parameters(
+            parameters=copy.deepcopy(mock_parameters_dictionary),
+            hyperparameters=copy.deepcopy(mock_hyperparameters),
+        )
+        p_alt.hyper["timesteps"] = 200  # Modify a hyperparameter
+        assert not mock_parameters.is_equal(p_alt)
+
+    def test_compare_different_parameters(
+        self, mock_parameters, mock_parameters_dictionary, mock_hyperparameters
+    ):
+        """Test comparison with different parameter sets"""
+        newp = copy.deepcopy(mock_parameters_dictionary)
+        newp["param3"] = {
+            "value": 3.0,
+            "lower bound": 2.0,
+            "upper bound": 4.0,
+            "unit": "units",
+            "notation": "p_3",
+        }
+
+        p_alt = Parameters(
+            parameters=newp,
+            hyperparameters=copy.deepcopy(mock_hyperparameters),
+        )
+        assert not mock_parameters.is_equal(p_alt)
+
+    def test_compare_empty_parameters(self):
+        """Test comparison with empty parameters"""
+        p1 = Parameters()
+        p2 = Parameters()
+        assert p1.is_equal(p2)
+
+    def test_compare_with_non_parameters(self, mock_parameters):
+        """Test comparison with non-Parameters object"""
+        with pytest.raises(AttributeError):
+            mock_parameters.is_equal("not a Parameters object")

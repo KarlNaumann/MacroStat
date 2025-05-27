@@ -12,4 +12,5 @@ see :ref:`api`.
    Getting Started <getting_started>
    Core Model Structure <core/index>
    Causality Analysis <causality>
+   Parameter Space Sampling <sample>
    LaTeX Interfaces <latex_interfaces>
