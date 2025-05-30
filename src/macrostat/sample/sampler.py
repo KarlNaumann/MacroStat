@@ -13,6 +13,7 @@ import copy
 import logging
 import multiprocessing as mp
 import os
+from datetime import datetime as dt
 from pathlib import Path
 
 # Third-party libraries
@@ -116,14 +117,14 @@ class BaseSampler:
 
         return tasks
 
-    def sample(self, tqdm_info: str = "Sampling"):
+    def sample(self, verbose: bool = False):
         """Run in parallel the sampling of the model's parameterspace
         by generating a set of tasks and executing them in parallel
 
         Parameters
         ----------
-        tqdm_info: str (default "Sampling")
-            Information to be displayed in the tqdm progress bar
+        verbose: bool (default False)
+            Whether to print progress information
         """
         # Generate the tasks to run
         self.tasks = self.generate_tasks()
@@ -143,7 +144,14 @@ class BaseSampler:
             len(self.tasks) % self.batchsize > 0
         )
 
+        start_time = dt.now()
         for batch in range(batchcount):
+            if verbose:
+                elapsed = dt.now() - start_time
+                print(
+                    f"Processing batch {batch+1:05d} of {batchcount:05d}. Elapsed {elapsed} ({elapsed/batchcount} per batch)"
+                )
+
             # Set tasks to run now
             start = batch * self.batchsize
             end = min([(batch + 1) * self.batchsize, len(self.tasks)])
@@ -153,7 +161,6 @@ class BaseSampler:
                 tasks=batch_tasks,
                 worker=self.worker_function,
                 cpu_count=self.cpu_count,
-                tqdm_info=tqdm_info,
             )
 
             # Save the outputs to disk
@@ -180,6 +187,8 @@ class BaseSampler:
         """
         # Concatenate the outputs
         index_names = list(raw_outputs[0][-1].index.names)
+        if all(x is None for x in index_names):
+            index_names = [f"index{i+1}" for i in range(len(index_names))]
         data = {v[0]: v[-1] for v in raw_outputs}
         data = pd.concat(
             data.values(), keys=data.keys(), names=["ID"] + index_names, axis=0
@@ -188,12 +197,12 @@ class BaseSampler:
         # Save the outputs to batch-specific files
         if self.output_filetype == "csv":
             data.to_csv(
-                self.output_folder / f"outputs_{batch}.csv",
+                path=self.output_folder / f"outputs_{batch}.csv",
                 compression=self.output_compression,
             )
         elif self.output_filetype == "parquet":
             data.to_parquet(
-                self.output_folder / f"outputs_{batch}.parquet",
+                path=self.output_folder / f"outputs_{batch}.parquet",
                 compression=self.output_compression,
             )
         else:

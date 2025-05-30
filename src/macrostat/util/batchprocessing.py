@@ -10,8 +10,6 @@ __maintainer__ = ["Karl Naumann-Woleske"]
 
 from concurrent.futures import ProcessPoolExecutor
 
-from tqdm import tqdm
-
 
 def timeseries_worker(task: tuple):
     """Worker function for parallel_processor, which will execute a
@@ -40,7 +38,6 @@ def parallel_processor(
     tasks: list = [],
     worker: callable = timeseries_worker,
     cpu_count: int = 1,
-    tqdm_info: str = "",
 ):
     """Run all of the tasks in parallel using the
     ProcessPoolExecutor.
@@ -55,8 +52,6 @@ def parallel_processor(
         Each task will be passed to the worker function as a tuple
     cpu_count : int (default=1)
         Number of CPUs to be used for the parallel processing.
-    tqdm_info : str (default="")
-        Information to be displayed in the tqdm progress bar.
 
     Returns
     -------
@@ -68,8 +63,7 @@ def parallel_processor(
 
     results = []
     process_count = min(cpu_count, len(tasks))
-    tqdmargs = dict(total=len(tasks), desc=tqdm_info)
     with ProcessPoolExecutor(max_workers=process_count) as executor:
-        for i in tqdm(executor.map(worker, tasks), **tqdmargs):
+        for i in executor.map(worker, tasks):
             results.append(i)
     return results
