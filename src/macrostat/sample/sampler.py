@@ -160,10 +160,10 @@ class BaseSampler:
 
             for batch in range(batchcount):
                 try:
-                    if verbose:
+                    if verbose and batch != 0:
                         elapsed = dt.now() - start_time
                         logger.info(
-                            f"Processing batch {batch+1:05d} of {batchcount:05d}. Elapsed {elapsed} ({elapsed/(batch+1)} per batch)"
+                            f"Processing batch {batch+1:05d} of {batchcount:05d}. Elapsed {elapsed} ({elapsed/batch} per batch)"
                         )
 
                     # Generate the tasks to run
