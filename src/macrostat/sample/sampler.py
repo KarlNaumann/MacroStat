@@ -87,9 +87,7 @@ class BaseSampler:
         os.makedirs(output_folder, exist_ok=True)
 
     def generate_parameters(self):
-        """Generate parameters for the parallel processor based on the Sobol sequence
-        for the model's parameterspace using the bounds set in the class.
-        """
+        """Generate parameters for the parallel processor"""
         raise NotImplementedError("This method should be implemented in a subclass")
 
     def generate_tasks(self, points: pd.DataFrame):
@@ -129,7 +127,7 @@ class BaseSampler:
 
         return tasks
 
-    def sample(self, verbose: bool = False):
+    def sample(self, verbose: bool = False, points: pd.DataFrame = None):
         """Run in parallel the sampling of the model's parameterspace
         by generating a set of tasks and executing them in parallel
 
@@ -141,7 +139,10 @@ class BaseSampler:
 
         try:
             # Generate the Sobol points
-            self.points = self.generate_parameters()
+            if points is None:
+                self.points = self.generate_parameters()
+            else:
+                self.points = points
 
             # Run the parallel processing in batches to conserve memory
             # This will write results to disk, clear memory, and proceed
@@ -241,7 +242,7 @@ class BaseSampler:
         # Save the outputs to batch-specific files
         if self.output_filetype == "csv":
             data.to_csv(
-                path=self.output_folder / f"outputs_{batch}.csv",
+                self.output_folder / f"outputs_{batch}.csv",
                 compression=self.output_compression,
             )
         elif self.output_filetype == "parquet":
