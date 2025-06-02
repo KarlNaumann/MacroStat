@@ -42,7 +42,7 @@ def test_timeseries_worker():
 # Test for parallel_processor when no tasks are provided
 def test_parallel_processor_no_tasks():
     with pytest.raises(ValueError, match="No tasks to process."):
-        parallel_processor(tasks=[], cpu_count=2, tqdm_info="Processing")
+        parallel_processor(tasks=[], cpu_count=2)
 
 
 # Test for parallel_processor with mocked ProcessPoolExecutor
@@ -67,7 +67,7 @@ def test_parallel_processor_with_tasks():
         )
 
         # Call parallel_processor and capture the result
-        result = parallel_processor(tasks=tasks, cpu_count=2, tqdm_info="Processing")
+        result = parallel_processor(tasks=tasks, cpu_count=2)
 
         # Assert that the results are as expected
         assert len(result) == 2
@@ -97,7 +97,7 @@ def test_parallel_processor_cpu_count():
         )
 
         # Call parallel_processor and capture the result
-        result = parallel_processor(tasks=tasks, cpu_count=3, tqdm_info="Processing")
+        result = parallel_processor(tasks=tasks, cpu_count=3)
 
         # Assert that the results are as expected
         assert len(result) == 3
