@@ -242,7 +242,7 @@ class BaseSampler:
         # Save the outputs to batch-specific files
         if self.output_filetype == "csv":
             data.to_csv(
-                path=self.output_folder / f"outputs_{batch}.csv",
+                self.output_folder / f"outputs_{batch}.csv",
                 compression=self.output_compression,
             )
         elif self.output_filetype == "parquet":
