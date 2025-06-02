@@ -8,17 +8,48 @@ import pytest
 from macrostat.core import Model, Parameters
 
 
+class MockParameters(Parameters):
+    """Mock parameters class for testing"""
+
+    def get_default_parameters(self):
+        """Return default parameters in the format expected by generate_tasks"""
+        return {
+            "param1": {
+                "value": 1.0,
+                "lower bound": 0.1,
+                "upper bound": 1.0,
+                "unit": "",
+                "notation": "p1",
+            },
+            "param2": {
+                "value": 2.0,
+                "lower bound": 1.0,
+                "upper bound": 10.0,
+                "unit": "",
+                "notation": "p2",
+            },
+        }
+
+
 class MockModel(Model):
     """Mock model class for testing"""
 
-    def __init__(self, parameters=None):
+    def __init__(
+        self,
+        parameters=None,
+        scenarios=None,
+        variables=None,
+        behavior=None,
+        *args,
+        **kwargs
+    ):
+        if parameters is None:
+            parameters = MockParameters()
         super().__init__(
-            parameters=Parameters(
-                {
-                    "param1": {"value": 1.0, "lower bound": 0.1, "upper bound": 1.0},
-                    "param2": {"value": 2.0, "lower bound": 1.0, "upper bound": 10.0},
-                }
-            )
+            parameters=parameters,
+            scenarios=scenarios,
+            variables=variables,
+            behavior=behavior,
         )
 
     def simulate(self, *args, **kwargs):
@@ -36,12 +67,7 @@ def mock_model():
 
 @pytest.fixture
 def mock_parameters():
-    return Parameters(
-        {
-            "param1": {"value": 1.0, "lower bound": 0.1, "upper bound": 1.0},
-            "param2": {"value": 2.0, "lower bound": 1.0, "upper bound": 10.0},
-        }
-    )
+    return MockParameters()
 
 
 @pytest.fixture

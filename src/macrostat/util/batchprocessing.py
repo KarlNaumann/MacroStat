@@ -8,8 +8,27 @@ __license__ = "MIT"
 __version__ = "0.1.0"
 __maintainer__ = ["Karl Naumann-Woleske"]
 
-from concurrent.futures import ProcessPoolExecutor
+import logging
+import traceback
+from contextlib import contextmanager
 
+import torch.multiprocessing as mp
+from torch.multiprocessing import Pool
+
+logger = logging.getLogger(__name__)
+
+
+@contextmanager
+def pool_context(*args, **kwargs):
+    """Context manager for process pool to ensure proper cleanup."""
+    pool = Pool(*args, **kwargs)
+    try:
+        yield pool
+    finally:
+        logger.debug("Cleaning up process pool")
+        pool.terminate()
+        pool.join()
+        logger.debug("Process pool cleanup completed")
 
 def timeseries_worker(task: tuple):
     """Worker function for parallel_processor, which will execute a
@@ -29,9 +48,14 @@ def timeseries_worker(task: tuple):
         simulation, *args are the arguments passed to the model's
         simulate method and output is the output of the simulation.
     """
-    model = task[1]
-    _ = model.simulate(*task[2:])
-    return (task[0], *task[2:], model.output)
+    try:
+        model = task[1]
+        _ = model.simulate(*task[2:])
+        return (task[0], *task[2:], model.output)
+    except Exception as e:
+        logger.error(f"Worker failed for task {task[0]}: {str(e)}")
+        logger.error(traceback.format_exc())
+        raise
 
 
 def parallel_processor(
@@ -39,31 +63,31 @@ def parallel_processor(
     worker: callable = timeseries_worker,
     cpu_count: int = 1,
 ):
-    """Run all of the tasks in parallel using the
-    ProcessPoolExecutor.
+    """Run all of the tasks in parallel using the ProcessPoolExecutor."""
 
-    Parameters
-    ----------
-    tasks : list[tuple]
-        List of tasks to be processed in parallel.
-        Each task should be a tuple
-    worker : callable
-        Worker function to be used for the parallel processing.
-        Each task will be passed to the worker function as a tuple
-    cpu_count : int (default=1)
-        Number of CPUs to be used for the parallel processing.
+    # Set multiprocessing start method to spawn
+    try:
+        mp.set_start_method("spawn", force=True)
+    except RuntimeError:
+        pass
 
-    Returns
-    -------
-    list
-        List of tuple results from the worker function
-    """
+    # Set sharing strategy
+    mp.set_sharing_strategy("file_system")
+
+
     if len(tasks) == 0:
         raise ValueError("No tasks to process.")
 
-    results = []
     process_count = min(cpu_count, len(tasks))
-    with ProcessPoolExecutor(max_workers=process_count) as executor:
-        for i in executor.map(worker, tasks):
-            results.append(i)
-    return results
+    logger.debug(f"Creating process pool with {process_count} workers")
+
+    try:
+        with pool_context(processes=process_count) as pool:
+            logger.debug("Process pool created successfully")
+            results = pool.map(worker, tasks)
+            logger.debug("Parallel processing completed")
+            return results
+    except Exception as e:
+        logger.error(f"Error in process pool: {str(e)}")
+        logger.error(traceback.format_exc())
+        raise

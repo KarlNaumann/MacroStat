@@ -184,7 +184,7 @@ class Model:
         if isinstance(scenario, str):
             scenario = self.scenarios.get_scenario_index(scenario)
 
-        logging.info(f"Starting simulation. Scenario: {scenario}")
+        logging.debug(f"Starting simulation. Scenario: {scenario}")
         behavior = self.behavior(
             self.parameters,
             self.scenarios,
@@ -193,6 +193,7 @@ class Model:
             *args,
             **kwargs,
         )
+        behavior = behavior.to(self.parameters["device"])
         with torch.no_grad():
             return behavior.forward(*args, **kwargs)
 
