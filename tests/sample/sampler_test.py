@@ -262,6 +262,175 @@ class TestBaseSampler:
         total_rows = len(df_batch0) + len(df_batch1)
         assert total_rows == 10  # 5 models * 2 timepoints
 
+    def test_sample_method_batch_exception(self, mock_model, tmp_path):
+        """Test that batch-level exceptions are properly handled and propagated"""
+        # Create sampler with batchsize=2
+        sampler = BaseSampler(
+            model=mock_model, output_folder=str(tmp_path), cpu_count=1, batchsize=2
+        )
+
+        # Create points that will result in two batches
+        mock_points = pd.DataFrame(
+            {
+                "param1": [
+                    0.1 + i * 0.2 for i in range(4)
+                ],  # 4 points = 2 batches of 2
+                "param2": [2.0] * 4,
+            }
+        )
+        sampler.generate_parameters = Mock(return_value=mock_points)
+
+        # Mock parallel_processor to raise an exception in the second batch
+        def mock_processor_side_effect(tasks, *args, **kwargs):
+            if tasks[0][0] >= 2:  # Second batch
+                raise ValueError("Test batch exception")
+            return [
+                (
+                    i,
+                    MockModel(
+                        parameters=MockParameters(
+                            {
+                                "param1": {
+                                    "value": 0.1 + i * 0.2,
+                                    "lower bound": 0.1,
+                                    "upper bound": 1.0,
+                                    "unit": "",
+                                    "notation": "p1",
+                                },
+                                "param2": {
+                                    "value": 2.0,
+                                    "lower bound": 1.0,
+                                    "upper bound": 10.0,
+                                    "unit": "",
+                                    "notation": "p2",
+                                },
+                            }
+                        )
+                    ),
+                    pd.DataFrame({"time": [1, 2], "value": [i, i + 1]}).set_index(
+                        "time"
+                    ),
+                )
+                for i in range(len(tasks))
+            ]
+
+        with patch(
+            "macrostat.sample.sampler.msbatchprocessing.parallel_processor",
+            side_effect=mock_processor_side_effect,
+        ):
+            # Run the sample method and expect it to raise the batch exception
+            with pytest.raises(ValueError, match="Test batch exception"):
+                sampler.sample()
+
+            # Verify that first batch was processed
+            assert os.path.exists(tmp_path / "parameters_0.csv")
+            assert os.path.exists(tmp_path / "outputs_0.csv")
+
+    def test_sample_method_generate_parameters_exception(self, mock_model, tmp_path):
+        """Test that exceptions in generate_parameters are properly handled"""
+        sampler = BaseSampler(
+            model=mock_model, output_folder=str(tmp_path), cpu_count=1
+        )
+
+        # Mock generate_parameters to raise an exception
+        sampler.generate_parameters = Mock(
+            side_effect=ValueError("Test generate_parameters exception")
+        )
+
+        # Run the sample method and expect it to raise the exception
+        with pytest.raises(ValueError, match="Test generate_parameters exception"):
+            sampler.sample()
+
+        # Verify that no files were created
+        assert not any(tmp_path.iterdir())
+
+    def test_sample_method_generate_tasks_exception(self, mock_model, tmp_path):
+        """Test that exceptions in generate_tasks are properly handled"""
+        sampler = BaseSampler(
+            model=mock_model, output_folder=str(tmp_path), cpu_count=1
+        )
+
+        # Create valid points
+        mock_points = pd.DataFrame(
+            {"param1": [0.1 + i * 0.2 for i in range(2)], "param2": [2.0] * 2}
+        )
+        sampler.generate_parameters = Mock(return_value=mock_points)
+
+        # Mock generate_tasks to raise an exception
+        def mock_generate_tasks(points):
+            raise ValueError("Test generate_tasks exception")
+
+        sampler.generate_tasks = Mock(side_effect=mock_generate_tasks)
+
+        # Run the sample method and expect it to raise the exception
+        with pytest.raises(ValueError, match="Test generate_tasks exception"):
+            sampler.sample()
+
+        # Verify that no files were created
+        assert not any(tmp_path.iterdir())
+
+    def test_sample_method_save_outputs_exception(self, mock_model, tmp_path):
+        """Test that exceptions in save_outputs are properly handled"""
+        sampler = BaseSampler(
+            model=mock_model, output_folder=str(tmp_path), cpu_count=1
+        )
+
+        # Create valid points
+        mock_points = pd.DataFrame(
+            {"param1": [0.1 + i * 0.2 for i in range(2)], "param2": [2.0] * 2}
+        )
+        sampler.generate_parameters = Mock(return_value=mock_points)
+
+        # Mock parallel_processor to return valid results
+        def mock_processor_side_effect(tasks, *args, **kwargs):
+            return [
+                (
+                    i,
+                    MockModel(
+                        parameters=MockParameters(
+                            {
+                                "param1": {
+                                    "value": 0.1 + i * 0.2,
+                                    "lower bound": 0.1,
+                                    "upper bound": 1.0,
+                                    "unit": "",
+                                    "notation": "p1",
+                                },
+                                "param2": {
+                                    "value": 2.0,
+                                    "lower bound": 1.0,
+                                    "upper bound": 10.0,
+                                    "unit": "",
+                                    "notation": "p2",
+                                },
+                            }
+                        )
+                    ),
+                    pd.DataFrame({"time": [1, 2], "value": [i, i + 1]}).set_index(
+                        "time"
+                    ),
+                )
+                for i in range(len(tasks))
+            ]
+
+        # Mock save_outputs to raise an exception
+        def mock_save_outputs(raw_outputs, batch):
+            raise ValueError("Test save_outputs exception")
+
+        sampler.save_outputs = Mock(side_effect=mock_save_outputs)
+
+        with patch(
+            "macrostat.sample.sampler.msbatchprocessing.parallel_processor",
+            side_effect=mock_processor_side_effect,
+        ):
+            # Run the sample method and expect it to raise the exception
+            with pytest.raises(ValueError, match="Test save_outputs exception"):
+                sampler.sample()
+
+            # Verify that parameters were saved but outputs were not
+            assert os.path.exists(tmp_path / "parameters_0.csv")
+            assert not os.path.exists(tmp_path / "outputs_0.csv")
+
     def test_save_outputs_csv(self, sampler, tmp_path):
         """Test saving outputs in CSV format"""
         # Create sample data
