@@ -111,6 +111,8 @@ class BaseSampler:
             values = self.model.parameters.get_default_parameters()
             for k, v in points.loc[i].to_dict().items():
                 values[k]["value"] = v
+                values[k]["lower bound"] = self.bounds[k][0]
+                values[k]["upper bound"] = self.bounds[k][1]
             newparams = self.model.parameters.__class__(parameters=values)
 
             # Create new model instance with new parameters
