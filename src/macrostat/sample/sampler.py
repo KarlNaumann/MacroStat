@@ -113,7 +113,10 @@ class BaseSampler:
                 values[k]["value"] = v
                 values[k]["lower bound"] = self.bounds[k][0]
                 values[k]["upper bound"] = self.bounds[k][1]
-            newparams = self.model.parameters.__class__(parameters=values)
+            newparams = self.model.parameters.__class__(
+                parameters=values,
+                hyperparameters=self.model.parameters.hyper,
+            )
 
             # Create new model instance with new parameters
             newmodel = self.model.__class__(
