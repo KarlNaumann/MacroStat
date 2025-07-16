@@ -4,6 +4,24 @@ Changelog
 This is an automatically generated changelog, for a more complete textual description of the changes
 please refer to the version release notes.
 
+`v0.5.0 <https://github.com/KarlNaumann/MacroStat/compare/v0.4.0...v0.5.0>`_ - 2025-05-27
+================================================================================================================================
+
+Merges / Pull Requests
+-----------------------
+
+- `[#12] <https://github.com/KarlNaumann/MacroStat/pull/12>`_: Sobol sampler
+- `[#11] <https://github.com/KarlNaumann/MacroStat/pull/11>`_: Causality Module
+- `[#10] <https://github.com/KarlNaumann/MacroStat/pull/10>`_: Model PCEX2
+- `[#9] <https://github.com/KarlNaumann/MacroStat/pull/9>`_: Model PCEX
+- `[#8] <https://github.com/KarlNaumann/MacroStat/pull/8>`_: Parameter shocks
+
+Commits
+--------
+
+- `3d61663 <https://github.com/KarlNaumann/MacroStat/commit/3d6166338d07bb88727c6176f02a6adcfeffa1b9>`_: docs: update the changelog
+- `217eba9 <https://github.com/KarlNaumann/MacroStat/commit/217eba96386c24e90c766e31280263bb2519c8be>`_: fix: to_csv also returns the dataframe for parameters
+
 `v0.4.0 <https://github.com/KarlNaumann/MacroStat/compare/v0.3.0...v0.4.0>`_ - 2025-04-15
 ================================================================================================================================
 

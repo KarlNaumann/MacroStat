@@ -118,6 +118,7 @@ class BaseSampler:
                 hyperparameters=self.model.parameters.hyper,
             )
 
+
             # Create new model instance with new parameters
             newmodel = self.model.__class__(
                 parameters=newparams,
