@@ -111,7 +111,13 @@ class BaseSampler:
             values = self.model.parameters.get_default_parameters()
             for k, v in points.loc[i].to_dict().items():
                 values[k]["value"] = v
-            newparams = self.model.parameters.__class__(parameters=values)
+                values[k]["lower bound"] = self.bounds[k][0]
+                values[k]["upper bound"] = self.bounds[k][1]
+            newparams = self.model.parameters.__class__(
+                parameters=values,
+                hyperparameters=self.model.parameters.hyper,
+            )
+
 
             # Create new model instance with new parameters
             newmodel = self.model.__class__(
@@ -247,7 +253,7 @@ class BaseSampler:
             )
         elif self.output_filetype == "parquet":
             data.to_parquet(
-                path=self.output_folder / f"outputs_{batch}.parquet",
+                self.output_folder / f"outputs_{batch}.parquet",
                 compression=self.output_compression,
             )
         else:

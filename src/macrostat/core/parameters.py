@@ -97,10 +97,7 @@ class Parameters:
         if key in self.values:
             self.values[key]["value"] = value
         elif key in self.hyper:
-            try:
-                self.hyper[key] = int(value)
-            except Exception:
-                self.hyper[key] = value
+            self.hyper[key] = value
         else:
             logger.warning(f"Key {key} not found in parameters or hyperparameters.")
 

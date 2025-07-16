@@ -143,8 +143,7 @@ class SobolSampler(BaseSampler):
             bounds_array = np.log(np.abs(bounds_array))
 
         # Generate the Sobol sequence
-        np.random.seed(self.sobol_seed)
-        sobol_sampler = stats.qmc.Sobol(len(self.bounds))
+        sobol_sampler = stats.qmc.Sobol(len(self.bounds), rng=self.sobol_seed)
         sobol_sample = sobol_sampler.random_base2(self.sample_power)
         sample = stats.qmc.scale(sobol_sample, bounds_array[:, 0], bounds_array[:, 1])
 
