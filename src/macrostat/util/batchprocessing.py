@@ -30,6 +30,7 @@ def pool_context(*args, **kwargs):
         pool.join()
         logger.debug("Process pool cleanup completed")
 
+
 def timeseries_worker(task: tuple):
     """Worker function for parallel_processor, which will execute a
     simulation with the given parameters and return the output.
@@ -73,8 +74,6 @@ def parallel_processor(
 
     # Set sharing strategy
     mp.set_sharing_strategy("file_system")
-
-
 
     if len(tasks) == 0:
         raise ValueError("No tasks to process.")

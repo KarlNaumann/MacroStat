@@ -48,7 +48,8 @@ class Scenarios:
             default scenarios.
         scenarios: dict | None
             The scenarios to initialize the model with. If None, the default
-            scenarios will be used.
+            scenarios will be used. Scenarios should be a str:dict (name:timeseries)
+            dictionary.
         scenario_info: dict | None
             The colors to use for the scenario variables. If None, the default
             colors will be used.
@@ -283,6 +284,28 @@ class Scenarios:
         with open(json_path, "w") as f:
             json.dump(data, f)
 
+    def vectorize_scenarios(self, timeseries: dict):
+        """User-defined vectorization operations on the scenario timeseries.
+
+        By default, scenarios are defined as single-column vectors where the
+        rows (dim 0) matches the number of timesteps and the column is the
+        scenario variable or paramter. However, for users with vectorized
+        implementations, one can modify this function to create vectors of
+        shape TxK as needed
+
+        Parameters
+        ----------
+        timeseries: dict[str:torch.tensor]
+            dictionary of the scenario timeseries
+
+        Returns
+        -------
+        vectors: dict[str:torch.tensor]
+            modified scenario timeseries
+
+        """
+        return timeseries
+
     def to_nn_parameters(self, scenario: int = 0):
         """Convert the scenarios to a PyTorch ParameterDict.
 
@@ -291,12 +314,12 @@ class Scenarios:
         scenario: int
             The scenario to convert to PyTorch parameters.
         """
-        # Set the current scenario
         self.current_scenario = scenario
 
-        # In general, we keep scenarios fixed, so we set requires_grad to False
-        vscenarios = torch.nn.ParameterDict(self.timeseries[scenario])
+        vectors = self.vectorize_scenarios(self.timeseries[scenario])
+        vscenarios = torch.nn.ParameterDict(vectors)
 
+        # In general, we keep scenarios fixed, so we set requires_grad to False
         for k, tensor in vscenarios.items():
             tensor.requires_grad = k in self.calibration_variables
 
