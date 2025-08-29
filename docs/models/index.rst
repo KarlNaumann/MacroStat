@@ -10,3 +10,4 @@ This section contains the documentation of the models available in MacroStat.
    :maxdepth: 2
 
    GL06/index.rst
+   NK3E/index.rst
