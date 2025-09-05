@@ -450,7 +450,9 @@ class Variables:
         # Initialize the timeseries
         self.timeseries = {}
         for k, v in self.info.items():
-            if "sectors" in v and len(v["sectors"]) > 0:
+            if "matrix" in v and len(v["sectors"]) > 0:
+                self.timeseries[k] = torch.zeros(t, len(v["sectors"]), len(v["matrix"]))
+            elif "sectors" in v and len(v["sectors"]) > 0:
                 self.timeseries[k] = torch.zeros(t, len(v["sectors"]))
             else:
                 self.timeseries[k] = torch.zeros(t, 1)
@@ -462,7 +464,9 @@ class Variables:
 
         state = {}
         for k, v in self.info.items():
-            if "sectors" in v and len(v["sectors"]) > 0:
+            if "matrix" in v and len(v["sectors"]) > 0:
+                state[k] = torch.zeros(len(v["sectors"]), len(v["matrix"]), **kwargs)
+            elif "sectors" in v and len(v["sectors"]) > 0:
                 state[k] = torch.zeros(len(v["sectors"]), **kwargs)
             else:
                 state[k] = torch.zeros(1, **kwargs)
@@ -479,14 +483,19 @@ class Variables:
         history: dict
             The history variables for the given period.
         """
-        for k, v in self.history.items():
-            steps = self.info[k]["history"]
 
-            if len(v) < steps:
-                v.insert(0, state[k].squeeze())
-            else:
-                del v[-1]
-                v.insert(0, state[k].squeeze())
+        for k, v in self.history.items():
+            try:
+                steps = self.info[k]["history"]
+
+                if len(v) < steps:
+                    v.insert(0, state[k].squeeze())
+                else:
+                    del v[-1]
+                    v.insert(0, state[k].squeeze())
+            except Exception as e:
+                logger.error(f"Update history failed for {k}. Value is {v}")
+                raise e
 
         vhistory = {}
         for k, v in self.history.items():
