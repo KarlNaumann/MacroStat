@@ -344,8 +344,9 @@ class Variables:
         """
         with open(file_path, "r") as file:
             data = json.load(file)
-        timeseries = {k: torch.tensor(v) for k, v in data.items()}
-        return cls(timeseries=timeseries)
+        varinfo = {k: v["info"] for k, v in data.items()}
+        timeseries = {k: torch.tensor(v["timeseries"]) for k, v in data.items()}
+        return cls(variable_info=varinfo, timeseries=timeseries)
 
     def to_excel(self, file_path: os.PathLike):
         """Convert the variables to an Excel file.
@@ -365,7 +366,10 @@ class Variables:
         file_path: os.PathLike
             The path to the JSON file to save the timeseries to.
         """
-        dicts = {k: v.tolist() for k, v in self.timeseries.items()}
+        dicts = {
+            k: {"info": self.info[k], "timeseries": v.tolist()}
+            for k, v in self.timeseries.items()
+        }
         with open(file_path, "w") as file:
             json.dump(dicts, file)
 
