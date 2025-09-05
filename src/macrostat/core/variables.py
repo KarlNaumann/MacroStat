@@ -7,6 +7,7 @@ __credits__ = ["Karl Naumann-Woleske"]
 __license__ = "MIT"
 __maintainer__ = ["Karl Naumann-Woleske"]
 
+import copy
 import json
 import logging
 import os
@@ -343,8 +344,9 @@ class Variables:
         """
         with open(file_path, "r") as file:
             data = json.load(file)
-        timeseries = {k: torch.tensor(v) for k, v in data.items()}
-        return cls(timeseries=timeseries)
+        varinfo = {k: v["info"] for k, v in data.items()}
+        timeseries = {k: torch.tensor(v["timeseries"]) for k, v in data.items()}
+        return cls(variable_info=varinfo, timeseries=timeseries)
 
     def to_excel(self, file_path: os.PathLike):
         """Convert the variables to an Excel file.
@@ -364,13 +366,27 @@ class Variables:
         file_path: os.PathLike
             The path to the JSON file to save the timeseries to.
         """
-        dicts = {k: v.tolist() for k, v in self.timeseries.items()}
+        dicts = {
+            k: {"info": self.info[k], "timeseries": v.tolist()}
+            for k, v in self.timeseries.items()
+        }
         with open(file_path, "w") as file:
             json.dump(dicts, file)
 
     def to_pandas(self):
         """Convert the variables to a pandas DataFrame."""
-        df = pd.concat({k: pd.DataFrame(v) for k, v in self.timeseries.items()}, axis=1)
+        # Copy deep so we can delete/add without affecting core var
+        timeseries = copy.deepcopy(self.timeseries)
+
+        # Flatten matrix variables: a timeseries per row of the matrix
+        for k, v in self.timeseries.items():
+            if "matrix" in self.info[k]:
+                del timeseries[k]
+                for i, subvar in enumerate(self.info[k]["matrix"]):
+                    key = f"{k}{subvar}"
+                    timeseries[key] = v[:, i, :]
+
+        df = pd.concat({k: pd.DataFrame(v) for k, v in timeseries.items()}, axis=1)
         return df
 
     def info_to_csv(self, file_path: str, sphinx_math: bool = False):
@@ -450,7 +466,9 @@ class Variables:
         # Initialize the timeseries
         self.timeseries = {}
         for k, v in self.info.items():
-            if "sectors" in v and len(v["sectors"]) > 0:
+            if "matrix" in v and len(v["sectors"]) > 0:
+                self.timeseries[k] = torch.zeros(t, len(v["sectors"]), len(v["matrix"]))
+            elif "sectors" in v and len(v["sectors"]) > 0:
                 self.timeseries[k] = torch.zeros(t, len(v["sectors"]))
             else:
                 self.timeseries[k] = torch.zeros(t, 1)
@@ -462,7 +480,9 @@ class Variables:
 
         state = {}
         for k, v in self.info.items():
-            if "sectors" in v and len(v["sectors"]) > 0:
+            if "matrix" in v and len(v["sectors"]) > 0:
+                state[k] = torch.zeros(len(v["sectors"]), len(v["matrix"]), **kwargs)
+            elif "sectors" in v and len(v["sectors"]) > 0:
                 state[k] = torch.zeros(len(v["sectors"]), **kwargs)
             else:
                 state[k] = torch.zeros(1, **kwargs)
@@ -479,14 +499,19 @@ class Variables:
         history: dict
             The history variables for the given period.
         """
-        for k, v in self.history.items():
-            steps = self.info[k]["history"]
 
-            if len(v) < steps:
-                v.insert(0, state[k].squeeze())
-            else:
-                del v[-1]
-                v.insert(0, state[k].squeeze())
+        for k, v in self.history.items():
+            try:
+                steps = self.info[k]["history"]
+
+                if len(v) < steps:
+                    v.insert(0, state[k].squeeze())
+                else:
+                    del v[-1]
+                    v.insert(0, state[k].squeeze())
+            except Exception as e:
+                logger.error(f"Update history failed for {k}. Value is {v}")
+                raise e
 
         vhistory = {}
         for k, v in self.history.items():
@@ -525,6 +550,7 @@ class Variables:
                 logger.error(f"Error recording {k}:")
                 logger.error(f"State: {state_vars[k].clone().detach()}")
                 logger.error(f"Timeseries: {self.timeseries[k][t, :]}")
+                print(k)
                 raise e
 
     def verify_sfc_info(self):
