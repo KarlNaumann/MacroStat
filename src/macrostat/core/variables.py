@@ -7,6 +7,7 @@ __credits__ = ["Karl Naumann-Woleske"]
 __license__ = "MIT"
 __maintainer__ = ["Karl Naumann-Woleske"]
 
+import copy
 import json
 import logging
 import os
@@ -370,7 +371,18 @@ class Variables:
 
     def to_pandas(self):
         """Convert the variables to a pandas DataFrame."""
-        df = pd.concat({k: pd.DataFrame(v) for k, v in self.timeseries.items()}, axis=1)
+        # Copy deep so we can delete/add without affecting core var
+        timeseries = copy.deepcopy(self.timeseries)
+
+        # Flatten matrix variables: a timeseries per row of the matrix
+        for k, v in self.timeseries.items():
+            if "matrix" in self.info[k]:
+                del timeseries[k]
+                for i, subvar in enumerate(self.info[k]["matrix"]):
+                    key = f"{k}{subvar}"
+                    timeseries[key] = v[:, i, :]
+
+        df = pd.concat({k: pd.DataFrame(v) for k, v in timeseries.items()}, axis=1)
         return df
 
     def info_to_csv(self, file_path: str, sphinx_math: bool = False):
@@ -534,6 +546,7 @@ class Variables:
                 logger.error(f"Error recording {k}:")
                 logger.error(f"State: {state_vars[k].clone().detach()}")
                 logger.error(f"Timeseries: {self.timeseries[k][t, :]}")
+                print(k)
                 raise e
 
     def verify_sfc_info(self):
