@@ -93,10 +93,10 @@ class Behavior(torch.nn.Module):
         )
         self.initialize()
 
-        for t in range(self.hyper["timesteps_initialization"]):
+        for t in range(self.hyper["timesteps_initialization"] + 1):
             self.variables.record_state(t, self.state)
 
-        for t in range(self.hyper["timesteps_initialization"]):
+        for t in range(self.hyper["timesteps_initialization"] + 1):
             self.history = self.variables.update_history(self.state)
 
         # Initialize the prior and state
