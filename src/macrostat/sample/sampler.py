@@ -127,7 +127,6 @@ class BaseSampler:
                 parameters=newparams,
                 scenarios=self.model.scenarios,
                 variables=self.model.variables,
-                behavior=self.model.behavior,
                 log_level=logging.CRITICAL,  # Suppress logging
             )
 
