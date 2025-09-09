@@ -502,13 +502,11 @@ class Variables:
 
         for k, v in self.history.items():
             try:
-                steps = self.info[k]["history"]
-
-                if len(v) < steps:
-                    v.insert(0, state[k].squeeze())
-                else:
+                # If the list is full we need to delete an item:
+                if len(v) >= self.info[k]["history"]:
                     del v[-1]
-                    v.insert(0, state[k].squeeze())
+                # Insert into position 0 as newest element
+                v.insert(0, state[k].squeeze())
             except Exception as e:
                 logger.error(f"Update history failed for {k}. Value is {v}")
                 raise e
