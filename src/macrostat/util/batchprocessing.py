@@ -52,7 +52,7 @@ def timeseries_worker(task: tuple):
     try:
         model = task[1]
         _ = model.simulate(*task[2:])
-        return (task[0], *task[2:], model.output)
+        return (task[0], *task[2:], model.variables.to_pandas())
     except Exception as e:
         logger.error(f"Worker failed for task {task[0]}: {str(e)}")
         logger.error(traceback.format_exc())
