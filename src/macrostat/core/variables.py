@@ -58,6 +58,10 @@ class Variables:
         else:
             self.parameters = Parameters()
 
+        self.tensor_kwargs = {
+            k: self.parameters[k] for k in ["device", "requires_grad"]
+        }
+
         if variable_info is None:
             self.info = self.get_default_variables()
         else:
@@ -455,7 +459,7 @@ class Variables:
             The number of periods to initialize the tensors for.
         """
         # State variables (only t-1 information)
-        state_vars = self.new_state(**kwargs)
+        state_vars = self.new_state()
 
         # History variables (v["history"] rows)
         self.history = {}
@@ -464,15 +468,7 @@ class Variables:
                 self.history[k] = []
 
         # Initialize the timeseries
-        self.timeseries = {}
-        for k, v in self.info.items():
-            if "matrix" in v and len(v["sectors"]) > 0:
-                self.timeseries[k] = torch.zeros(t, len(v["sectors"]), len(v["matrix"]))
-            elif "sectors" in v and len(v["sectors"]) > 0:
-                self.timeseries[k] = torch.zeros(t, len(v["sectors"]))
-            else:
-                self.timeseries[k] = torch.zeros(t, 1)
-
+        self.timeseries = {k: [] for k in self.info}
         return state_vars, self.history
 
     def new_state(self, **kwargs):
@@ -481,11 +477,13 @@ class Variables:
         state = {}
         for k, v in self.info.items():
             if "matrix" in v and len(v["sectors"]) > 0:
-                state[k] = torch.zeros(len(v["sectors"]), len(v["matrix"]), **kwargs)
+                state[k] = torch.zeros(
+                    len(v["sectors"]), len(v["matrix"]), **self.tensor_kwargs
+                )
             elif "sectors" in v and len(v["sectors"]) > 0:
-                state[k] = torch.zeros(len(v["sectors"]), **kwargs)
+                state[k] = torch.zeros(len(v["sectors"]), **self.tensor_kwargs)
             else:
-                state[k] = torch.zeros(1, **kwargs)
+                state[k] = torch.zeros(1, **self.tensor_kwargs)
 
         return state
 
@@ -543,13 +541,20 @@ class Variables:
         # Only keep the keys that are in both dictionaries
         for k in list(key_state.intersection(key_series)):
             try:
-                self.timeseries[k][t, :] = state_vars[k].clone().detach()
+                self.timeseries[k].append(state_vars[k].clone())
+                # self.timeseries[k][t, :] = state_vars[k].clone().detach()
             except Exception as e:
                 logger.error(f"Error recording {k}:")
                 logger.error(f"State: {state_vars[k].clone().detach()}")
                 logger.error(f"Timeseries: {self.timeseries[k][t, :]}")
-                print(k)
                 raise e
+
+    def gather_timeseries(self):
+        """Gather the existing timeseries "lists" into single PyTorch tensors"""
+        cat = {}
+        for k, vlist in self.timeseries.items():
+            cat[k] = torch.stack(vlist)
+        return cat
 
     def verify_sfc_info(self):
         """Verify that the sfc information in the info dictionary is complete.

@@ -130,7 +130,7 @@ class Behavior(torch.nn.Module):
             self.history = self.variables.update_history(self.state)
             self.prior = self.state
 
-        return None
+        return self.variables.gather_timeseries()
 
     def initialize(self):
         """Initialize the behavior.
