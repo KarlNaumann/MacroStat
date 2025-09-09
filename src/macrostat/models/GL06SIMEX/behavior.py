@@ -101,7 +101,6 @@ class BehaviorGL06SIMEX(Behavior):
         - LabourDemand
         - DisposableIncome
         - WageRate
-        - MoneySupply
         - HouseholdMoneyStock
 
         """
@@ -115,7 +114,6 @@ class BehaviorGL06SIMEX(Behavior):
         self.state["LabourDemand"] = torch.zeros(1)
         self.state["ExpectedDisposableIncome"] = torch.zeros(1)
         self.state["DisposableIncome"] = torch.zeros(1)
-        self.state["MoneySupply"] = torch.zeros(1)
         self.state["HouseholdMoneyStock"] = torch.zeros(1)
 
     def step(self, t: int, scenario: dict, params: dict | None = None):

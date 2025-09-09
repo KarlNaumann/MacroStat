@@ -100,7 +100,7 @@ class VariablesGL06SIMEX(Variables):
                 "sectors": ["Household"],
                 "sfc": [("Index", "Household")],
             },
-            "LabourEarnings": {
+            "LabourIncome": {
                 "notation": r"W(t)\cdot N_s(t)",
                 "unit": "USD",
                 "history": 0,
