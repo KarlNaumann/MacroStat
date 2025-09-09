@@ -248,17 +248,16 @@ class TestVariables:
 
     def test_compare_to_variables(self):
         """Test the compare function"""
-        # Create two Variables objects with different values
-        v1 = Variables(variable_info=self.variable_info, parameters=self.params)
-        v2 = Variables(variable_info=self.variable_info, parameters=self.params)
-
-        # Initialize tensors with different values
-        v1.initialize_tensors(100)
-        v2.initialize_tensors(100)
-
-        # Set different values
-        v1.timeseries["householdWealth"][:] = 100
-        v2.timeseries["householdWealth"][:] = 200
+        v1 = Variables(
+            variable_info=self.variable_info,
+            parameters=self.params,
+            timeseries={"householdWealth": 100 * torch.ones(self.params["timesteps"])},
+        )
+        v2 = Variables(
+            variable_info=self.variable_info,
+            parameters=self.params,
+            timeseries={"householdWealth": 200 * torch.ones(self.params["timesteps"])},
+        )
 
         # Compare the variables
         diff, rel_diff = v1.compare(v2)
@@ -278,17 +277,16 @@ class TestVariables:
 
     def test_compare_to_pandas(self):
         """Test the compare function"""
-        # Create two Variables objects with different values
-        v1 = Variables(variable_info=self.variable_info, parameters=self.params)
-        v2 = Variables(variable_info=self.variable_info, parameters=self.params)
-
-        # Initialize tensors with different values
-        v1.initialize_tensors(100)
-        v2.initialize_tensors(100)
-
-        # Set different values
-        v1.timeseries["householdWealth"][:] = 100
-        v2.timeseries["householdWealth"][:] = 200
+        v1 = Variables(
+            variable_info=self.variable_info,
+            parameters=self.params,
+            timeseries={"householdWealth": 100 * torch.ones(self.params["timesteps"])},
+        )
+        v2 = Variables(
+            variable_info=self.variable_info,
+            parameters=self.params,
+            timeseries={"householdWealth": 200 * torch.ones(self.params["timesteps"])},
+        )
 
         # Compare the variables
         diff, rel_diff = v1.compare(v2.to_pandas())
@@ -313,12 +311,15 @@ class TestVariables:
 
     def test_json_io(self, tmp_path):
         """Test JSON I/O operations"""
-        # Create Variables object with some data
-        v1 = Variables(variable_info=self.variable_info, parameters=self.params)
-        state, _ = v1.initialize_tensors(100)
-        state["householdWealth"][:] = 100
-        state["householdConsumption"][:] = 50
-        state["firmProfit"][:] = 25
+        t = self.params["timesteps"]
+        data = {
+            "householdWealth": 100 * torch.ones(t),
+            "householdConsumption": 50 * torch.ones(t),
+            "firmProfit": 25 * torch.ones(t),
+        }
+        v1 = Variables(
+            variable_info=self.variable_info, parameters=self.params, timeseries=data
+        )
 
         # Save to JSON
         json_path = tmp_path / "variables.json"
@@ -341,12 +342,18 @@ class TestVariables:
 
     def test_to_pandas(self):
         """Test conversion to pandas DataFrame"""
+
+        t = self.params["timesteps"]
+        data = {
+            "householdWealth": 100 * torch.ones(t),
+            "householdConsumption": 50 * torch.ones(t),
+            "firmProfit": 25 * torch.ones(t),
+        }
+
         # Create Variables object with some data
-        v = Variables(variable_info=self.variable_info, parameters=self.params)
-        v.initialize_tensors(100)
-        v.timeseries["householdWealth"][:] = 100
-        v.timeseries["householdConsumption"][:] = 50
-        v.timeseries["firmProfit"][:] = 25
+        v = Variables(
+            variable_info=self.variable_info, parameters=self.params, timeseries=data
+        )
 
         # Convert to pandas
         df = v.to_pandas()
@@ -418,7 +425,7 @@ class TestVariables:
     def test_initialize_tensors(self):
         """Test tensor initialization"""
         v = Variables(variable_info=self.variable_info, parameters=self.params)
-        state, history = v.initialize_tensors(100)
+        state, history = v.initialize_tensors()
 
         # Check state variables
         assert set(state.keys()) == set(self.variable_info.keys())
@@ -433,7 +440,7 @@ class TestVariables:
         # Check timeseries initialization
         assert set(v.timeseries.keys()) == set(self.variable_info.keys())
         for k in v.timeseries.keys():
-            assert v.timeseries[k].shape == (100, 1)
+            assert v.timeseries[k].shape == torch.Size([100])
 
     def test_new_state(self):
         """Test new state initialization"""
@@ -446,7 +453,7 @@ class TestVariables:
     def test_update_history(self):
         """Test history update mechanism"""
         v = Variables(variable_info=self.variable_info, parameters=self.params)
-        state, _ = v.initialize_tensors(100)
+        state, _ = v.initialize_tensors()
 
         # Update history multiple times
         for i in range(3):
@@ -470,7 +477,7 @@ class TestVariables:
     def test_record_state(self, caplog):
         """Test recording of state variables"""
         v = Variables(variable_info=self.variable_info, parameters=self.params)
-        state, _ = v.initialize_tensors(100)
+        state, _ = v.initialize_tensors()
 
         # Record state at different timesteps
         for t in range(3):
