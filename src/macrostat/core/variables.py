@@ -389,7 +389,9 @@ class Variables:
                     key = f"{k}{subvar}"
                     timeseries[key] = v[:, i, :]
 
-        df = pd.concat({k: pd.DataFrame(v) for k, v in timeseries.items()}, axis=1)
+        ts = {k: pd.Series(v.squeeze()) for k, v in timeseries.items()}
+        df = pd.concat(ts.values(), keys=ts.keys(), axis=1)
+        df.index.name = "time"
         return df
 
     def info_to_csv(self, file_path: str, sphinx_math: bool = False):
