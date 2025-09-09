@@ -37,6 +37,7 @@ class BaseSampler:
         output_folder: str = "samples",
         cpu_count: int = 1,
         batchsize: int = None,
+        save_to_disk: bool = True,
         output_filetype: str = "csv",
         output_compression: str | None = None,
     ):
@@ -55,6 +56,8 @@ class BaseSampler:
             Number of CPUs to use for the parallel processing
         batchsize: int (default None)
             Size of each batch to be processed in parallel
+        save_to_disk: bool (default True)
+            Save each of the batches to disk individually
         output_filetype: str (default "csv")
             Filetype to use for the output files. Options are
             "csv", "parquet"
@@ -81,6 +84,7 @@ class BaseSampler:
         self.simulation_args = simulation_args
 
         # Set up the output folder
+        self.save_to_disk = save_to_disk
         self.output_folder = Path(output_folder)
         self.output_filetype = output_filetype
         self.output_compression = output_compression
@@ -164,6 +168,9 @@ class BaseSampler:
             )
             logger.info(f"Expecting to use {batchcount} batches")
 
+            if not self.save_to_disk:
+                all_outputs = {}
+
             for batch in range(batchcount):
                 try:
                     if verbose and batch != 0:
@@ -196,7 +203,11 @@ class BaseSampler:
                     )
 
                     # Save the outputs to disk
-                    self.save_outputs(raw_outputs, batch=batch)
+                    pd_outputs = self.transform_outputs(raw_outputs, batch=batch)
+                    if self.save_to_disk:
+                        self.save_outputs(pd_outputs, batch=batch)
+                    else:
+                        all_outputs[batch] = pd_outputs
 
                     # Clean up batch resources
                     del raw_outputs
@@ -216,14 +227,12 @@ class BaseSampler:
                 del self.tasks
             gc.collect()
 
-    def save_outputs(self, raw_outputs: list, batch: int):
-        """Save the raw outputs to disk.
+        if not self.save_to_disk:
+            names = ["batch", *all_outputs[0].index.names]
+            return pd.concat(all_outputs, axis=0, names=names)
 
-        The model's outputs are in the form of a pandas DataFrame.
-        This method should save the outputs to disk in a format that
-        can be easily read back in later. Generically, it writes a
-        CSV file with the outputs in a MultiIndex format. However,
-        this can be overwritten to save in a different format.
+    def transform_outputs(self, raw_outputs: list, batch: int):
+        """Concatenate the raw outputs into a single pandas dataframe
 
         Parameters
         ----------
@@ -234,8 +243,11 @@ class BaseSampler:
         batch: int
             Batch number to save the outputs. Assumes that
             the batchsize is constant.
+
+        Returns
+        -------
+        output: pd.DataFrame
         """
-        # Concatenate the outputs
         index_names = list(raw_outputs[0][-1].index.names)
         if all(x is None for x in index_names):
             index_names = [f"index{i+1}" for i in range(len(index_names))]
@@ -243,8 +255,26 @@ class BaseSampler:
         data = pd.concat(
             data.values(), keys=data.keys(), names=["ID"] + index_names, axis=0
         )
+        return data
 
-        # Save the outputs to batch-specific files
+    def save_outputs(self, data: pd.DataFrame, batch: int):
+        """Save the raw outputs to disk.
+
+        The model's outputs are in the form of a pandas DataFrame.
+        This method should save the outputs to disk in a format that
+        can be easily read back in later. Generically, it writes a
+        CSV file with the outputs in a MultiIndex format. However,
+        this can be overwritten to save in a different format.
+
+        Parameters
+        ----------
+        data: pd.DataFrame
+            The samples run in this dataset
+        batch: int
+            Batch number to save the outputs. Assumes that
+            the batchsize is constant.
+        """
+        # Concatenate the outputs
         if self.output_filetype == "csv":
             data.to_csv(
                 self.output_folder / f"outputs_{batch}.csv",
