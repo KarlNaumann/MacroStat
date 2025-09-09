@@ -7,7 +7,6 @@ __credits__ = ["Karl Naumann-Woleske"]
 __license__ = "MIT"
 __maintainer__ = ["Karl Naumann-Woleske"]
 
-import copy
 import json
 import logging
 import os
@@ -67,10 +66,10 @@ class Variables:
         else:
             self.info = variable_info
 
-        if timeseries is None:
-            self.initialize_tensors(self.parameters.hyper["timesteps"])
-        else:
-            self.timeseries = timeseries
+        self.initialize_tensors()
+        if timeseries is not None:
+            self._timeseries_tensor_to_list(timeseries)
+            self.gather_timeseries()
 
     ############################################################################
     # Accounting Functions
@@ -372,7 +371,7 @@ class Variables:
         """
         dicts = {
             k: {"info": self.info[k], "timeseries": v.tolist()}
-            for k, v in self.timeseries.items()
+            for k, v in self.gather_timeseries().items()
         }
         with open(file_path, "w") as file:
             json.dump(dicts, file)
@@ -380,7 +379,7 @@ class Variables:
     def to_pandas(self):
         """Convert the variables to a pandas DataFrame."""
         # Copy deep so we can delete/add without affecting core var
-        timeseries = copy.deepcopy(self.timeseries)
+        timeseries = self.gather_timeseries()
 
         # Flatten matrix variables: a timeseries per row of the matrix
         for k, v in self.timeseries.items():
@@ -462,7 +461,8 @@ class Variables:
                 self.history[k] = []
 
         # Initialize the timeseries
-        self.timeseries = {k: [] for k in self.info}
+        self.timeseries_list = {k: [] for k in self.info}
+        self.timeseries = self.gather_timeseries()
         return state_vars, self.history
 
     def new_state(self, **kwargs):
@@ -524,7 +524,7 @@ class Variables:
             The state variables to record.
         """
         key_state = set(state_vars.keys())
-        key_series = set(self.timeseries.keys())
+        key_series = set(self.timeseries_list.keys())
 
         # Warn if there are keys that are in the state variables
         # but not in the timeseries
@@ -535,19 +535,42 @@ class Variables:
         # Only keep the keys that are in both dictionaries
         for k in list(key_state.intersection(key_series)):
             try:
-                self.timeseries[k].append(state_vars[k].clone())
+                self.timeseries_list[k].append(state_vars[k].clone())
                 # self.timeseries[k][t, :] = state_vars[k].clone().detach()
             except Exception as e:
                 logger.error(f"Error recording {k}:")
                 logger.error(f"State: {state_vars[k].clone().detach()}")
-                logger.error(f"Timeseries: {self.timeseries[k][t, :]}")
+                logger.error(f"Timeseries: {self.timeseries_list[k][t, :]}")
                 raise e
+
+        self.gather_timeseries()
+
+    def _timeseries_tensor_to_list(self, tensordict):
+        """Populate the self.timeseries_list given a tensor (e.g. from the
+        initialization or similar. This ensures the gather_timeseries has the
+        correct underlying info
+        """
+        new = {}
+        for k, v in tensordict.items():
+            new[k] = [v[i] for i in range(v.shape[0])]
+        self.timeseries_list.update(new)
 
     def gather_timeseries(self):
         """Gather the existing timeseries "lists" into single PyTorch tensors"""
         cat = {}
-        for k, vlist in self.timeseries.items():
-            cat[k] = torch.stack(vlist)
+        t = self.parameters["timesteps"]
+
+        for k, v in self.timeseries_list.items():
+            if not v:
+                cat[k] = torch.tensor(t * [float("nan")])
+            else:
+                new = torch.stack(v)
+                if new.shape[0] < t:
+                    none_to_add = torch.ones(t - new.shape[0], *new.shape[1:])
+                    new = torch.cat([new, float("nan") * none_to_add], dim=0)
+                cat[k] = new
+
+        self.timeseries = cat
         return cat
 
     def verify_sfc_info(self):
