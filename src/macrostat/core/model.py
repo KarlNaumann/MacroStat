@@ -197,6 +197,31 @@ class Model:
         with torch.no_grad():
             return behavior.forward(*args, **kwargs)
 
+    def get_model_training_instance(self, scenario: int | str = 0, *args, **kwargs):
+        """Simulate the model.
+
+        Parameters
+        ----------
+        scenario: int (optional)
+            The scenario to use for the model run, defaults to 0, which
+            represents the default scenario (no shocks).
+        """
+        if isinstance(scenario, str):
+            scenario = self.scenarios.get_scenario_index(scenario)
+
+        logging.debug(f"Starting simulation. Scenario: {scenario}")
+        behavior = self.behavior(
+            self.parameters,
+            self.scenarios,
+            self.variables,
+            scenario=scenario,
+            *args,
+            **kwargs,
+        )
+        behavior = behavior.to(self.parameters["device"])
+        behavior.train()
+        return behavior
+
     def compute_theoretical_steady_state(
         self, scenario: int | str = 0, *args, **kwargs
     ):

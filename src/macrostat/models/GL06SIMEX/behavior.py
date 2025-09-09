@@ -48,7 +48,6 @@ class BehaviorGL06SIMEX(Behavior):
         scenario: int
             The scenario to use for the model.
         """
-
         if parameters is None:
             parameters = ParametersGL06SIMEX()
         if scenarios is None:
