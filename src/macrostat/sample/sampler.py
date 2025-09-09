@@ -146,14 +146,12 @@ class BaseSampler:
         """
 
         try:
-            # Generate the Sobol points
             if points is None:
                 self.points = self.generate_parameters()
             else:
                 self.points = points
 
             # Run the parallel processing in batches to conserve memory
-            # This will write results to disk, clear memory, and proceed
             if self.batchsize is None:
                 self.batchsize = self.points.shape[0]
 
@@ -178,15 +176,11 @@ class BaseSampler:
                             f"Processing batch {batch+1:05d} of {batchcount:05d}. Elapsed {elapsed} ({elapsed/batch} per batch)"
                         )
 
-                    # Generate the tasks to run
-                    # logger.info("Generating tasks")
                     end = min([(batch + 1) * self.batchsize, self.points.shape[0]])
                     batch_tasks = self.generate_tasks(
                         points=self.points.iloc[batch * self.batchsize : end]
                     )
 
-                    # Save the parameters
-                    # logger.info("Saving parameters")
                     parameters = {
                         v[0]: v[1].parameters.get_values() for v in batch_tasks
                     }
