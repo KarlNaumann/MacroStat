@@ -1,6 +1,9 @@
 name: Build and test package
 
 on:
+  workflow_dispatch:
+    branches:
+      - master
   pull_request:
     branches:
       - master
