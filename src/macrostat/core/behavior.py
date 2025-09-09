@@ -80,12 +80,7 @@ class Behavior(torch.nn.Module):
         torch.manual_seed(self.hyper["seed"])
 
         # Initialize the output tensors
-        self.state, self.history = self.variables.initialize_tensors(
-            t=self.hyper["timesteps"],
-            dtype=torch.float32,
-            requires_grad=self.hyper["requires_grad"],
-            device=self.hyper["device"],
-        )
+        self.state, self.history = self.variables.initialize_tensors()
 
         # Initialize the model
         logger.debug(
@@ -217,12 +212,7 @@ class Behavior(torch.nn.Module):
         torch.manual_seed(self.hyper["seed"])
 
         # Initialize the output tensors
-        self.state, _ = self.variables.initialize_tensors(
-            t=self.hyper["timesteps"],
-            dtype=torch.float32,
-            requires_grad=self.hyper["requires_grad"],
-            device=self.hyper["device"],
-        )
+        self.state, _ = self.variables.initialize_tensors()
 
         # Initialize the model
         info = f"(t=0...{self.hyper['timesteps_initialization']})"

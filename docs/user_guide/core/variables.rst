@@ -59,6 +59,6 @@ Example
 A typical workflow for variables might look like:
 
 >>> variables = Variables(parameters)
->>> variables.initialize_tensors(100)
+>>> variables.initialize_tensors()
 >>> variables.record_state(0, {'x': torch.tensor([1.0])})
 >>> variables.to_json('variables.json')

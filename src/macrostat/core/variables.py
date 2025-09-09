@@ -445,18 +445,12 @@ class Variables:
         """
         return {}
 
-    def initialize_tensors(self, t: int, **kwargs):
+    def initialize_tensors(self):
         """Initialize the output tensors, creating two different dictionaries.
         First, a dictionary for the state variables (i.e. those that require
         only t-1 information, but no history) and second a dictionary for the
         history variables (i.e. those that require information from further
-        previous periods). This distinction is important for PyTorch based
-        simulations to reduce memory usage.
-
-        Parameters
-        ----------
-        t: int
-            The number of periods to initialize the tensors for.
+        previous periods).
         """
         # State variables (only t-1 information)
         state_vars = self.new_state()
