@@ -21,7 +21,16 @@ logger = logging.getLogger(__name__)
 
 
 class NK3E(Model):
-    """NK3E model class for the New Keynesian 3-Equation model."""
+    """NK3E model class for the New Keynesian 3-Equation model.
+
+    Description: A compact three-equation New Keynesian framework with an IS
+    curve (goods demand), a New Keynesian Phillips curve (price-setting), and a
+    monetary policy rule. Together these describe the joint dynamics of output,
+    inflation, and the real interest rate.
+
+    Source: A New Keynesian 3-Equation Model —
+    https://macrosimulation.org/a_new_keynesian_3_equation_model
+    """
 
     version = "NK3E"
 

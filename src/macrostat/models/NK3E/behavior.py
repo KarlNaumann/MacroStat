@@ -98,6 +98,11 @@ class BehaviorNK3E(Behavior):
         self.state["pi"] = torch.tensor([pi_ss])
         self.state["r"] = torch.tensor([r_ss])
         self.state["r_s"] = torch.tensor([r_s])
+        # a3 baseline for recording/graphing (depends on a1, a2, b)
+        a2 = self.params["a2"]
+        b = self.params["b"]
+        a3 = 1.0 / (a1 * (1.0 / (a2 * b) + a2))
+        self.state["a3"] = torch.tensor([a3])
 
     def step(self, t: int, scenario: dict, params: dict | None = None, **kwargs):
         """Advance the model by one period using the 3-equation system.
@@ -120,32 +125,177 @@ class BehaviorNK3E(Behavior):
         - The Phillips curve uses the output gap to update inflation.
         - The policy rule sets the real rate relative to the stabilizing rate.
         """
+        # Compute per-period components via subfunctions with explicit dependencies
+        self.central_bank_slope(t=t, scenario=scenario, params=params)
+        self.stabilizing_real_rate(t=t, scenario=scenario, params=params)
+        self.is_curve_output(t=t, scenario=scenario, params=params)
+        self.phillips_curve_inflation(t=t, scenario=scenario, params=params)
+        self.monetary_policy_rate(t=t, scenario=scenario, params=params)
+
+    def central_bank_slope(self, t: int, scenario: dict, params: dict | None = None):
+        r"""Compute the monetary policy reaction slope a3 from structural parameters.
+
+        Parameters
+        ----------
+        t : int
+            Current period (for bookkeeping only).
+        scenario : dict
+            Scenario dictionary (not used).
+        params : dict | None
+            Parameter values for time t with scenario shocks already applied.
+
+        Equations
+        ---------
+        .. math::
+            a_3 = \frac{1}{a_1\left(\frac{1}{a_2 b} + a_2\right)}
+
+        Dependency
+        ----------
+        - parameters: a1
+        - parameters: a2
+        - parameters: b
+
+        Sets
+        -----
+        - a3
+        """
         a1 = params["a1"]
         a2 = params["a2"]
         b = params["b"]
-        # Parameter shocks already applied in params via apply_parameter_shocks
+        value = 1.0 / (a1 * (1.0 / (a2 * b) + a2))
+        # preserve dtype/device/shape
+        self.state["a3"] = torch.full_like(self.state["a3"], fill_value=value)
+
+    def stabilizing_real_rate(self, t: int, scenario: dict, params: dict | None = None):
+        r"""Compute the stabilizing real rate r_s consistent with output at potential.
+
+        Parameters
+        ----------
+        t : int
+            Current period (for bookkeeping only).
+        scenario : dict
+            Scenario dictionary (not used).
+        params : dict | None
+            Parameter values for time t with scenario shocks already applied.
+
+        Equations
+        ---------
+        .. math::
+            r_s = \frac{A - y_e}{a_1}
+
+        Dependency
+        ----------
+        - parameters: A
+        - parameters: y_e
+        - parameters: a1
+
+        Sets
+        -----
+        - r_s
+        """
+        a1 = params["a1"]
         A = params["A"]
-        pi_T = params["pi_T"]
         y_e = params["y_e"]
+        value = (A - y_e) / a1
+        self.state["r_s"] = torch.full_like(self.state["r_s"], fill_value=value)
 
-        a3 = 1.0 / (a1 * (1.0 / (a2 * b) + a2))
+    def is_curve_output(self, t: int, scenario: dict, params: dict | None = None):
+        r"""IS curve: output as a function of demand shifter and lagged real rate.
 
-        # r_s depends on current A and y_e
-        r_s = (A - y_e) / a1
+        Parameters
+        ----------
+        t : int
+            Current period (for bookkeeping only).
+        scenario : dict
+            Scenario dictionary (not used).
+        params : dict | None
+            Parameter values for time t with scenario shocks already applied.
 
-        # IS: y_t = A - a1 * r_{t-1}
-        y_t = A - a1 * self.prior["r"]
+        Equations
+        ---------
+        .. math::
+            y_t = A - a_1 r_{t-1}
 
-        # PC: pi_t = pi_{t-1} + a2 * (y_t - y_e)
-        pi_t = self.prior["pi"] + a2 * (y_t - y_e)
+        Dependency
+        ----------
+        - parameters: A
+        - parameters: a1
+        - prior: r
 
-        # MP: r_t = r_s + a3 * (pi_t - pi_T)
-        r_t = r_s + a3 * (pi_t - pi_T)
+        Sets
+        -----
+        - y
+        """
+        A = params["A"]
+        a1 = params["a1"]
+        self.state["y"] = A - a1 * self.prior["r"]
 
-        self.state["y"] = y_t
-        self.state["pi"] = pi_t
-        self.state["r"] = r_t
-        self.state["r_s"] = r_s
+    def phillips_curve_inflation(
+        self, t: int, scenario: dict, params: dict | None = None
+    ):
+        r"""Phillips curve: inflation responds to the output gap.
+
+        Parameters
+        ----------
+        t : int
+            Current period (for bookkeeping only).
+        scenario : dict
+            Scenario dictionary (not used).
+        params : dict | None
+            Parameter values for time t with scenario shocks already applied.
+
+        Equations
+        ---------
+        .. math::
+            \pi_t = \pi_{t-1} + a_2 (y_t - y_e)
+
+        Dependency
+        ----------
+        - prior: pi
+        - state: y
+        - parameters: a2
+        - parameters: y_e
+
+        Sets
+        -----
+        - pi
+        """
+        a2 = params["a2"]
+        y_e = params["y_e"]
+        self.state["pi"] = self.prior["pi"] + a2 * (self.state["y"] - y_e)
+
+    def monetary_policy_rate(self, t: int, scenario: dict, params: dict | None = None):
+        r"""Monetary policy rule: real rate reacts to inflation deviations.
+
+        Parameters
+        ----------
+        t : int
+            Current period (for bookkeeping only).
+        scenario : dict
+            Scenario dictionary (not used).
+        params : dict | None
+            Parameter values for time t with scenario shocks already applied.
+
+        Equations
+        ---------
+        .. math::
+            r_t = r_s + a_3 (\pi_t - \pi^T)
+
+        Dependency
+        ----------
+        - state: r_s
+        - state: a3
+        - state: pi
+        - parameters: pi_T
+
+        Sets
+        -----
+        - r
+        """
+        pi_T = params["pi_T"]
+        self.state["r"] = self.state["r_s"] + self.state["a3"] * (
+            self.state["pi"] - pi_T
+        )
 
     def forward(self):
         """Run the full simulation, optionally with a tqdm progress bar.

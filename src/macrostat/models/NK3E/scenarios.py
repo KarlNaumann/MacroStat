@@ -1,8 +1,4 @@
-"""
-Scenarios class for the New Keynesian 3-Equation (NK3E) model.
-
-Source: A New Keynesian 3-Equation Model — https://macrosimulation.org/a_new_keynesian_3_equation_model
-"""
+"""Scenarios class for the New Keynesian 3-Equation (NK3E) model."""
 
 __author__ = ["Mitja Devetak"]
 __credits__ = ["Mitja Devetak"]
@@ -18,17 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 class ScenariosNK3E(Scenarios):
-    """Scenarios for the NK3E model.
-
-    We provide the three textbook experiments as named scenarios:
-    - Scenario 1: Increase in autonomous demand (A) by +2 (10 → 12)
-    - Scenario 2: Increase in the inflation target (pi_T) by +1 (2 → 3)
-    - Scenario 3: Increase in equilibrium output (y_e) by +2 (5 → 7)
-
-    Implementation detail: scenarios operate via additive shocks to parameters.
-    The core engine applies these shocks before each step so the behavior class
-    reads already-updated parameter values.
-    """
+    """Scenarios class for the New Keynesian 3-Equation (NK3E) model."""
 
     version = "NK3E"
 
@@ -39,6 +25,7 @@ class ScenariosNK3E(Scenarios):
         *args,
         **kwargs,
     ):
+        """Initialize the scenarios of the New Keynesian 3-Equation (NK3E) model."""
         if parameters is None:
             parameters = ParametersNK3E()
 
@@ -53,6 +40,7 @@ class ScenariosNK3E(Scenarios):
         self.add_three_parameterizations()
 
     def get_default_scenario_values(self):
+        """Return the default scenario values."""
         # Baseline (no shock): A=10, pi_T=2, y_e=5
         return {
             "A_add": 0.0,
@@ -61,6 +49,7 @@ class ScenariosNK3E(Scenarios):
         }
 
     def add_three_parameterizations(self):
+        """Register the three default NK3E scenarios."""
         # Scenario 1: rise in A (A: 12 vs baseline 10 -> +2)
         self.add_scenario(
             timeseries={

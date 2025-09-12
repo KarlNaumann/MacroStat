@@ -110,6 +110,6 @@ class ParametersNK3E(Parameters):
         hyper["sectors"] = [
             "Macroeconomy",
         ]
-        # tqdm usage toggle
-        hyper["use_tqdm"] = True
+        # tqdm usage toggle (default off)
+        hyper["use_tqdm"] = False
         return hyper

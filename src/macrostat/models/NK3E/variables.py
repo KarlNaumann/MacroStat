@@ -50,17 +50,24 @@ class VariablesNK3E(Variables):
                 "sectors": ["Macroeconomy"],
                 "sfc": [("Index", "Macroeconomy")],
             },
+            "a3": {
+                "notation": r"a_3",
+                "unit": ".",
+                "history": 0,
+                "sectors": ["Macroeconomy"],
+                "sfc": [("Index", "Macroeconomy")],
+            },
             "pi": {
                 "notation": r"\pi_t",
                 "unit": "% per period",
-                "history": 1,  # needs t-1
+                "history": 0,
                 "sectors": ["Macroeconomy"],
                 "sfc": [("Index", "Macroeconomy")],
             },
             "r": {
                 "notation": r"r_t",
                 "unit": "% per period",
-                "history": 1,  # needs t-1
+                "history": 0,
                 "sectors": ["Macroeconomy"],
                 "sfc": [("Index", "Macroeconomy")],
             },
