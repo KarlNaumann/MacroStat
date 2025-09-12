@@ -448,7 +448,8 @@ class TestBaseSampler:
         ]
 
         # Save outputs
-        sampler.save_outputs(raw_outputs, batch=0)
+        interm = sampler.transform_outputs(raw_outputs, batch=0)
+        sampler.save_outputs(interm, batch=0)
 
         # Check file exists
         output_file = tmp_path / "outputs_0.csv"
@@ -479,7 +480,8 @@ class TestBaseSampler:
         ]
 
         # Save outputs
-        sampler.save_outputs(raw_outputs, batch=0)
+        interm = sampler.transform_outputs(raw_outputs, batch=0)
+        sampler.save_outputs(interm, batch=0)
 
         # Check file exists
         output_file = tmp_path / "outputs_0.parquet"

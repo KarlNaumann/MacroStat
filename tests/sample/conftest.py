@@ -5,7 +5,7 @@ Shared fixtures for sample tests
 import pandas as pd
 import pytest
 
-from macrostat.core import Model, Parameters
+from macrostat.core import Model, Parameters, Variables
 
 
 class MockParameters(Parameters):
@@ -31,6 +31,13 @@ class MockParameters(Parameters):
         }
 
 
+class MockVariables(Variables):
+    def to_pandas():
+        return pd.DataFrame({"time": [1, 2, 3], "value": [1.0, 2.0, 3.0]}).set_index(
+            "time"
+        )
+
+
 class MockModel(Model):
     """Mock model class for testing"""
 
@@ -54,9 +61,7 @@ class MockModel(Model):
 
     def simulate(self, *args, **kwargs):
         # Return a simple DataFrame for testing
-        return pd.DataFrame({"time": [1, 2, 3], "value": [1.0, 2.0, 3.0]}).set_index(
-            "time"
-        )
+        return
 
 
 @pytest.fixture
