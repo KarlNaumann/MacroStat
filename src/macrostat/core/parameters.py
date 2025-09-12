@@ -55,11 +55,13 @@ class Parameters:
 
         self.values = self.get_default_parameters()
         if parameters is not None:
-            self.values.update(parameters)
+            new = {k: v for k, v in parameters.items() if k in self.values}
+            self.values.update(new)
 
         self.hyper = self.get_default_hyperparameters()
         if hyperparameters is not None:
-            self.hyper.update(hyperparameters)
+            new = {k: v for k, v in hyperparameters.items() if k in self.values}
+            self.hyper.update(new)
 
         self.verify_bounds()
         self.verify_parameters()
