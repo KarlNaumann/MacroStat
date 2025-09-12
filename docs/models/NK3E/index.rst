@@ -3,10 +3,10 @@ New Keynesian 3-Equation Model
 
 Equations
 ---------
-- IS: ``y_t = A_t - a1 * r_{t-1}``
-- Phillips: ``pi_t = pi_{t-1} + a2 * (y_t - yE_t)``
-- Policy: ``rs_t = (A_t - yE_t) / a1`` and ``r_t = rs_t + a3 * (pi_t - piT_t)``,
-  where ``a3 = 1 / [a1 * (1/(a2*b) + a2)]``.
+- IS: :math:`y_t = A - a_1 \, r_{t-1}`
+- Phillips: :math:`\pi_t = \pi_{t-1} + a_2 \, (y_t - y_e)`
+- Policy: :math:`r_s = \frac{A - y_e}{a_1}` and :math:`r_t = r_s + a_3 \, (\pi_t - \pi^T)`,
+  where :math:`a_3 = \frac{1}{a_1\left(\frac{1}{a_2 b} + a_2\right)}`.
 
 API
 ---
