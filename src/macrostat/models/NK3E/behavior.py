@@ -163,8 +163,8 @@ class BehaviorNK3E(Behavior):
         a2 = params["a2"]
         b = params["b"]
         value = 1.0 / (a1 * (1.0 / (a2 * b) + a2))
-        # preserve dtype/device/shape
-        self.state["a3"] = torch.full_like(self.state["a3"], fill_value=value)
+        # preserve dtype/device/shape without requiring a Python scalar
+        self.state["a3"] = torch.ones_like(self.state["a3"]) * value
 
     def stabilizing_real_rate(self, t: int, scenario: dict, params: dict | None = None):
         r"""Compute the stabilizing real rate r_s consistent with output at potential.
@@ -197,7 +197,7 @@ class BehaviorNK3E(Behavior):
         A = params["A"]
         y_e = params["y_e"]
         value = (A - y_e) / a1
-        self.state["r_s"] = torch.full_like(self.state["r_s"], fill_value=value)
+        self.state["r_s"] = torch.ones_like(self.state["r_s"]) * value
 
     def is_curve_output(self, t: int, scenario: dict, params: dict | None = None):
         r"""IS curve: output as a function of demand shifter and lagged real rate.
