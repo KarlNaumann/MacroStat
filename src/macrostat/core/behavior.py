@@ -102,9 +102,7 @@ class Behavior(torch.nn.Module):
             f"Simulating model (t={self.hyper['timesteps_initialization'] + 1}...{self.hyper['timesteps']})"
         )
 
-        for t in range(
-            self.hyper["timesteps_initialization"] + 1, self.hyper["timesteps"]
-        ):
+        for t in range(self.hyper["timesteps_initialization"], self.hyper["timesteps"]):
             self.state = self.variables.new_state()
             # Get scenario series for this point in time
             idx = torch.where(
