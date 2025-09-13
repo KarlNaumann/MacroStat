@@ -123,21 +123,6 @@ class Model:
         logging.basicConfig(level=log_level, filename=log_file)
 
     @classmethod
-    def from_json(
-        cls,
-        parameter_file: str,
-        scenario_file: str,
-        variable_file: str,
-        *args,
-        **kwargs,
-    ):
-        """Initialize the model from a JSON file."""
-        parameters = Parameters.from_json(parameter_file)
-        scenarios = Scenarios.from_json(scenario_file, parameters=parameters)
-        variables = Variables.from_json(variable_file, parameters=parameters)
-        return cls(parameters=parameters, scenarios=scenarios, variables=variables)
-
-    @classmethod
     def load(cls, path: os.PathLike):
         """Class method to load a model instance from a pickled file.
 

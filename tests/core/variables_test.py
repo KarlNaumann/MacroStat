@@ -98,7 +98,8 @@ class TestVariables:
         },
     }
 
-    params = Parameters(hyperparameters={"sectors": ["Household", "Firm", "Other"]})
+    params = Parameters()
+    params.hyper["sectors"] = ["Household", "Firm", "Other"]
 
     def test_init(self):
         """Test initialization of Variables class"""

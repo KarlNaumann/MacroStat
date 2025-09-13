@@ -51,10 +51,44 @@ def mock_hyperparameters():
 
 @pytest.fixture
 def mock_parameters(mock_parameters_dictionary, mock_hyperparameters):
-    return Parameters(
+    instance = Parameters(
         parameters=mock_parameters_dictionary,
         hyperparameters=mock_hyperparameters,
     )
+    instance.values.update(mock_parameters_dictionary)
+    instance.hyper.update(mock_hyperparameters)
+    print(instance)
+    return instance
+
+
+class MockParameters(Parameters):
+    def get_default_parameters(self):
+        return {
+            "param1": {
+                "value": 1.0,
+                "lower bound": 0.0,
+                "upper bound": 2.0,
+                "unit": "units",
+                "notation": "p_1",
+            },
+            "param2": {
+                "value": 2.0,
+                "lower bound": 1.0,
+                "upper bound": 3.0,
+                "unit": "units",
+                "notation": "p_2",
+            },
+        }
+
+    def get_default_hyperparameters(self):
+        return {
+            "timesteps": 100,
+            "timesteps_initialization": 10,
+            "scenario_trigger": 0,
+            "seed": 42,
+            "device": "cpu",
+            "requires_grad": False,
+        }
 
 
 class TestParameters:
@@ -103,7 +137,7 @@ class TestParameters:
 
     def test_init_with_params(self, mock_parameters):
         """Test initialization with parameters and hyperparameters provided"""
-        p = Parameters(
+        p = MockParameters(
             parameters=mock_parameters.values, hyperparameters=mock_parameters.hyper
         )
         assert p.values == mock_parameters.values
@@ -117,14 +151,14 @@ class TestParameters:
 
     def test_contains(self):
         """Test the contains magic method"""
-        p = Parameters(parameters=self.params, hyperparameters=self.hyper)
+        p = MockParameters(parameters=self.params, hyperparameters=self.hyper)
         assert "param1" in p
         assert "timesteps" in p
         assert "nonexistent" not in p
 
     def test_getitem(self):
         """Test the getitem magic method"""
-        p = Parameters(parameters=self.params, hyperparameters=self.hyper)
+        p = MockParameters(parameters=self.params, hyperparameters=self.hyper)
         assert p["param1"] == 1.0
         assert p["timesteps"] == 100
         with pytest.raises(KeyError):
@@ -132,25 +166,25 @@ class TestParameters:
 
     def test_setitem_parameter_value(self):
         """Test setting a parameter value"""
-        p = Parameters(parameters=self.params, hyperparameters=self.hyper)
+        p = MockParameters(parameters=self.params, hyperparameters=self.hyper)
         p["param1"] = 1.5
         assert p.values["param1"]["value"] == 1.5
 
     def test_setitem_hyperparameter_int(self):
         """Test setting a hyperparameter value that should be an int"""
-        p = Parameters(parameters=self.params, hyperparameters=self.hyper)
+        p = MockParameters(parameters=self.params, hyperparameters=self.hyper)
         p["timesteps"] = 200
         assert p.hyper["timesteps"] == 200
 
     def test_setitem_hyperparameter_string(self):
         """Test setting a hyperparameter value that is a string"""
-        p = Parameters(parameters=self.params, hyperparameters=self.hyper)
+        p = MockParameters(parameters=self.params, hyperparameters=self.hyper)
         p["device"] = "cuda"
         assert p.hyper["device"] == "cuda"
 
     def test_setitem_nonexistent(self, caplog):
         """Test setting a non-existent parameter"""
-        p = Parameters(parameters=self.params, hyperparameters=self.hyper)
+        p = MockParameters(parameters=self.params, hyperparameters=self.hyper)
         with caplog.at_level(logging.WARNING):
             p["nonexistent"] = 1.0
         assert (
@@ -159,7 +193,7 @@ class TestParameters:
 
     def test_json_to_file(self, tmp_path):
         """Test saving parameters to JSON file"""
-        p = Parameters(parameters=self.params, hyperparameters=self.hyper)
+        p = MockParameters(parameters=self.params, hyperparameters=self.hyper)
 
         json_file = tmp_path / "params.json"
         p.to_json(json_file)
@@ -167,27 +201,27 @@ class TestParameters:
 
     def test_json_from_file(self, tmp_path):
         """Test loading parameters from JSON file"""
-        p = Parameters(parameters=self.params, hyperparameters=self.hyper)
+        p = MockParameters(parameters=self.params, hyperparameters=self.hyper)
         json_file = tmp_path / "params.json"
         p.to_json(json_file)
 
-        loaded_params = Parameters.from_json(json_file)
+        loaded_params = MockParameters.from_json(json_file)
         assert loaded_params.values == p.values
         assert loaded_params.hyper == p.hyper
 
     def test_json_roundtrip(self, tmp_path):
         """Test JSON serialization roundtrip"""
-        p = Parameters(parameters=self.params, hyperparameters=self.hyper)
+        p = MockParameters(parameters=self.params, hyperparameters=self.hyper)
         roundtrip_file = tmp_path / "roundtrip.json"
         p.to_json(roundtrip_file)
-        loaded_p = Parameters.from_json(roundtrip_file)
+        loaded_p = MockParameters.from_json(roundtrip_file)
 
         assert loaded_p.values == p.values
         assert loaded_p.hyper == p.hyper
 
     def test_csv_to_file(self, tmp_path):
         """Test saving parameters to CSV file"""
-        p = Parameters(parameters=self.params, hyperparameters=self.hyper)
+        p = MockParameters(parameters=self.params, hyperparameters=self.hyper)
         csv_file = tmp_path / "params.csv"
         p.to_csv(csv_file)
         assert csv_file.exists()
@@ -196,33 +230,33 @@ class TestParameters:
         """Test loading parameters from CSV file"""
         h = copy.deepcopy(self.hyper)
         h["hypertrue"] = True
-        p = Parameters(parameters=self.params, hyperparameters=h)
+        p = MockParameters(parameters=self.params, hyperparameters=h)
         csv_file = tmp_path / "params.csv"
         p.to_csv(csv_file)
 
-        loaded_params = Parameters.from_csv(csv_file)
+        loaded_params = MockParameters.from_csv(csv_file)
         assert loaded_params.values == p.values
         assert loaded_params.hyper == p.hyper
 
     def test_csv_roundtrip(self, tmp_path):
         """Test CSV serialization roundtrip"""
-        p = Parameters(parameters=self.params, hyperparameters=self.hyper)
+        p = MockParameters(parameters=self.params, hyperparameters=self.hyper)
         roundtrip_file = tmp_path / "roundtrip.csv"
         p.to_csv(roundtrip_file)
-        loaded_p = Parameters.from_csv(roundtrip_file)
+        loaded_p = MockParameters.from_csv(roundtrip_file)
 
         assert loaded_p.values == p.values
         assert loaded_p.hyper == p.hyper
 
     def test_excel_to_file_not_implemented(self, tmp_path):
         """Test that the excel_to_file method is not implemented"""
-        p = Parameters(parameters=self.params, hyperparameters=self.hyper)
+        p = MockParameters(parameters=self.params, hyperparameters=self.hyper)
         with pytest.raises(NotImplementedError):
             p.to_excel(tmp_path / "params.xlsx")
 
     def test_excel_from_file_not_implemented(self, tmp_path):
         """Test that the excel_from_file method is not implemented"""
-        p = Parameters(parameters=self.params, hyperparameters=self.hyper)
+        p = MockParameters(parameters=self.params, hyperparameters=self.hyper)
         with pytest.raises(NotImplementedError):
             p.from_excel(tmp_path / "params.xlsx")
 
@@ -273,38 +307,37 @@ class TestParameters:
         invalid_params["param1"]["lower bound"] = 2.0
         invalid_params["param1"]["upper bound"] = 1.0  # Upper < Lower
         with pytest.raises(BoundaryError):
-            Parameters(parameters=invalid_params, hyperparameters=self.hyper)
+            MockParameters(parameters=invalid_params)
 
     def test_boundary_validation_value_outside_bounds(self):
         """Test validation fails when parameter value is outside bounds"""
-        invalid_params = copy.deepcopy(self.params)
-        invalid_params["param1"]["value"] = 3.0  # Outside (0.0, 2.0)
+        p = MockParameters()
+        p.values["param1"]["value"] = 3.0
         with pytest.raises(BoundaryError):
-            Parameters(parameters=invalid_params, hyperparameters=self.hyper)
+            p.verify_parameters()
 
     def test_set_bound(self):
         """Test setting bounds"""
-        p = Parameters(parameters=self.params, hyperparameters=self.hyper)
-
+        p = MockParameters()
         p.set_bound("param1", (0.5, 1.5))
         assert p.values["param1"]["Lower Bound"] == 0.5
         assert p.values["param1"]["Upper Bound"] == 1.5
 
     def test_set_notation(self):
         """Test setting notation"""
-        p = Parameters(parameters=self.params, hyperparameters=self.hyper)
+        p = MockParameters()
         p.set_notation("param1", "new_notation")
         assert p.values["param1"]["notation"] == "new_notation"
 
     def test_set_unit(self):
         """Test setting unit"""
-        p = Parameters(parameters=self.params, hyperparameters=self.hyper)
+        p = MockParameters()
         p.set_unit("param1", "new_unit")
         assert p.values["param1"]["unit"] == "new_unit"
 
     def test_vectorize_parameters(self):
         """Test vectorizing parameters"""
-        p = Parameters(parameters=self.params, hyperparameters=self.hyper)
+        p = MockParameters()
         pvectors = p.vectorize_parameters()
         assert isinstance(pvectors, dict)
         assert len(pvectors) == len(self.params)
@@ -368,10 +401,7 @@ class TestParameters:
 
     def test_compare_same_parameters(self, mock_parameters):
         """Test comparison with identical parameters"""
-        p2 = Parameters(
-            parameters=copy.deepcopy(mock_parameters.values),
-            hyperparameters=copy.deepcopy(mock_parameters.hyper),
-        )
+        p2 = MockParameters()
         assert mock_parameters.is_equal(p2)
 
     def test_compare_different_values(

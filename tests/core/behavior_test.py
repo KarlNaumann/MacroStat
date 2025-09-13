@@ -10,8 +10,9 @@ __maintainer__ = ["Karl Naumann-Woleske"]
 
 import pytest
 import torch
+from conftest import MockParameters, MockScenarios, MockVariables
 
-from macrostat.core import Behavior, Parameters, Scenarios, Variables
+from macrostat.core import Behavior, Variables
 
 
 class TestBehavior:
@@ -20,20 +21,10 @@ class TestBehavior:
     @pytest.fixture
     def behavior_instance(self):
         """Create a basic behavior instance for testing"""
-
-        parameters = Parameters(
-            {
-                "alpha": {"value": 1.0, "lower bound": 0.0, "upper bound": 2.0},
-                "beta": {"value": 2.0, "lower bound": 0.0, "upper bound": 4.0},
-            }
-        )
-        scenarios = Scenarios(parameters=parameters)
-        variables = Variables(parameters=parameters)
-
         return Behavior(
-            parameters=parameters,
-            scenarios=scenarios,
-            variables=variables,
+            parameters=MockParameters(),
+            scenarios=MockScenarios(parameters=MockParameters()),
+            variables=MockVariables(parameters=MockParameters()),
             scenario=0,
         )
 
@@ -41,34 +32,19 @@ class TestBehavior:
     def behavior_instance_simple(self):
         """Create a basic behavior instance for testing"""
 
-        parameters = Parameters(
-            {
-                "alpha": {"value": 1.0, "lower bound": 0.0, "upper bound": 2.0},
-                "beta": {"value": 2.0, "lower bound": 0.0, "upper bound": 4.0},
-            }
-        )
-        scenarios = Scenarios(parameters=parameters)
-
-        class SimpleVariables(Variables):
-            def get_default_variables(self):
-                v = super().get_default_variables()
-                v["var1"] = {}
-                v["var2"] = {}
-                return v
-
         class SimpleBehavior(Behavior):
             def initialize(self):
-                self.state["var1"] = torch.tensor(0.0)
-                self.state["var2"] = torch.tensor(0.0)
+                self.state["variable1"] = torch.tensor(0.0)
+                self.state["variable2"] = torch.tensor(0.0)
 
             def compute_theoretical_steady_state_per_step(self, **kwargs):
-                self.state["var1"] = torch.tensor(1.0)
-                self.state["var2"] = torch.tensor(2.0)
+                self.state["variable1"] = torch.tensor(1.0)
+                self.state["variable2"] = torch.tensor(2.0)
 
         return SimpleBehavior(
-            parameters=parameters,
-            scenarios=scenarios,
-            variables=SimpleVariables(parameters=parameters),
+            parameters=MockParameters(),
+            scenarios=MockScenarios(parameters=MockParameters()),
+            variables=MockVariables(parameters=MockParameters()),
             scenario=0,
         )
 
@@ -85,13 +61,6 @@ class TestBehavior:
 
     def test_forward_initialization(self, behavior_instance):
         """Test the initialization phase of the forward pass"""
-        behavior_instance.hyper["T"] = 10
-        behavior_instance.hyper["seed"] = 42
-        behavior_instance.hyper["requires_grad"] = False
-        behavior_instance.hyper["device"] = "cpu"
-        behavior_instance.hyper["timesteps_initialization"] = 2
-        behavior_instance.hyper["timesteps"] = 5
-
         # Mock the initialize method since it's abstract
         behavior_instance.initialize = lambda: None
         behavior_instance.step = lambda t, scenario, params: None
@@ -106,13 +75,6 @@ class TestBehavior:
 
     def test_forward_recording(self, behavior_instance):
         """Test recording functionality during forward pass"""
-        behavior_instance.hyper["T"] = 10
-        behavior_instance.hyper["seed"] = 42
-        behavior_instance.hyper["requires_grad"] = False
-        behavior_instance.hyper["device"] = "cpu"
-        behavior_instance.hyper["timesteps_initialization"] = 2
-        behavior_instance.hyper["timesteps"] = 5
-
         # Mock required methods
         behavior_instance.initialize = lambda: None
         behavior_instance.step = lambda t, scenario, params: None
@@ -128,15 +90,9 @@ class TestBehavior:
 
     def test_forward_scenario_indexing(self, behavior_instance):
         """Test scenario indexing during forward pass"""
-        behavior_instance.hyper["T"] = 3
-        behavior_instance.hyper["seed"] = 42
-        behavior_instance.hyper["requires_grad"] = False
-        behavior_instance.hyper["device"] = "cpu"
-        behavior_instance.hyper["timesteps_initialization"] = 1
-        behavior_instance.hyper["timesteps"] = 3
-
         # Add a test scenario variable
-        behavior_instance.scenarios["test"] = torch.nn.Parameter(torch.ones(3, 1))
+        t = behavior_instance.hyper["timesteps"]
+        behavior_instance.scenarios["test"] = torch.nn.Parameter(torch.ones(t, 1))
 
         # Mock required methods and track scenario values
         behavior_instance.initialize = lambda: None
@@ -149,18 +105,14 @@ class TestBehavior:
         behavior_instance.forward()
 
         # Check scenario values were correctly indexed
-        assert len(scenario_values) == 1  # one series only
+        assert (
+            len(scenario_values)
+            == t - behavior_instance.hyper["timesteps_initialization"]
+        )  # one series only
         assert all(v == 1.0 for v in scenario_values)
 
     def test_forward_history_update(self, behavior_instance):
         """Test history updates during forward pass"""
-        behavior_instance.hyper["T"] = 5
-        behavior_instance.hyper["seed"] = 42
-        behavior_instance.hyper["requires_grad"] = False
-        behavior_instance.hyper["device"] = "cpu"
-        behavior_instance.hyper["timesteps_initialization"] = 2
-        behavior_instance.hyper["timesteps"] = 4
-
         # Mock required methods
         behavior_instance.initialize = lambda: None
         behavior_instance.step = lambda t, scenario, params: None
@@ -186,18 +138,18 @@ class TestBehavior:
     def test_apply_parameter_shocks_multiplicative_shock(self, behavior_instance):
         """Test the apply_parameter_shocks method with a multiplicative shock"""
 
-        scenario = {"alpha_multiply": 2.0, "beta_multiply": 2.0}
+        scenario = {"param1_multiply": 2.0, "param2_multiply": 2.0}
         params = behavior_instance.apply_parameter_shocks(t=0, scenario=scenario)
-        assert params["alpha"] == 2.0
-        assert params["beta"] == 4.0
+        assert params["param1"] == 2.0
+        assert params["param2"] == 4.0
 
     def test_apply_parameter_shocks_additive_shock(self, behavior_instance):
         """Test the apply_parameter_shocks method with an additive shock"""
 
-        scenario = {"alpha_add": 1.0, "beta_add": 1.0}
+        scenario = {"param1_add": 1.0, "param2_add": 1.0}
         params = behavior_instance.apply_parameter_shocks(t=0, scenario=scenario)
-        assert params["alpha"] == 2.0
-        assert params["beta"] == 3.0
+        assert params["param1"] == 2.0
+        assert params["param2"] == 3.0
 
     def test_apply_parameter_shocks_multiplicative_and_additive_shock(
         self, behavior_instance
@@ -209,14 +161,14 @@ class TestBehavior:
         """
 
         scenario = {
-            "alpha_multiply": 2.0,
-            "beta_multiply": 2.0,
-            "alpha_add": 1.0,
-            "beta_add": 1.0,
+            "param1_multiply": 2.0,
+            "param2_multiply": 2.0,
+            "param1_add": 1.0,
+            "param2_add": 1.0,
         }
         params = behavior_instance.apply_parameter_shocks(t=0, scenario=scenario)
-        assert params["alpha"] == 3.0
-        assert params["beta"] == 5.0
+        assert params["param1"] == 3.0
+        assert params["param2"] == 5.0
 
     def test_compute_theoretical_steady_state(self, behavior_instance):
         """Test the compute_theoretical_steady_state method"""
@@ -229,8 +181,8 @@ class TestBehavior:
     ):
         """Test the compute_theoretical_steady_state_per_step method"""
         behavior_instance_simple.compute_theoretical_steady_state()
-        assert behavior_instance_simple.state["var1"] == 1.0
-        assert behavior_instance_simple.state["var2"] == 2.0
+        assert behavior_instance_simple.state["variable1"] == 1.0
+        assert behavior_instance_simple.state["variable2"] == 2.0
 
     def test_diffwhere(self, behavior_instance):
         """Test the differentiable where function"""

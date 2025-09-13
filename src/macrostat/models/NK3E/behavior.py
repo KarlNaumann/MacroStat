@@ -308,12 +308,7 @@ class BehaviorNK3E(Behavior):
         4) record the new state into the timeseries and history buffers.
         """
         torch.manual_seed(self.hyper["seed"])
-        self.state, self.history = self.variables.initialize_tensors(
-            t=self.hyper["timesteps"],
-            dtype=torch.float32,
-            requires_grad=self.hyper["requires_grad"],
-            device=self.hyper["device"],
-        )
+        self.state, self.history = self.variables.initialize_tensors()
 
         # initialize
         self.initialize()

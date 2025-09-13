@@ -566,7 +566,18 @@ class Variables:
             if not v:
                 cat[k] = torch.tensor(t * [float("nan")])
             else:
-                new = torch.stack(v)
+                try:
+                    # Try to maintain dimensions and avoid broadcasting
+                    new = torch.stack(v)
+                except Exception as e0:
+                    try:
+                        # If fails, see if we can squeeze away dims of shape 1
+                        new = torch.stack([i.squeeze() for i in v])
+                    except Exception as e1:
+                        logger.error(f"Gather timeseries Issue with: {k}")
+                        logger.error(f"Associated list of tensors: {v}")
+                        raise e1 from e0
+
                 if new.shape[0] < t:
                     none_to_add = torch.ones(t - new.shape[0], *new.shape[1:])
                     new = torch.cat([new, float("nan") * none_to_add], dim=0)
