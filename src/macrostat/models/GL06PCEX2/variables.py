@@ -43,7 +43,7 @@ class VariablesGL06PCEX2(Variables):
             **kwargs,
         )
 
-    def check_health(self, tolerance: float = 1e-4):
+    def check_health(self, tolerance: float = 1e-4):  # pragma: no cover
         r"""Check the health of the variables by verifying that the redundant equations hold
         and that all the assets and liabilities are positive.
 

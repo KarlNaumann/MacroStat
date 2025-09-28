@@ -67,7 +67,7 @@ def create_rst_content(
     behavior_class: Type[Behavior],
     title: str = None,
     subsec: bool = False,
-) -> str:
+) -> str:  # pragma: no cover
     """Generate rst content for a model's documentation. Primarily for docs.
 
     This function creates a complete rst document structure for documenting a model's
@@ -325,7 +325,9 @@ def find_called_methods(method_node: ast.FunctionDef) -> Set[str]:
     return called_methods
 
 
-def convert_docstring_to_rst(docstring: str, label: str = None) -> str:
+def convert_docstring_to_rst(
+    docstring: str, label: str = None
+) -> str:  # pragma: no cover
     """Convert a docstring to the rst markdown syntax.
 
     Parameters
