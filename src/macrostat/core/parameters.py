@@ -325,12 +325,61 @@ class Parameters:
         return torch.nn.ParameterDict(vectorized)
 
     def vectorize_parameters(self):
-        """Vectorize the parameters."""
+        """Vectorize the parameters.
+
+        This function generates vectors out of the list of individual parameters.
+        It does so by respecting the "vector_sectors" hyperparameter. If this
+        hyperparameter exists, then:
+
+        1. for each parameter of the form "sector.name" a vector of zeros of
+        size (len(vector_sectors),1) will be generated and populated with
+        the values of the sector. The sectors index is computed as the index
+        of the sector name in the sorted vector_sectors list.
+        2. for each parameter of the form "rowsec.colsec.name" a matrix of zeros
+        of size (len(vector_sectors),len(vector_sectors)) will be generated and
+        populated with the values of the sector. The sectors index is computed
+        as the index of the sector name in the sorted vector_sectors list. The
+        first sector is the row, the second the column of the matrix to be
+        populated
+        """
+        # Allow users to specify that only a subset of sectors fit the vector/matrix scheme
+        if "vector_sectors" in self.hyper:
+            vsecs = sorted(self.hyper["vector_sectors"])
+        else:
+            vsecs = []
+
+        # Parse info dict to generate: individual, vector, and matrix setups
+        kwargs = dict(device=self.hyper["device"], dtype=torch.float)
         pvectors = {}
         for key, info in self.values.items():
-            pvectors[key.replace(".", "_")] = torch.tensor(
-                info["value"], device=self.hyper["device"], dtype=torch.float
-            )
+            parts = key.split(".")
+
+            # Case 1: parameter vectors (if desired)
+            if len(parts) == 2 and parts[0] in vsecs:
+                sec, par = parts
+
+                if par not in pvectors:
+                    pvectors[par] = torch.zeros(len(vsecs), **kwargs)
+
+                pvectors[par][vsecs.index(sec)] = info["value"]
+
+            # Case 2: parameter matrices, e.g. input-output coefficients
+            # We assume that the order is row-sector.col-sector.name
+            elif len(parts) == 3 and parts[0] in vsecs and parts[1] in vsecs:
+                rowsec, colsec, par = parts
+
+                if par not in pvectors:
+                    pvectors[par] = torch.zeros(len(vsecs), len(vsecs), **kwargs)
+
+                row = (vsecs.index(rowsec),)
+                col = vsecs.index(colsec)
+                pvectors[par][row, col] = info["value"]
+
+            # Case 3: everything else (incl. if more than 2 periods in the name)
+            else:
+                v = torch.tensor(info["value"], **kwargs)
+                pvectors[key.replace(".", "_")] = v
+
         return pvectors
 
     def verify_bounds(self):
