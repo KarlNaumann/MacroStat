@@ -351,11 +351,11 @@ def convert_docstring_to_rst(
     equations = extract_equations_from_docstring(docstring)
     if equations:
         rst.append(".. math::")
-        rst.append(f"\t:label: {label}")
+        rst.append("\t" + f":label: {label}")
         rst.append("\t:nowrap:\n")
-        rst.append(f"\t{r'\begin{align}'}")
-        rst.append(f"\t{equations}")
-        rst.append(f"\t{r'\end{align}'}")
+        rst.append("\t" + r"\begin{align}")
+        rst.append("\t" + equations)
+        rst.append("\t" + r"\end{align}")
         rst.append("\n")
 
     return "\n".join(rst)
