@@ -396,7 +396,9 @@ class Variables:
                 secs = self.info[k]["sectors"]
             else:
                 secs = list(range(v.squeeze().shape[1]))
+
             ts[k] = pd.DataFrame(v.squeeze(), columns=secs)
+
         df = pd.concat(ts.values(), keys=ts.keys(), axis=1)
         df.index.name = "time"
         return df
