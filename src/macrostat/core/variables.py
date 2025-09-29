@@ -111,6 +111,7 @@ class Variables:
         self,
         mathfmt: str = "sphinx",
         non_camel_case: bool = False,
+        group_io: bool = True,
     ):
         """Calculate the theoretical balance sheet of the model based on the
         information in the info dictionary.
@@ -121,6 +122,8 @@ class Variables:
             The format to use for the math. Can be "sphinx", "myst", or "latex".
         non_camel_case: bool
             Whether to convert variable names to non-camel case.
+        group_io: bool
+            Whether to group the hyper["iosectors"] into "IO Sectors"
 
         Returns
         -------
@@ -130,14 +133,22 @@ class Variables:
         if not self.verify_sfc_info():
             raise ValueError("SFC information is not complete")
 
+        if "iosectors" in self.parameters.hyper:
+            iosectors = self.parameters.hyper["iosectors"]
+            sectors = [
+                i for i in self.parameters.hyper["sectors"] if i not in iosectors
+            ] + ["IOSectors"]
+        else:
+            iosectors = []
+            sectors = self.parameters.hyper["sectors"]
+
         bs = {}
         for k, v in self.get_stock_variables().items():
             for kind, sector in v:
                 # Set the default balance sheet section to "Current"
-                if isinstance(sector, list):
-                    sector = tuple(sector)
-                elif not isinstance(sector, tuple):
-                    sector = (sector, "Current")
+                sector = self._convert_sector_to_tuples(sector)
+                if group_io and sector[0] in iosectors:
+                    sector = ("IOSectors", sector[1])
 
                 # Convert variable name to non-camel case if requested
                 item = k.replace(sector[0], "").replace(sector[0].lower(), "")
@@ -163,19 +174,17 @@ class Variables:
             bs = bs.loc[order]
 
             # Add columns for any other sectors that are not in the sfc
-            for sector in self.parameters.hyper["sectors"]:
+            for sector in sectors:
                 if sector not in bs.columns:
                     bs[(sector, "Current")] = None
         else:
             # If there are no stocks, create a DataFrame with the sectors and Current
             bs = pd.DataFrame(
-                columns=pd.MultiIndex.from_product(
-                    [self.parameters.hyper["sectors"], ["Current"]]
-                )
+                columns=pd.MultiIndex.from_product([sectors, ["Current"]])
             )
 
         # Sort the columns by the order of the sectors
-        bs = bs[self.parameters.hyper["sectors"]]
+        bs = bs[sectors]
 
         # Apply the math format
         bs = self._apply_math_format(bs, mathfmt)
@@ -193,6 +202,7 @@ class Variables:
         self,
         mathfmt: str = "sphinx",
         non_camel_case: bool = False,
+        group_io: bool = True,
     ):
         """Calculate the theoretical transaction matrix of the model based on the
         information in the info dictionary.
@@ -212,11 +222,23 @@ class Variables:
         if not self.verify_sfc_info():
             raise ValueError("SFC information is not complete")
 
+        if "iosectors" in self.parameters.hyper:
+            iosectors = self.parameters.hyper["iosectors"]
+            sectors = [
+                i for i in self.parameters.hyper["sectors"] if i not in iosectors
+            ] + ["IOSectors"]
+        else:
+            iosectors = []
+            sectors = self.parameters.hyper["sectors"]
+
         tm = {}
         # Capture the flows
         for k, v in self.get_flow_variables().items():
             for kind, sector in v:
+
                 sector = self._convert_sector_to_tuples(sector)
+                if group_io and sector[0] in iosectors:
+                    sector = ("IOSectors", sector[1])
 
                 # Convert variable name to non-camel case if requested
                 if non_camel_case:
@@ -241,6 +263,8 @@ class Variables:
         for k, v in self.get_stock_variables().items():
             for kind, sector in v:
                 sector = self._convert_sector_to_tuples(sector)
+                if group_io and sector[0] in iosectors:
+                    sector = ("IOSectors", sector[1])
 
                 # Change in wealth is not considered a flow
                 if "wealth" in k.lower():
@@ -254,10 +278,10 @@ class Variables:
                 item = f"Change in {item}"
 
                 if kind.lower() == "asset":
-                    notation = f"+{self.info[k]['notation']}"
+                    notation = r"+\Delta " + self.info[k]["notation"]
                 else:
                     # Only other option is that kind.lower() == "liability":
-                    notation = f"-{self.info[k]['notation']}"
+                    notation = r"-\Delta " + self.info[k]["notation"]
 
                 # Add the item to the transaction matrix
                 if item not in tm:
@@ -271,12 +295,12 @@ class Variables:
         tm = tm.loc[order]
 
         # Add columns for any other sectors that are not in the sfc
-        for sector in self.parameters.hyper["sectors"]:
+        for sector in sectors:
             if sector not in tm.columns:
                 tm[(sector, "Current")] = None
 
         # Sort the columns by the order of the sectors
-        tm = tm.loc[:, self.parameters.hyper["sectors"]]
+        tm = tm.loc[:, sectors]
 
         # Add the total column to the end
         tm["Total"] = 0

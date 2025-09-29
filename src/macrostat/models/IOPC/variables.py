@@ -110,35 +110,49 @@ class VariablesIOPC(Variables):
             # Consumption and Production
             "RealConsumptionHousehold": {
                 "notation": r"c(t)",
-                "unit": "USD",
+                "unit": "RU",
                 "history": 0,
                 "sectors": ["Household"],
                 "sfc": [("Index", "Household")],
             },
+            "NominalConsumptionHousehold": {
+                "notation": r"p_c(t)c(t)",
+                "unit": "USD",
+                "history": 0,
+                "sectors": ["Household"],
+                "sfc": [("Outflow", "Household"), ("Inflow", "IOSectors")],
+            },
             "RealConsumptionGovernment": {
                 "notation": r"g(t)",
-                "unit": "USD",
+                "unit": "RU",
                 "history": 0,
                 "sectors": ["Government"],
                 "sfc": [("Index", "Government")],
             },
-            "RealGrossOutput": {
-                "notation": r"x(t)",
+            "NominalConsumptionGovernment": {
+                "notation": r"p_g(t) g(t)",
                 "unit": "USD",
+                "history": 0,
+                "sectors": ["Government"],
+                "sfc": [("Outflow", "Government"), ("Inflow", "IOSectors")],
+            },
+            "RealGrossOutput": {
+                "notation": r"x_i(t)",
+                "unit": "RU_i",
                 "history": 0,
                 "sectors": iosectors,
                 "sfc": [("Index", "Production")],
             },
             "RealFinalDemand": {
-                "notation": r"p_g(t) \cdot g(t)",
-                "unit": "USD",
+                "notation": r"d_i(t)",
+                "unit": "RU_i",
                 "history": 0,
                 "sectors": iosectors,
                 "sfc": [("Index", "Production")],
             },
             # Prices and Price-indices
             "Prices": {
-                "notation": r"p_g(t) \cdot g(t)",
+                "notation": r"P_i(t)",
                 "unit": "USD",
                 "history": 0,
                 "sectors": iosectors,
@@ -171,7 +185,7 @@ class VariablesIOPC(Variables):
                 "unit": "USD",
                 "history": 0,
                 "sectors": ["Macroeconomy"],
-                "sfc": [("Outflow", "Production"), ("Inflow", "Household")],
+                "sfc": [("Outflow", "S1"), ("Inflow", "Household")],
             },
             "InterestEarnedOnBillsHousehold": {
                 "notation": r"r(t-1)\cdot B_h(t-1)",
