@@ -68,7 +68,10 @@ class BehaviorGL06SIM(Behavior):
         r"""Initialize the behavior of the Godley-Lavoie 2006 SIM model.
 
         Within the book the initialization is generally to set all non-scenario
-        variables to zero. Accordingly
+        variables to zero.
+
+        Parameters
+        ----------
 
         Equations
         ---------

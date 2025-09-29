@@ -69,6 +69,9 @@ class BehaviorGL06SIMEX(Behavior):
         Within the book the initialization is generally to set all non-scenario
         variables to zero. Accordingly
 
+        Parameters
+        ----------
+
         Equations
         ---------
         .. math::
