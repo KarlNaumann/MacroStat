@@ -3,6 +3,6 @@
 Consumption Supply,$-C_s(t)$,$+C_s(t)$,,$0$
 Government Supply,,$+G_s(t)$,$-G_s(t)$,$0$
 Tax Supply,$-T_s(t)$,,$+T_s(t)$,$0$
-Labour Earnings,$+W(t)\cdot N_s(t)$,$-W(t)\cdot N_s(t)$,,$0$
+Labour Income,$+W(t)\cdot N_s(t)$,$-W(t)\cdot N_s(t)$,,$0$
 Change in Money Stock,$+H_h(t)$,,$-H_s(t)$,$0$
 Total,$0$,$0$,$0$,$0$

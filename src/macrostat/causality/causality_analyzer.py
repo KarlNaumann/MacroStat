@@ -226,15 +226,15 @@ class CausalityAnalyzer:
         # Define the layout
         app.layout = html.Div(
             [
-                html.H1("Model Structure", style={"textAlign": "center"}),
                 cyto.Cytoscape(
                     id="model-graph",
                     layout={
                         "name": "dagre",
-                        "rankDir": "LR",
-                        "nodeSep": 50,
-                        "rankSep": 200,
-                        "spacingFactor": 2.0,
+                        "rankDir": "TB",
+                        # "align": "UL",
+                        "nodeSep": 20,
+                        "rankSep": 50,
+                        "spacingFactor": 1.0,
                     },
                     style={"width": "100%", "height": "1200px"},
                     elements=nodes + edges,
@@ -279,7 +279,7 @@ class CausalityAnalyzer:
                                 "target-arrow-color": "#000",
                                 "source-arrow-color": "#000",
                                 "text-outline-color": "#000",
-                                "text-outline-width": 2,
+                                "text-outline-width": 0,
                             },
                         },
                         {

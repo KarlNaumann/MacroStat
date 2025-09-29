@@ -8,6 +8,8 @@ The macrostat.models module consists of the following classes
     GL06PC
     GL06SIM
     GL06SIMEX
+    NK3E
+    IOPC
     model_manager
 
 """

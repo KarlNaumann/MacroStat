@@ -1,5 +1,6 @@
 import argparse
 
+import macrostat.util as msutil
 from macrostat.models import get_available_models, get_model_classes
 
 MODELGROUPS = ["GL06"]
@@ -74,14 +75,26 @@ if __name__ == "__main__":
         with open(f"{modeldir}/variables.rst", "w") as f:
             f.write("\n".join(rst) + "\n")
 
-        print("  - Creating Balance Sheet table")
-        balance_sheet = variables.balance_sheet_theoretical(
-            mathfmt="myst", non_camel_case=True
-        )
-        balance_sheet.to_csv(f"{modeldir}/balance_sheet.csv")
+        try:
+            print("  - Creating Balance Sheet table")
+            balance_sheet = variables.balance_sheet_theoretical(
+                mathfmt="myst", non_camel_case=True
+            )
+            balance_sheet.to_csv(f"{modeldir}/balance_sheet.csv")
 
-        print("  - Creating Transaction Matrix table")
-        transaction_matrix = variables.transaction_matrix_theoretical(
-            mathfmt="myst", non_camel_case=True
-        )
-        transaction_matrix.to_csv(f"{modeldir}/transaction_matrix.csv")
+            print("  - Creating Transaction Matrix table")
+            transaction_matrix = variables.transaction_matrix_theoretical(
+                mathfmt="myst", non_camel_case=True
+            )
+            transaction_matrix.to_csv(f"{modeldir}/transaction_matrix.csv")
+        except KeyError as e:
+            print("Couldn't create accounting matrices. KeyError")
+            print(e)
+
+        print("  - Creating Equation document")
+        with open(f"{modeldir}/equations.rst", "w") as f:
+            f.write(
+                msutil.latex_model_documentation.create_rst_content(
+                    model_classes.Behavior
+                )
+            )

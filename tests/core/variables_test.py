@@ -140,7 +140,7 @@ class TestVariables:
         # Add an index variable to test
         v = Variables(variable_info=self.variable_info, parameters=self.params)
         v.info["priceIndex"] = {
-            "sectors": [],
+            "sectors": ["Macroeconomy"],
             "history": 0,
             "unit": "index",
             "notation": "P",
@@ -295,9 +295,11 @@ class TestVariables:
         # Check that the differences are calculated correctly
         assert isinstance(diff, pd.DataFrame)
         assert isinstance(rel_diff, pd.DataFrame)
-        assert (diff["householdWealth"][0] == -100).all().all()  # 100 - 200
         assert (
-            (rel_diff["householdWealth"][0] == -50).all().all()
+            (diff[("householdWealth", "Household")][0] == -100).all().all()
+        )  # 100 - 200
+        assert (
+            (rel_diff[("householdWealth", "Household")][0] == -50).all().all()
         )  # (100-200)/200 * 100
 
         # Test comparing with a DataFrame directly

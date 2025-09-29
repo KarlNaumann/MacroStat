@@ -81,6 +81,12 @@ class TestModel:
         with pytest.raises(NotImplementedError):
             model.simulate()
 
+    def test_training_instance(self):
+        """Test model simulation with default behavior"""
+        model = MockModel(parameters=self.mockparameters)
+        behav = model.get_model_training_instance()
+        assert isinstance(behav, Behavior)
+
     def test_simulate_named_scenario(self):
         """Test model simulation with named scenario"""
         model = MockModel(

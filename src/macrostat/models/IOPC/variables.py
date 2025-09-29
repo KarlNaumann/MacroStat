@@ -1,5 +1,5 @@
 """
-Variables class for the Godley-Lavoie 2006 PC model.
+Variables class for Marco Veronese Passarella's 3IO-PC model
 """
 
 __author__ = ["Karl Naumann-Woleske"]
@@ -12,28 +12,28 @@ import logging
 import numpy as np
 
 from macrostat.core.variables import Variables
-from macrostat.models.GL06PC.parameters import ParametersGL06PC
+from macrostat.models.IOPC.parameters import ParametersIOPC
 
 logger = logging.getLogger(__name__)
 
 
-class VariablesGL06PC(Variables):
-    """Variables class for the Godley-Lavoie 2006 PC model."""
+class VariablesIOPC(Variables):
+    """Variables class for Marco Veronese Passarella's 3IO-PC model"""
 
-    version = "GL06PC"
+    version = "IOPC"
 
     def __init__(
         self,
         variable_info: dict | None = None,
         timeseries: dict | None = None,
-        parameters: ParametersGL06PC | None = None,
+        parameters: ParametersIOPC | None = None,
         *args,
         **kwargs,
     ):
-        """Initialize the variables of the Godley-Lavoie 2006 PC model."""
+        """Initialize the variables of Marco Veronese Passarella's 3IO-PC"""
 
         if parameters is None:
-            parameters = ParametersGL06PC()
+            parameters = ParametersIOPC()
 
         super().__init__(
             variable_info=variable_info,
@@ -105,22 +105,67 @@ class VariablesGL06PC(Variables):
 
     def get_default_variables(self):
         """Return the default variables information dictionary."""
+        iosectors = self.parameters.hyper["iosectors"]
         return {
-            # Flows from Table 4.1, top to bottom
-            "ConsumptionHousehold": {
-                "notation": r"C(t)",
+            # Consumption and Production
+            "RealConsumptionHousehold": {
+                "notation": r"c(t)",
                 "unit": "USD",
                 "history": 0,
                 "sectors": ["Household"],
-                "sfc": [("Inflow", "Production"), ("Outflow", "Household")],
+                "sfc": [("Index", "Household")],
             },
-            "ConsumptionGovernment": {
-                "notation": r"G(t)",
+            "RealConsumptionGovernment": {
+                "notation": r"g(t)",
                 "unit": "USD",
                 "history": 0,
                 "sectors": ["Government"],
-                "sfc": [("Inflow", "Production"), ("Outflow", "Government")],
+                "sfc": [("Index", "Government")],
             },
+            "RealGrossOutput": {
+                "notation": r"x(t)",
+                "unit": "USD",
+                "history": 0,
+                "sectors": iosectors,
+                "sfc": [("Index", "Production")],
+            },
+            "RealFinalDemand": {
+                "notation": r"p_g(t) \cdot g(t)",
+                "unit": "USD",
+                "history": 0,
+                "sectors": iosectors,
+                "sfc": [("Index", "Production")],
+            },
+            # Prices and Price-indices
+            "Prices": {
+                "notation": r"p_g(t) \cdot g(t)",
+                "unit": "USD",
+                "history": 0,
+                "sectors": iosectors,
+                "sfc": [("Index", "Production")],
+            },
+            "ConsumerPriceIndex": {  # CPI
+                "notation": r"p_c(t)",
+                "unit": "USD",
+                "history": 0,
+                "sectors": ["Household"],
+                "sfc": [("Index", "Household")],
+            },
+            "ConsumerPriceInflation": {  # CPI
+                "notation": r"\pi(t)",
+                "unit": "%pp",
+                "history": 0,
+                "sectors": ["Household"],
+                "sfc": [("Index", "Household")],
+            },
+            "GovernmentPriceIndex": {
+                "notation": r"p_g(t)",
+                "unit": "USD",
+                "history": 0,
+                "sectors": ["Government"],
+                "sfc": [("Index", "Government")],
+            },
+            # Other PCEX flows
             "NationalIncome": {
                 "notation": r"Y(t)",
                 "unit": "USD",
@@ -202,6 +247,34 @@ class VariablesGL06PC(Variables):
             },
             "DisposableIncome": {
                 "notation": r"YD(t)",
+                "unit": "USD",
+                "history": 0,
+                "sectors": ["Household"],
+                "sfc": [("Index", "Household")],
+            },
+            "ExpectedDisposableIncome": {
+                "notation": r"YD^e(t)",
+                "unit": "USD",
+                "history": 0,
+                "sectors": ["Household"],
+                "sfc": [("Index", "Household")],
+            },
+            "PropensityToConsumeIncome": {
+                "notation": r"\alpha_1(t)",
+                "unit": ".",
+                "history": 0,
+                "sectors": ["Household"],
+                "sfc": [("Index", "Household")],
+            },
+            "ExpectedWealth": {
+                "notation": r"V^e(t)",
+                "unit": "USD",
+                "history": 0,
+                "sectors": ["Household"],
+                "sfc": [("Index", "Household")],
+            },
+            "HouseholdBillDemand": {
+                "notation": r"B_d(t)",
                 "unit": "USD",
                 "history": 0,
                 "sectors": ["Household"],

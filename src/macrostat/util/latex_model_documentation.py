@@ -63,6 +63,82 @@ def generate_latex_documentation(
     return tex
 
 
+def create_rst_content(
+    behavior_class: Type[Behavior],
+    title: str = None,
+    subsec: bool = False,
+) -> str:  # pragma: no cover
+    """Generate rst content for a model's documentation. Primarily for docs.
+
+    This function creates a complete rst document structure for documenting a model's
+    behavior class. It starts with a preamble and title, then adds a section for the initialization
+    of the model, including any methods called by initialize(). It then adds a section for the
+    step() method, including any methods called by step().
+
+    Parameters
+    ----------
+    behavior_class : Type[Behavior]
+        The Behavior class to document
+    title : str, optional
+        Optional title for the document. If None, uses the class name
+    subsec : bool, optional
+        If True, creates a subsection instead of a section
+    preamble : str, optional
+        Optional LaTeX preamble to include before the document content
+
+    Returns
+    -------
+    str
+        Complete rst document as a string
+    """
+    title = title if title is not None else behavior_class.__name__
+
+    # Extract the docstrings from the initialize() and step() methods
+    docstrings = parse_behavior_docstrings(behavior_class)
+
+    rst = []
+
+    rst.append(len(title) * "=")
+    rst.append(title)
+    rst.append(len(title) * "=")
+
+    # Add initialization equations
+    if docstrings["initialize"]:
+        txt = "Initialization Equations"
+        rst.append(len(txt) * "-")
+        rst.append(txt)
+        rst.append(len(txt) * "-")
+
+        if "initialize" in docstrings["initialize"]:
+            rst.append(
+                convert_docstring_to_latex(
+                    docstrings["initialize"]["initialize"], "initialize"
+                )
+            )
+
+        # Go through any methods that have been called
+        for method_name, docstring in docstrings["initialize"].items():
+            rst.append(convert_docstring_to_latex(docstring, method_name))
+
+    # Add step equations
+    if docstrings["step"]:
+        txt = "Step Equations"
+        rst.append(len(txt) * "-")
+        rst.append(txt)
+        rst.append(len(txt) * "-")
+
+        if "step" in docstrings["step"]:
+            rst.append(convert_docstring_to_latex(docstrings["step"]["step"], "step"))
+
+        for count, method_name in enumerate(docstrings["step"]):
+            docstring = docstrings["step"][method_name]
+            rst.append(f"{count+1}. {method_name.replace('_', ' ').title()}\n")
+            rst.append(convert_docstring_to_rst(docstring, method_name))
+            rst.append("\n")
+
+    return "\n".join(rst)
+
+
 def create_latex_content(
     behavior_class: Type[Behavior],
     title: str = None,
@@ -247,6 +323,42 @@ def find_called_methods(method_node: ast.FunctionDef) -> Set[str]:
                 called_methods.add(node.attr)
 
     return called_methods
+
+
+def convert_docstring_to_rst(
+    docstring: str, label: str = None
+) -> str:  # pragma: no cover
+    """Convert a docstring to the rst markdown syntax.
+
+    Parameters
+    ----------
+    docstring : str
+        The docstring to convert to LaTeX.
+    label : str, optional
+        The label of the equation. If None, no label is added.
+
+    Returns
+    -------
+    str
+        The LaTeX text and align equations.
+    """
+    rst = []
+
+    description = docstring.split("Parameters")[0].strip()
+    if description:
+        rst.append(description + "\n")
+
+    equations = extract_equations_from_docstring(docstring)
+    if equations:
+        rst.append(".. math::")
+        rst.append("\t" + f":label: {label}")
+        rst.append("\t:nowrap:\n")
+        rst.append("\t" + r"\begin{align}")
+        rst.append("\t" + equations)
+        rst.append("\t" + r"\end{align}")
+        rst.append("\n")
+
+    return "\n".join(rst)
 
 
 def convert_docstring_to_latex(docstring: str, label: str = None) -> str:

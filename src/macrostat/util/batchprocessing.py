@@ -90,4 +90,3 @@ def parallel_processor(
     except Exception as e:
         logger.error(f"Error in process pool: {str(e)}")
         logger.error(traceback.format_exc())
-        raise

@@ -389,7 +389,16 @@ class Variables:
                     key = f"{k}{subvar}"
                     timeseries[key] = v[:, i, :]
 
-        ts = {k: pd.Series(v.squeeze()) for k, v in timeseries.items()}
+        # Any vector-based parameters will just be
+        ts = {}
+        for k, v in timeseries.items():
+            if "sectors" in self.info[k]:
+                secs = self.info[k]["sectors"]
+            else:
+                secs = list(range(v.squeeze().shape[1]))
+
+            ts[k] = pd.DataFrame(v.squeeze(), columns=secs)
+
         df = pd.concat(ts.values(), keys=ts.keys(), axis=1)
         df.index.name = "time"
         return df
