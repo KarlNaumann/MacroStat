@@ -110,7 +110,7 @@ class VariablesIOPC(Variables):
             # Consumption and Production
             "RealConsumptionHousehold": {
                 "notation": r"c(t)",
-                "unit": "USD",
+                "unit": "RU",
                 "history": 0,
                 "sectors": ["Household"],
                 "sfc": [("Index", "Household")],
@@ -124,7 +124,7 @@ class VariablesIOPC(Variables):
             },
             "RealConsumptionGovernment": {
                 "notation": r"g(t)",
-                "unit": "USD",
+                "unit": "RU",
                 "history": 0,
                 "sectors": ["Government"],
                 "sfc": [("Index", "Government")],
@@ -138,14 +138,14 @@ class VariablesIOPC(Variables):
             },
             "RealGrossOutput": {
                 "notation": r"x_i(t)",
-                "unit": "USD",
+                "unit": "RU_i",
                 "history": 0,
                 "sectors": iosectors,
                 "sfc": [("Index", "Production")],
             },
             "RealFinalDemand": {
                 "notation": r"d_i(t)",
-                "unit": "USD",
+                "unit": "RU_i",
                 "history": 0,
                 "sectors": iosectors,
                 "sfc": [("Index", "Production")],
