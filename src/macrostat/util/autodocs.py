@@ -16,51 +16,62 @@ from typing import Dict, Set, Type
 from macrostat.core.behavior import Behavior
 
 
-def generate_latex_documentation(
+def generate_docs(
     behavior_class: Type[Behavior],
     output_file: str = None,
+    docstyle: str = "latex",
     title: str = None,
     subsec: bool = True,
     preamble: str = None,
 ) -> str:
-    r"""Make a LaTeX model description from a Behavior class.
+    r"""Make a model description from a Behavior class.
 
-    This function takes a Behavior class and returns a LaTeX model description by parsing
+    This function takes a Behavior class and returns a model description by parsing
     the docstrings of the initialize() and the step() methods. It then copies the docstrings
     of those methods and all of the methods that they call. From each, it extracts the description
-    and the equations section, and then formats them for LaTeX. It then saves the LaTeX code to a
+    and the equations section, and then formats them. It then saves the docs to a
     file if an output file is provided.
 
     Parameters
     ----------
     behavior_class : Type[Behavior]
-        The Behavior class to make a LaTeX model description from.
+        The Behavior class to make a model description from.
     output_file : str, optional
-        The file to save the LaTeX model description to.
+        The file to save the model description to.
+    docstyle : str, default "latex"
+        The type of documentation to make
     title : str, optional
-        The title of the LaTeX model description.
+        The title of the model description.
     subsec : bool, optional
         If True, add a subsection for each method. If False, just append the description and equations.
     preamble : str, optional
         A string of LaTeX code to add to the preamble of the document, i.e. before the \begin{document} command.
+        Only for LaTeX
 
     Returns
     -------
     str
-        The LaTeX model description.
+        The model description.
 
     Examples
     --------
     >>> from macrostat.models import get_model
     >>> GL06SIM = get_model("GL06SIM")
-    >>> tex = generate_documentation(GL06SIM().behavior)
+    >>> tex = generate_docs(GL06SIM().behavior, dostyle="latex")
     >>> print(tex)
     """
-    tex = create_latex_content(behavior_class, title, subsec, preamble)
+    match docstyle.lower():
+        case "latex":
+            content = create_latex_content(behavior_class, title, subsec, preamble)
+        case "rst":
+            content = create_rst_content(behavior_class, title, subsec, preamble)
+        case _:
+            raise ValueError("Incorrect docstyle supplied. Accepted: [latex, rst]")
+
     if output_file:
         with open(output_file, "w") as f:
-            f.write(tex)
-    return tex
+            f.write(content)
+    return content
 
 
 def create_rst_content(

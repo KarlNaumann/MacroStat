@@ -6,14 +6,14 @@ The macrostat.util module consists of the following classes
 .. autosummary::
     :toctree: util
 
-    latex_model_documentation
+    autodocs
     batchprocessing
 """
 
+from .autodocs import generate_docs
 from .batchprocessing import parallel_processor
-from .latex_model_documentation import generate_latex_documentation
 
 __all__ = [
-    "generate_latex_documentation",
+    "generate_docs",
     "parallel_processor",
 ]
