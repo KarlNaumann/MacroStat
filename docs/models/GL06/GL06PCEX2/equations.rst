@@ -1,6 +1,33 @@
-=========================
-Behavioral Equations IOPC
-=========================
+==============================
+Behavioral Equations GL06PCEX2
+==============================
+------------------------
+Initialization Equations
+------------------------
+Initialize the behavior of the Godley-Lavoie 2006 PCEX2 model.
+Within the book the initialization is generally to set all non-scenario
+variables to zero. Accordingly
+
+.. math::
+	:label: initialize
+	:nowrap:
+
+	\begin{align}
+	C(0) &= 0 \\
+	G(0) &= 0 \\
+	Y(0) &= 0 \\
+	T(0) &= 0 \\
+	YD(0) &= 0 \\
+	V(0) &= 0 \\
+	H_s(0) &= 0 \\
+	H_h(0) &= 0 \\
+	B_h(0) &= 0 \\
+	B_s(0) &= 0 \\
+	B_{CB}(0) &= 0 \\
+	r(0) &= 0 \\
+	\end{align}
+
+
 --------------
 Step Equations
 --------------
@@ -58,7 +85,7 @@ Calculate the consumption.
 	:nowrap:
 
 	\begin{align}
-	c(t) = \alpha_1 \left(\frac{YD^e(t)}{p_c(t)} - \pi(t)\right) + \alpha_2 \frac{V(t-1)}{p_c(t)}
+	C(t) = (\alpha_{10} - \iota r(t-1)) YD^e(t) + \alpha_2 V(t-1)
 	\end{align}
 
 
@@ -110,23 +137,7 @@ Calculate the expected wealth.
 
 
 
-8. Final Demand
-
-Calculate the final demand as the sum of household and government
-demands spread over the sectors
-
-.. math::
-	:label: final_demand
-	:nowrap:
-
-	\begin{align}
-	d_i(t) = \beta_{HH,i}C_{HH}(t) + \beta_{GOV,i}G(t)
-	\end{align}
-
-
-
-
-9. Government Bill Issuance
+8. Government Bill Issuance
 
 Calculate the government bill issuance.
 
@@ -141,7 +152,7 @@ Calculate the government bill issuance.
 
 
 
-10. Household Bill Demand
+9. Household Bill Demand
 
 Calculate the household bill demand.
 
@@ -156,7 +167,7 @@ Calculate the household bill demand.
 
 
 
-11. Household Bill Holdings
+10. Household Bill Holdings
 
 Calculate the household bill holdings.
 
@@ -171,7 +182,7 @@ Calculate the household bill holdings.
 
 
 
-12. Household Money Stock
+11. Household Money Stock
 
 Calculate the household deposits as a residual.
 
@@ -186,22 +197,7 @@ Calculate the household deposits as a residual.
 
 
 
-13. Inflation
-
-Compute the inflation (i.e. term for absence of money illusion)
-
-.. math::
-	:label: inflation
-	:nowrap:
-
-	\begin{align}
-	\pi(t) &= \left(\frac{p_c(t) - p_c(t-1)}{p_c(t-1)}\right)\left(\frac{V(t-1)}{p_c(t-1)}\right)
-	\end{align}
-
-
-
-
-14. Interest Earned On Bills Household
+12. Interest Earned On Bills Household
 
 Calculate the interest earned on bills by the household.
 
@@ -216,103 +212,24 @@ Calculate the interest earned on bills by the household.
 
 
 
-15. National Income
+13. National Income
 
-National income is the sum of nominal final demand
+Calculate the national income based on the closed-form solution derived in the documentation.
+The closed-form solution is used to avoid the need to solve the system of equations iteratively, thus
+preserving the differentiability of the model trajectory.
 
 .. math::
 	:label: national_income
 	:nowrap:
 
 	\begin{align}
-	Y(t) = P^\top(t)d(t)
+	Y(t) = C(t) + G(t)
 	\end{align}
 
 
 
 
-16. Price Indices
-
-Compute the consumer and government price indices based on their
-consumption shares
-
-.. math::
-	:label: price_indices
-	:nowrap:
-
-	\begin{align}
-	p_c(t) &= \beta_{HH}^\top P(t)\\
-	p_g(t) &= \beta_{G}^\top P(t)
-	\end{align}
-
-
-
-
-17. Prices
-
-Compute the sectoral prices as the sum of unit labour cost and a
-markup on intermediate prices
-
-.. math::
-	:label: prices
-	:nowrap:
-
-	\begin{align}
-	P_i(t) = \frac{w}{pr_i} + (1 + \mu)\sum_j a_{ij}P_j(t)
-	\end{align}
-
-
-
-
-18. Propensity To Consume Income
-
-Endogenous propensity to consume out of income, dependent on the
-rate of interest
-
-.. math::
-	:label: propensity_to_consume_income
-	:nowrap:
-
-	\begin{align}
-	\alpha_1(t) = \alpha_{10} - \alpha_{11} r(t-1)
-	\end{align}
-
-
-
-
-19. Real Gross Output
-
-Compute real gross output as the solution to the linear set of
-equations
-
-.. math::
-	:label: real_gross_output
-	:nowrap:
-
-	\begin{align}
-	x(t) = (I - A)^{-1}d(t)
-	\end{align}
-
-
-
-
-20. Set Interest Rate
-
-Set the interest rate. This is given exogenously by the scenario.
-
-.. math::
-	:label: set_interest_rate
-	:nowrap:
-
-	\begin{align}
-	r(t) = \bar{r}
-	\end{align)
-	\end{align}
-
-
-
-
-21. Taxes
+14. Taxes
 
 Calculate the taxes.
 
@@ -327,7 +244,7 @@ Calculate the taxes.
 
 
 
-22. Wealth
+15. Wealth
 
 Calculate the wealth.
 

@@ -92,9 +92,9 @@ if __name__ == "__main__":
             print(e)
 
         print("  - Creating Equation document")
-        with open(f"{modeldir}/equations.rst", "w") as f:
-            f.write(
-                msutil.latex_model_documentation.create_rst_content(
-                    model_classes.Behavior
-                )
-            )
+        msutil.autodocs.generate_docs(
+            model_classes.Behavior,
+            output_file=f"{modeldir}/equations.rst",
+            title=f"Behavioral Equations {modelname}",
+            docstyle="rst",
+        )

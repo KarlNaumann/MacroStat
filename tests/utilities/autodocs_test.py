@@ -3,12 +3,12 @@ from unittest import TestCase
 from unittest.mock import MagicMock, patch
 
 from macrostat.core.behavior import Behavior
-from macrostat.util.latex_model_documentation import (
+from macrostat.util.autodocs import (
     convert_docstring_to_latex,
     create_latex_content,
     extract_equations_from_docstring,
     find_called_methods,
-    generate_latex_documentation,
+    generate_docs,
     parse_behavior_docstrings,
 )
 
@@ -152,9 +152,9 @@ x = y + z
         self.assertIn("x = y + z", result)
         self.assertIn("a = b + c", result)
 
-    def test_generate_latex_documentation(self):
+    def test_generate_docs(self):
         with patch("builtins.open", MagicMock()) as mock_open:
-            result = generate_latex_documentation(
+            result = generate_docs(
                 self.mock_behavior, output_file="test.tex", title="Test Model"
             )
 
