@@ -10,7 +10,6 @@ __maintainer__ = ["Karl Naumann-Woleske"]
 
 import ast
 import inspect
-import re
 from typing import Dict, Set, Type
 
 from macrostat.core.behavior import Behavior
@@ -64,7 +63,7 @@ def generate_docs(
         case "latex":
             content = create_latex_content(behavior_class, title, subsec, preamble)
         case "rst":
-            content = create_rst_content(behavior_class, title, subsec, preamble)
+            content = create_rst_content(behavior_class, title, subsec)
         case _:
             raise ValueError("Incorrect docstyle supplied. Accepted: [latex, rst]")
 
@@ -122,14 +121,16 @@ def create_rst_content(
 
         if "initialize" in docstrings["initialize"]:
             rst.append(
-                convert_docstring_to_latex(
+                convert_docstring_to_rst(
                     docstrings["initialize"]["initialize"], "initialize"
                 )
             )
 
         # Go through any methods that have been called
         for method_name, docstring in docstrings["initialize"].items():
-            rst.append(convert_docstring_to_latex(docstring, method_name))
+            if method_name == "initialize":
+                continue
+            rst.append(convert_docstring_to_rst(docstring, method_name))
 
     # Add step equations
     if docstrings["step"]:
@@ -139,7 +140,7 @@ def create_rst_content(
         rst.append(len(txt) * "-")
 
         if "step" in docstrings["step"]:
-            rst.append(convert_docstring_to_latex(docstrings["step"]["step"], "step"))
+            rst.append(convert_docstring_to_rst(docstrings["step"]["step"], "step"))
 
         for count, method_name in enumerate(docstrings["step"]):
             docstring = docstrings["step"][method_name]
@@ -336,6 +337,38 @@ def find_called_methods(method_node: ast.FunctionDef) -> Set[str]:
     return called_methods
 
 
+def gather_docstring_sections(docstring: str) -> dict:
+    """Convert a docstring into a dict of sections and their content. The first
+    section is called Description
+
+    Parameters
+    ----------
+    docstring : str
+        The docstring to convert to LaTeX.
+
+    Returns
+    -------
+    docparts : dict[str,str]
+        section name: text separation of the docstring
+    """
+
+    section = "Description"
+    docparts = {section: []}
+
+    lines = docstring.split("\n")
+    for i, line in enumerate(lines):
+        if len(line) == 0:
+            continue
+        elif line == len(line) * "-":
+            docparts[section].pop(-1)
+            section = lines[i - 1].strip()
+            docparts[section] = []
+        else:
+            docparts[section].append(line)
+
+    return {k: "\n".join(v) for k, v in docparts.items()}
+
+
 def convert_docstring_to_rst(
     docstring: str, label: str = None
 ) -> str:  # pragma: no cover
@@ -354,18 +387,16 @@ def convert_docstring_to_rst(
         The LaTeX text and align equations.
     """
     rst = []
+    docparts = gather_docstring_sections(docstring)
 
-    description = docstring.split("Parameters")[0].strip()
-    if description:
-        rst.append(description + "\n")
-
+    rst.append(docparts["Description"])
     equations = extract_equations_from_docstring(docstring)
     if equations:
-        rst.append(".. math::")
+        rst.append("\n.. math::")
         rst.append("\t" + f":label: {label}")
         rst.append("\t:nowrap:\n")
         rst.append("\t" + r"\begin{align}")
-        rst.append("\t" + equations)
+        rst.append("\t" + equations.replace("\n", "\n\t"))
         rst.append("\t" + r"\end{align}")
         rst.append("\n")
 
@@ -425,16 +456,7 @@ def extract_equations_from_docstring(docstring: str) -> str:
     str
         The formatted LaTeX equations.
     """
-    # Split the docstring into sections
-    sections = re.split(r"\n\s*([A-Za-z]+)\s*\n\s*-+\n", docstring)
-
-    # Find the Equations section
-    for i, section in enumerate(sections):
-        if section.strip() == "Equations":
-            equations_text = sections[i + 1].strip()
-            break
-    else:
-        return ""
+    equations_text = gather_docstring_sections(docstring)["Equations"]
 
     # Format the equations for LaTeX
     equations = []
