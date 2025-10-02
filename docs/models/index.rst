@@ -9,6 +9,7 @@ This section contains the documentation of the models available in MacroStat.
 .. toctree::
    :maxdepth: 1
 
+   ECOIOPC/ECOIOPC.ipynb
    GL06/index.rst
    IOPC/IOPC.ipynb
    NK3E/NK3E.ipynb
