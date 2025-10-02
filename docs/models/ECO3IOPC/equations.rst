@@ -122,7 +122,7 @@ existing stock, converted into units of matter
 	:nowrap:
 
 	\begin{align}
-	dis(t) &= m_{mat}^\top (\zeta \cdot x(t))
+	dis(t) &= m_{mat}^\top (\zeta \cdot dc(t-1))
 	\end{align}
 
 

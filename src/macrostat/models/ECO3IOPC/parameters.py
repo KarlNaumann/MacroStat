@@ -335,7 +335,7 @@ class ParametersECO3IOPC(Parameters):
                 "upper bound": 1.0,
                 "notation": r"\Delta_\%\beta_e",
                 "unit": ".",
-                "value": 0.01,
+                "value": 0.00,
             },
             "TransientClimateResponseCumCO2": {
                 "lower bound": 0.0,

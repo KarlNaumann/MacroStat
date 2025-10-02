@@ -126,7 +126,7 @@ class BehaviorECO3IOPC(Behavior):
         self.central_bank_bill_holdings(**kwargs)
         self.central_bank_money_stock(**kwargs)
 
-        # Ecosystem
+        # ECO: Matter
         self.material_goods_production(**kwargs)
         self.discarding_of_socioeconomic_stock(**kwargs)
         self.recycling_of_discarded_stock(**kwargs)
@@ -134,6 +134,8 @@ class BehaviorECO3IOPC(Behavior):
         self.stock_of_durable_goods(**kwargs)
         self.socioeconomic_stock(**kwargs)
         self.waste(**kwargs)
+
+        # ECO: Energy
         self.energy_used_in_production(**kwargs)
         self.renewable_energy_used_in_production(**kwargs)
         self.non_renewable_energy_used_in_production(**kwargs)
@@ -141,6 +143,8 @@ class BehaviorECO3IOPC(Behavior):
         self.emissions_from_nonrenewable_energy(**kwargs)
         self.cumulative_co2_emissions(**kwargs)
         self.temperature(**kwargs)
+
+        # ECO: Reserves
         self.matter_to_resource_conversion(**kwargs)
         self.matter_reserves(**kwargs)
         self.carbon_mass_nonrenewable_energy(**kwargs)
@@ -1090,12 +1094,12 @@ class BehaviorECO3IOPC(Behavior):
             :nowrap:
 
             \begin{align}
-                dis(t) &= m_{mat}^\top (\zeta \cdot x(t))
+                dis(t) &= m_{mat}^\top (\zeta \cdot dc(t-1))
             \end{align}
 
         Dependency
         ----------
-        - state: RealGrossOutput
+        - prior: DurableGoodsStock
         - params: MaterialIntensity
         - params: DiscardedStockShare
 
@@ -1104,7 +1108,7 @@ class BehaviorECO3IOPC(Behavior):
         - DiscardedSocioeconomicStock
         """
         self.state["DiscardedSocioeconomicStock"] = params["MaterialIntensity"] @ (
-            params["DiscardedStockShare"] * self.state["RealGrossOutput"]
+            params["DiscardedStockShare"] * self.prior["DurableGoodsStock"]
         )
 
     def recycling_of_discarded_stock(

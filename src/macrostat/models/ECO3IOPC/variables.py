@@ -372,7 +372,7 @@ class VariablesECO3IOPC(Variables):
                 "sectors": ["Macroeconomy"],
                 "sfc": [("Index", "Macroeconomy")],
             },
-            "AtmosphericTemperature": {
+            "Temperature": {
                 "notation": r"temp(t)",
                 "unit": ".",
                 "history": 0,
