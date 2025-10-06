@@ -5,6 +5,7 @@ The macrostat.models module consists of the following classes
 .. autosummary::
     :toctree: models
 
+    ECO3IOPC
     GL06PC
     GL06SIM
     GL06SIMEX
