@@ -397,6 +397,8 @@ class BehaviorGL06SIMEX(Behavior):
 
         Dependency
         ----------
+        - params: PropensityToConsumeIncome
+        - params: PropensityToConsumeSavings
         - state: ExpectedDisposableIncome
         - prior: HouseholdMoneyStock
 
