@@ -164,10 +164,12 @@ class BehaviorGL06SIMEX(Behavior):
 
         Sets
         -----
+        - GovernmentDemand
         - GovernmentSupply
 
         """
-        self.state["GovernmentSupply"] = scenario["GovernmentDemand"]
+        self.state["GovernmentDemand"] = scenario["GovernmentDemand"]
+        self.state["GovernmentSupply"] = self.state["GovernmentDemand"]
 
     def labour_demand(
         self, t: torch.tensor, scenario: dict, params: dict | None = None
@@ -578,3 +580,77 @@ class BehaviorGL06SIMEX(Behavior):
         self.state["NationalIncome"] = (
             self.state["ConsumptionSupply"] + self.state["GovernmentSupply"]
         )
+
+    ############################################################################
+    # Steady State
+    ############################################################################
+
+    def compute_theoretical_steady_state_per_step(
+        self, t: int, params: dict, scenario: dict
+    ):
+        r"""Compute the theoretical steady state of the model for each given
+        period. This is done per-period as there are parameters and scenarios
+        that may be time-varying, so the interpretation is a timeseries of the
+        theoretical steady state at a given period based on the parameters and
+        scenarios at that period.
+
+        Parameters
+        ----------
+        params: dict
+            The parameters at the given period
+        scenario: dict
+            The scenarios at the given period
+
+        Equations
+        ---------
+        .. math::
+            :nowrap:
+
+            \begin{align}
+            G^\star(t) &=  G_s(t) = G_d(t)\\
+            r^\star(t) &= r(t)\\
+            \alpha_3 &= \frac{1-\alpha_1}{\alpha_2}\\
+            Y^\star(t) &= \frac{G^\star}{\theta}\\
+            YD^\star(t) = YD^{e\star}(t) = C^\star(t) &= \frac{G^\star(t)(1-\theta)}{\theta}\\
+            H_h^\star(t)  &= \alpha_3 YD^\star(t)\\
+            T^\star(t) & \theta\cdot Y^\star(t)\\
+            B_s^\star(t) &= \frac{r^\star(t) B_{CB}^\star(t) + T^\star(t) - G^\star(t)}{r^\star(t)}\\
+            B_{CB}^\star(t) &= B_s^\star(t) - B_h^\star(t)\\
+            H_s^\star(t) &= H_{s}(t-1) + (B_{CB}(t) - B_{CB}(t-1))
+            \end{align}
+        """
+        kwargs = dict(t=t, params=params, scenario=scenario)
+        # Scenario specific items, as in normal step()
+        self.government_supply(**kwargs)
+
+        self.state["NationalIncome"] = (
+            self.state["GovernmentSupply"] / params["TaxRate"]
+        )
+        self.state["DisposableIncome"] = self.state["NationalIncome"] * (
+            1 - params["TaxRate"]
+        )
+        a3 = (1 - params["PropensityToConsumeIncome"]) / params[
+            "PropensityToConsumeSavings"
+        ]
+        self.state["HouseholdMoneyStock"] = a3 * self.state["DisposableIncome"]
+        self.state["HouseholdMoneyDemand"] = torch.zeros_like(
+            self.state["HouseholdMoneyDemand"]
+        )
+
+        self.state["ExpectedDisposableIncome"] = self.state["DisposableIncome"]
+        self.state["ConsumptionDemand"] = self.state["DisposableIncome"]
+        self.consumption_supply(**kwargs)
+
+        self.labour_demand(**kwargs)
+        self.labour_supply(**kwargs)
+        self.tax_demand(**kwargs)
+        self.tax_supply(**kwargs)
+        self.labour_income(**kwargs)
+
+        self.state["HouseholdMoneyDemand"] = (
+            self.state["HouseholdMoneyStock"]
+            + self.state["ExpectedDisposableIncome"]
+            - self.state["ConsumptionDemand"]
+        )
+
+        self.state["GovernmentMoneyStock"] = self.state["HouseholdMoneyStock"]
