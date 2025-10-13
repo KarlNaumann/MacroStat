@@ -598,22 +598,19 @@ class BehaviorGL06SIM(Behavior):
             "PropensityToConsumeSavings"
         ]
         self.state["HouseholdMoneyStock"] = a3 * self.state["DisposableIncome"]
-        self.state["HouseholdMoneyDemand"] = torch.zeros_like(
-            self.state["HouseholdMoneyDemand"]
-        )
         self.state["ConsumptionDemand"] = self.state["DisposableIncome"]
         self.consumption_supply(**kwargs)
+        numerator = (
+            scenario["GovernmentDemand"]
+            + params["PropensityToConsumeSavings"] * self.state["HouseholdMoneyStock"]
+        )
+        denominator = scenario["WageRate"] * (
+            1 - params["PropensityToConsumeIncome"] * (1 - params["TaxRate"])
+        )
+        self.state["LabourDemand"] = numerator / denominator
 
-        self.labour_demand(**kwargs)
         self.labour_supply(**kwargs)
         self.tax_demand(**kwargs)
         self.tax_supply(**kwargs)
         self.labour_income(**kwargs)
-
-        self.state["HouseholdMoneyDemand"] = (
-            self.state["HouseholdMoneyStock"]
-            + self.state["ExpectedDisposableIncome"]
-            - self.state["ConsumptionDemand"]
-        )
-
         self.state["GovernmentMoneyStock"] = self.state["HouseholdMoneyStock"]
