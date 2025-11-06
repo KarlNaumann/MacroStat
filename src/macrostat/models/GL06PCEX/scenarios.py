@@ -41,9 +41,15 @@ class ScenariosGL06PCEX(Scenarios):
 
     def get_default_scenario_values(self):
         """Return the default scenario values."""
-        return {
+
+        sc = {
             "GovernmentDemand": 20,
             "WageRate": 1,
             "InterestRate": 0.025,
             "PropensityToConsumeIncome_add": 0,
         }
+
+        for k in self.parameters.values.keys():
+            sc[f"{k.replace('.', '_')}_add"] = 0.0
+
+        return sc
