@@ -175,22 +175,26 @@ class Behavior(torch.nn.Module):
         dict
             A dictionary with the updated parameters.
         """
-        # Generate index vector per sector
-        n = len(self.hyper["vector_sectors"])
-        one, zero = torch.ones(n), torch.zeros(n)
-        sec_vectors = {
-            s: torch.where(torch.arange(n) == i, one, zero)
-            for i, s in enumerate(self.hyper["vector_sectors"])
-        }
+        # Optional sectoral structure for vector/matrix parameters
+        vsecs = self.hyper.get("vector_sectors", [])
+        n = len(vsecs)
+        if n > 0:
+            one, zero = torch.ones(n), torch.zeros(n)
+            sec_vectors = {
+                s: torch.where(torch.arange(n) == i, one, zero)
+                for i, s in enumerate(vsecs)
+            }
 
-        # Generate index matrices per sector pair
-        sec = self.hyper["vector_sectors"]
-        pairs = [(row, col) for row in sec for col in sec]
-        one, zero = torch.ones(n, n), torch.zeros(n, n)
-        sec_matrices = {
-            s: torch.where(torch.arange(n * n).reshape(n, n) == i, one, zero)
-            for i, s in enumerate(pairs)
-        }
+            # Generate index matrices per sector pair
+            pairs = [(row, col) for row in vsecs for col in vsecs]
+            one, zero = torch.ones(n, n), torch.zeros(n, n)
+            sec_matrices = {
+                s: torch.where(torch.arange(n * n).reshape(n, n) == i, one, zero)
+                for i, s in enumerate(pairs)
+            }
+        else:
+            sec_vectors = {}
+            sec_matrices = {}
 
         params = {}
         for key, value in self.params.items():
@@ -205,14 +209,14 @@ class Behavior(torch.nn.Module):
                 add = torch.zeros_like(value)
                 mul = torch.ones_like(value)
 
-                if len(value.shape) == 1:
+                if len(value.shape) == 1 and sec_vectors:
                     for s, ix in sec_vectors.items():
                         if f"{s}_{key}_multiply" in scenario:
                             mul = mul * (ix * scenario[f"{s}_{key}_multiply"])
                         if f"{s}_{key}_add" in scenario:
                             add = add + (ix * scenario[f"{s}_{key}_add"])
 
-                elif len(value.shape) == 2:
+                elif len(value.shape) == 2 and sec_matrices:
                     for rowcol, ix in sec_matrices.items():
                         s = f"{rowcol[0]}_{rowcol[1]}"
 
