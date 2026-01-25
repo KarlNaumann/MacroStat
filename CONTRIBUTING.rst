@@ -147,9 +147,17 @@ Clone the repository
 
 #. You should run::
 
-    pip install -U pip setuptools -e .
+    uv sync                    # Install all dependencies
+    uv pip install -e .        # Install package in editable mode
 
    to be able to import the package under development in the Python REPL.
+
+   .. note::
+      This project uses `uv`_ for dependency management. The ``uv pip install -e .``
+      command installs the package in editable mode, allowing you to make changes
+      to the source code that are immediately available without reinstalling.
+
+.. _uv: https://github.com/astral-sh/uv
 
    .. todo:: if you are not using pre-commit, please remove the following item:
 
