@@ -7,7 +7,7 @@ in a way that is compatible with PyTorch's autograd and torch.func APIs.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Dict, Tuple
+from typing import Dict, Tuple
 
 import pandas as pd
 import torch
@@ -89,7 +89,9 @@ class JacobianBase:
     # Helper methods for output format conversion
     # ------------------------------------------------------------------
     def to_tensor(
-        self, jacobian_dict: Dict[str, torch.Tensor] | None = None, param_order: list[str] | None = None
+        self,
+        jacobian_dict: Dict[str, torch.Tensor] | None = None,
+        param_order: list[str] | None = None,
     ) -> torch.Tensor:
         """Convert Jacobian dict to single 2D tensor.
 
@@ -115,7 +117,9 @@ class JacobianBase:
         """
         if jacobian_dict is None:
             if not hasattr(self, "jacobian") or self.jacobian is None:
-                raise ValueError("jacobian_dict must be provided or self.jacobian must be set")
+                raise ValueError(
+                    "jacobian_dict must be provided or self.jacobian must be set"
+                )
             jacobian_dict = self.jacobian
 
         if not jacobian_dict:
@@ -184,7 +188,9 @@ class JacobianBase:
         """
         if jacobian_dict is None:
             if not hasattr(self, "jacobian") or self.jacobian is None:
-                raise ValueError("jacobian_dict must be provided or self.jacobian must be set")
+                raise ValueError(
+                    "jacobian_dict must be provided or self.jacobian must be set"
+                )
             jacobian_dict = self.jacobian
 
         if not jacobian_dict:
@@ -203,32 +209,37 @@ class JacobianBase:
             # If scalar, use flat index
             index = pd.Index(["loss"], name="element")
         elif len(loss_shape) == 1:
-            if timesteps is None and variable_names is None: 
+            if timesteps is None and variable_names is None:
                 # 1D loss: infer if no structure is provided
                 index = pd.RangeIndex(first_grad.numel(), name="element")
             elif variable_names is None:
                 # Without variable names, assume timesteps
                 index = pd.RangeIndex(timesteps, name="timestep")
                 if len(index) != loss_shape[0]:
-                    raise ValueError(f"Incompatible loss structure: timesteps {timesteps} does not match shape {loss_shape}")
+                    raise ValueError(
+                        f"Incompatible loss structure: timesteps {timesteps} does not match shape {loss_shape}"
+                    )
             else:
                 # With variable names, use provided names
                 index = pd.Index(variable_names, name="variable")
                 if len(index) != loss_shape[0]:
-                    raise ValueError(f"Incompatible loss structure: variable names {variable_names} does not match shape {loss_shape}")
+                    raise ValueError(
+                        f"Incompatible loss structure: variable names {variable_names} does not match shape {loss_shape}"
+                    )
         elif len(loss_shape) == 2:
             # 2D loss: assume (timesteps, variables) structure
             if timesteps is None:
                 timesteps = loss_shape[0]
             if variable_names is None:
                 variable_names = [f"var_{i}" for i in range(loss_shape[1])]
-            
+
             index = pd.MultiIndex.from_product(
-                [range(timesteps), variable_names],
-                names=["timestep", "variable"]
+                [range(timesteps), variable_names], names=["timestep", "variable"]
             )
             if len(index) != loss_shape[0] * loss_shape[1]:
-                raise ValueError(f"Incompatible loss structure: timesteps {timesteps} and variable names {variable_names} do not match shape {loss_shape}")
+                raise ValueError(
+                    f"Incompatible loss structure: timesteps {timesteps} and variable names {variable_names} do not match shape {loss_shape}"
+                )
         else:
             raise ValueError(f"Unsupported loss shape: {loss_shape}")
 
@@ -243,6 +254,6 @@ class JacobianBase:
                 )
             # Flatten gradient to match index length
             data[pname] = grad.flatten().detach().cpu().numpy()
-        
+
         data = pd.DataFrame(data, index=index)
         return data

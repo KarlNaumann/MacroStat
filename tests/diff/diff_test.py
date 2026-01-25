@@ -1,5 +1,3 @@
-import warnings
-
 import pandas as pd
 import pytest
 import torch
@@ -88,34 +86,30 @@ class TestDiffLinear2D:
     def test_log_space_zero_parameter_error(self):
         """Test that log-space raises ValueError for zero parameters."""
         loss_fn = self.make_loss_fn()
-        jac_num = JacobianNumerical(
-            self.model, epsilon=1e-5, parameter_space="log"
-        )
-        
+        jac_num = JacobianNumerical(self.model, epsilon=1e-5, parameter_space="log")
+
         # LINEAR2D model has x0_2 parameter with value 0, which should raise ValueError
-        with pytest.raises(ValueError, match="Cannot use log-space with zero parameters"):
+        with pytest.raises(
+            ValueError, match="Cannot use log-space with zero parameters"
+        ):
             jac_num.compute(loss_fn=loss_fn, mode="central")
 
     def test_log_space_parameter_steps(self):
         """Test log-space parameter steps with non-zero parameters."""
         loss_fn = self.make_loss_fn()
-        
+
         # Create a model and modify x0_2 to be non-zero
         model = self.model_cls()
         # Set x0_2 to a small positive value (it's 0 by default)
         model.parameters["x0_2"] = 0.1
-        
-        jac_num = JacobianNumerical(
-            model, epsilon=1e-5, parameter_space="log"
-        )
+
+        jac_num = JacobianNumerical(model, epsilon=1e-5, parameter_space="log")
 
         # Should work for positive parameters
         grads_log = jac_num.compute(loss_fn=loss_fn, mode="central")
 
         # Compare with direct space (should be different but reasonable)
-        jac_direct = JacobianNumerical(
-            model, epsilon=1e-5, parameter_space="direct"
-        )
+        jac_direct = JacobianNumerical(model, epsilon=1e-5, parameter_space="direct")
         grads_direct = jac_direct.compute(loss_fn=loss_fn, mode="central")
 
         # Both should produce same structure
@@ -211,12 +205,9 @@ class TestDiffLinear2D:
         # This is hard to test without modifying model parameters
         # The warning is issued during _validate_log_space_params
         # We'll just verify the method exists and can be called
-        jac_num = JacobianNumerical(
-            self.model, epsilon=1e-5, parameter_space="log"
-        )
         # If model has negative params, warning will be issued during compute
         # For this test model, we assume it doesn't have negative params
-        pass
+        JacobianNumerical(self.model, epsilon=1e-5, parameter_space="log")
 
 
 class TestJacobianBase:
@@ -504,13 +495,19 @@ class TestJacobianBase:
     def test_to_pandas_with_non_scalar_loss(self):
         """Test to_pandas with non-scalar loss (1D and 2D)."""
         # Test 1D
-        jac_dict_1d = self.jac_num.compute(loss_fn=loss_fn_non_scalar_1d, mode="central")
-        df_1d = self.jac_num.to_pandas(jacobian_dict=jac_dict_1d, variable_names=["x", "y"])
+        jac_dict_1d = self.jac_num.compute(
+            loss_fn=loss_fn_non_scalar_1d, mode="central"
+        )
+        df_1d = self.jac_num.to_pandas(
+            jacobian_dict=jac_dict_1d, variable_names=["x", "y"]
+        )
         assert len(df_1d.index) == 2
         assert df_1d.index.name == "variable"
 
         # Test 2D
-        jac_dict_2d = self.jac_num.compute(loss_fn=loss_fn_non_scalar_2d, mode="central")
+        jac_dict_2d = self.jac_num.compute(
+            loss_fn=loss_fn_non_scalar_2d, mode="central"
+        )
         df_2d = self.jac_num.to_pandas(
             jacobian_dict=jac_dict_2d, timesteps=3, variable_names=["x", "y"]
         )
