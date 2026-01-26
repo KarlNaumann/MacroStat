@@ -41,7 +41,7 @@ def jacobian_worker(task):
         loss = loss_fn(output)
         if isinstance(loss, torch.Tensor):
             loss = loss.detach()
-    
+
         return (*task_id, loss)
     except Exception as e:
         logger.error(f"Worker failed for task {task_id}: {str(e)}")
@@ -95,7 +95,7 @@ class JacobianNumerical(JacobianBase):
         ------
         ValueError
             If any zero parameters found.
-        
+
         Warns
         -----
         UserWarning
@@ -106,7 +106,7 @@ class JacobianNumerical(JacobianBase):
 
         for name in param_names:
             value = self.model.parameters[name]
-            
+
             if value == 0:
                 zero_params.append(name)
             if value < 0:
@@ -164,7 +164,6 @@ class JacobianNumerical(JacobianBase):
                 new_value = value_tensor - self.epsilon
 
         return new_value.item()
-
 
     def _generate_tasks(
         self,

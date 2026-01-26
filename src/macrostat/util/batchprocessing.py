@@ -110,12 +110,12 @@ def parallel_processor(
         if progress_bar and sys.stdout.isatty():
             with pool_context(processes=process_count) as pool:
                 results = list(
-                            tqdm(
-                                pool.imap(worker, tasks),
-                                total=len(tasks),
-                                desc="Processing tasks",
-                            )
-                        )
+                    tqdm(
+                        pool.imap(worker, tasks),
+                        total=len(tasks),
+                        desc="Processing tasks",
+                    )
+                )
                 logger.debug("Parallel processing completed")
                 return results
 

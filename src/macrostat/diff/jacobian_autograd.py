@@ -77,9 +77,6 @@ class JacobianAutograd(JacobianBase):
 
         # jacrev/jacfwd return a structure matching the inputs (dict[name -> tensor])
         # where names have "params." prefix. Strip prefix to match model.parameters format
-        jacobian = {
-            name.replace("params.", "", 1): g
-            for name, g in grads.items()
-        }
+        jacobian = {name.replace("params.", "", 1): g for name, g in grads.items()}
         self.jacobian = jacobian
         return jacobian
