@@ -53,6 +53,20 @@ Or, directly from GitHub::
 
    pip install git+https://github.com/KarlNaumann/MacroStat.git#egg=macrostat
 
+Development Installation
+========================
+
+For development, install the package in editable mode. This project uses `uv`_ for dependency management::
+
+    uv sync                    # Install all dependencies
+    uv pip install -e .        # Install package in editable mode
+
+After this, you can run tests with::
+
+    uv run pytest
+
+.. _uv: https://github.com/astral-sh/uv
+
 If you'd like to contribute to the package, please read the CONTRIBUTING.md guide.
 
 Making Changes & Contributing
