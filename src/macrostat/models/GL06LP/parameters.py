@@ -146,6 +146,7 @@ class ParametersGL06LP(Parameters):
         hyperparameters = super().get_default_hyperparameters()
         hyperparameters["timesteps"] = 100
         hyperparameters["timesteps_initialization"] = 1
+        hyperparameters["scenario_trigger"] = 50
         hyperparameters["sectors"] = [
             "Household",
             "Production",
