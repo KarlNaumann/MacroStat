@@ -7,6 +7,8 @@ The macrostat.models module consists of the following classes
 
     ECO3IOPC
     GL06LP
+    GL06LP2
+    GL06LP3
     GL06PC
     GL06PCEX
     GL06PCEX2
