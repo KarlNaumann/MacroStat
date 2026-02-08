@@ -13,3 +13,4 @@ ISBN: 978-1-137-08599-3 `Link to publisher <https://link.springer.com/book/10.10
    PC <GL06PC>
    PCEX <GL06PCEX>
    PCEX2 <GL06PCEX2>
+   LP <GL06LP>
