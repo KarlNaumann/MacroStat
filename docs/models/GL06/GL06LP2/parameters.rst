@@ -2,13 +2,16 @@
 Parameters GL06LP2
 ==================
 
+
 The following two tables contain the default values for the hyperparameters and parameters of the GL06LP2 model.
+
 
 Hyperparameters
 ===============
 .. csv-table::
 	:file: hyperparameters.csv
 	:header-rows: 1
+
 
 Parameters
 ==========
