@@ -53,16 +53,16 @@ def test_baseline_runs_without_error():
 
 
 def test_scenario1_runs_without_error():
-    """Smoke test: scenario 1 (bill rate rise) completes without error."""
+    """Smoke test: scenario 1 (interest rates rise) completes without error."""
     model, _, scenarios = _make_model()
-    sc = scenarios.get_scenario_index("Scenario.1: Rise in bill rate")
+    sc = scenarios.get_scenario_index("Scenario.1: Rise in interest rates")
     model.simulate(scenario=sc)
 
 
 def test_scenario2_runs_without_error():
-    """Smoke test: scenario 2 (G rise) completes without error."""
+    """Smoke test: scenario 2 (drop in alpha1) completes without error."""
     model, _, scenarios = _make_model()
-    sc = scenarios.get_scenario_index("Scenario.2: Rise in G")
+    sc = scenarios.get_scenario_index("Scenario.2: Drop in alpha1")
     model.simulate(scenario=sc)
 
 
@@ -140,7 +140,7 @@ def test_redundant_equation_baseline():
 def test_redundant_equation_scenario1():
     """Redundant equation holds under scenario 1 (bill rate rise)."""
     model, _, scenarios = _make_model(timesteps=100)
-    sc = scenarios.get_scenario_index("Scenario.1: Rise in bill rate")
+    sc = scenarios.get_scenario_index("Scenario.1: Rise in interest rates")
     model.simulate(scenario=sc)
     ts = model.variables.timeseries
 
@@ -226,14 +226,14 @@ def test_steady_state_convergence():
 # ---------------------------------------------------------------------------
 
 
-def test_higher_bill_rate_raises_income():
-    """A higher bill rate should increase steady-state national income."""
+def test_higher_interest_rates_raises_income():
+    """A combined interest rate increase should raise steady-state Y."""
     model_base, _, _ = _make_model(timesteps=100)
     model_base.simulate()
     y_base = model_base.variables.timeseries["NationalIncome"][-1]
 
     model_shock, _, scenarios = _make_model(timesteps=100)
-    sc = scenarios.get_scenario_index("Scenario.1: Rise in bill rate")
+    sc = scenarios.get_scenario_index("Scenario.1: Rise in interest rates")
     model_shock.simulate(scenario=sc)
     y_shock = model_shock.variables.timeseries["NationalIncome"][-1]
 
@@ -243,43 +243,52 @@ def test_higher_bill_rate_raises_income():
     )
 
 
-def test_higher_G_raises_income():
-    """Higher government spending should increase steady-state income."""
-    model_base, _, _ = _make_model(timesteps=100)
+def test_lower_alpha1_raises_income_long_run():
+    """With exogenous G, a drop in α1 should raise long-run Y via higher debt service."""
+    model_base, _, _ = _make_model(timesteps=200)
     model_base.simulate()
     y_base = model_base.variables.timeseries["NationalIncome"][-1]
 
-    model_shock, _, scenarios = _make_model(timesteps=100)
-    sc = scenarios.get_scenario_index("Scenario.2: Rise in G")
+    model_shock, _, scenarios = _make_model(timesteps=200)
+    sc = scenarios.get_scenario_index("Scenario.2: Drop in alpha1")
     model_shock.simulate(scenario=sc)
     y_shock = model_shock.variables.timeseries["NationalIncome"][-1]
 
     assert y_shock > y_base, (
-        f"Higher G should raise Y: Y_base={y_base.item()}, " f"Y_shock={y_shock.item()}"
+        f"Lower alpha1 should raise long-run Y (paradox of thrift): "
+        f"Y_base={y_base.item()}, Y_shock={y_shock.item()}"
     )
 
 
-def test_higher_bill_rate_shifts_portfolio_to_bills():
-    """A higher bill rate should shift the portfolio toward bills."""
+def test_higher_interest_rates_shifts_portfolio():
+    """A combined interest rate increase should shift portfolio shares.
+
+    With both rb rising (3%→4%) and pbl falling (20→15), the bond yield
+    increases from 5% to 6.67%.  The portfolio allocation equations in LP
+    weight both rates, and the larger absolute increase in bond yield means
+    the bond share should rise while the bill share falls.
+    """
     model_base, _, _ = _make_model(timesteps=100)
     model_base.simulate()
     ts_base = model_base.variables.timeseries
-    bh_base = ts_base["HouseholdBillStock"][-1]
+    blh_base = ts_base["HouseholdBondStock"][-1]
+    pbl_base = ts_base["BondPrice"][-1]
     v_base = ts_base["Wealth"][-1]
-    bill_share_base = bh_base / v_base
+    bond_share_base = (blh_base * pbl_base) / v_base
 
     model_shock, _, scenarios = _make_model(timesteps=100)
-    sc = scenarios.get_scenario_index("Scenario.1: Rise in bill rate")
+    sc = scenarios.get_scenario_index("Scenario.1: Rise in interest rates")
     model_shock.simulate(scenario=sc)
     ts_shock = model_shock.variables.timeseries
-    bh_shock = ts_shock["HouseholdBillStock"][-1]
+    blh_shock = ts_shock["HouseholdBondStock"][-1]
+    pbl_shock = ts_shock["BondPrice"][-1]
     v_shock = ts_shock["Wealth"][-1]
-    bill_share_shock = bh_shock / v_shock
+    bond_share_shock = (blh_shock * pbl_shock) / v_shock
 
-    assert bill_share_shock > bill_share_base, (
-        f"Higher rb should increase bill share: "
-        f"base={bill_share_base.item():.4f}, "
-        f"shock={bill_share_shock.item():.4f}"
+    assert bond_share_shock > bond_share_base, (
+        f"Higher interest rates should increase bond share: "
+        f"base={bond_share_base.item():.4f}, "
+        f"shock={bond_share_shock.item():.4f}"
     )
 
 

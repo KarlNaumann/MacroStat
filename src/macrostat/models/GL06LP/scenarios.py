@@ -60,19 +60,30 @@ class ScenariosGL06LP(Scenarios):
         return sc
 
     def add_default_scenarios(self):
-        """Register the default LP scenarios from Godley & Lavoie (2006)."""
-        # Scenario 1: Increase in the interest rate on bills
+        """Register the default LP scenarios from Godley & Lavoie (2006).
+
+        Scenario 1 (Section 5.7): Combined increase in both short-term
+        and long-term interest rates. The bill rate rises from 3% to 4%
+        while the bond price drops from 20 to 15 (bond yield rises from
+        5% to 6.67%).
+
+        Scenario 2 (Section 5.9, LP1 baseline): A sharp decrease in the
+        propensity to consume out of current income. This provides the
+        comparison baseline for LP3's hysteresis result.
+        """
+        # Scenario 1: Combined interest rate increase (§5.7, Figs 5.2–5.4)
         self.add_scenario(
             timeseries={
-                "InterestRateBills": 0.035,
+                "InterestRateBills": 0.04,
+                "BondPrice": 15,
             },
-            name="Scenario.1: Rise in bill rate",
+            name="Scenario.1: Rise in interest rates",
         )
 
-        # Scenario 2: Increase in government expenditures
+        # Scenario 2: Drop in propensity to consume (§5.9, Fig 5.10)
         self.add_scenario(
             timeseries={
-                "GovernmentDemand": 25,
+                "PropensityToConsumeIncome_add": -0.1,
             },
-            name="Scenario.2: Rise in G",
+            name="Scenario.2: Drop in alpha1",
         )
