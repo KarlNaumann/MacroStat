@@ -78,21 +78,21 @@ class ParametersGL06LP2(ParametersGL06LP):
                     "upper bound": 0.1,
                     "notation": r"\beta",
                     "unit": ".",
-                    "value": 0.001,
+                    "value": 0.02,
                 },
                 "TargetProportionUpper": {
                     "lower bound": 0.0,
                     "upper bound": 1.0,
                     "notation": r"\text{top}",
                     "unit": ".",
-                    "value": 0.52,
+                    "value": 0.505,
                 },
                 "TargetProportionLower": {
                     "lower bound": 0.0,
                     "upper bound": 1.0,
                     "notation": r"\text{bot}",
                     "unit": ".",
-                    "value": 0.47,
+                    "value": 0.495,
                 },
             }
         )
