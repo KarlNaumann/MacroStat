@@ -401,6 +401,11 @@ def convert_docstring_to_rst(
         rst.append("\t" + r"\end{align}")
         rst.append("\n")
 
+    where_text = extract_where_from_docstring(docstring)
+    if where_text:
+        rst.append(where_text)
+        rst.append("\n")
+
     return "\n".join(rst)
 
 
@@ -436,6 +441,10 @@ def convert_docstring_to_latex(docstring: str, label: str = None) -> str:
         tex.append(equations)
         tex.append(r"\end{align}")
 
+    where_text = extract_where_from_docstring(docstring)
+    if where_text:
+        tex.append("\n" + where_text)
+
     return "\n".join(tex)
 
 
@@ -445,7 +454,8 @@ def extract_equations_from_docstring(docstring: str) -> str:
     This function is used to extract the Equations section from a docstring and format
     it for LaTeX. It eliminates any sphinx directives and other text that is not part
     of the equations, and, if it finds an align environment, it removes the outermost
-    align environment.
+    align environment.  Processing stops when a ``where:`` line is encountered so that
+    symbol definitions are not mixed into the LaTeX math.
 
     Parameters
     ----------
@@ -465,6 +475,9 @@ def extract_equations_from_docstring(docstring: str) -> str:
 
     for line in equations_text.split("\n"):
         line = line.strip()
+        # Stop before the "where:" symbol-definition block
+        if line.lower().startswith("where"):
+            break
         # Skip lines that are not equations (e.g. sphinx math directive and its options) or empty lines
         if line.startswith(".. math::") or line.startswith(":") or not line:
             continue
@@ -485,3 +498,36 @@ def extract_equations_from_docstring(docstring: str) -> str:
             equations.append(line)
 
     return "\n".join(equations)
+
+
+def extract_where_from_docstring(docstring: str) -> str:
+    """Extract the ``where:`` symbol-definition block from the Equations section.
+
+    Parameters
+    ----------
+    docstring : str
+        The docstring containing an Equations section.
+
+    Returns
+    -------
+    str
+        The symbol-definition text (including the ``where:`` header),
+        or an empty string if none is present.
+    """
+    sections = gather_docstring_sections(docstring)
+    if "Equations" not in sections:
+        return ""
+
+    equations_text = sections["Equations"]
+    lines = equations_text.split("\n")
+    where_lines = []
+    collecting = False
+
+    for line in lines:
+        stripped = line.strip()
+        if stripped.lower().startswith("where"):
+            collecting = True
+        if collecting:
+            where_lines.append(line)
+
+    return "\n".join(where_lines)
