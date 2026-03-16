@@ -73,12 +73,12 @@ def main():
             output,
             target_output,
             variables=["ConsumptionDemand", "DisposableIncome"],
-            timesteps=slice(-20, None),  # Last 20 timesteps
+            timesteps=slice(5, 40),  # Transition period (most informative)
             reduction="mean",
         )
 
     print(
-        "  Loss function: MSE on ConsumptionDemand and DisposableIncome (last 20 timesteps)"
+        "  Loss function: MSE on ConsumptionDemand and DisposableIncome (timesteps 5-40)"
     )
     print()
 
@@ -96,10 +96,10 @@ def main():
 
     # Step 5: Run optimization with Adam
     print("Step 5: Running optimization with torch.optim.Adam...")
-    optimizer = torch.optim.Adam(params_to_optimize, lr=1e-3)
+    optimizer = torch.optim.Adam(params_to_optimize, lr=5e-3)
 
-    n_epochs = 50
-    print_every = 10
+    n_epochs = 200
+    print_every = 50
 
     for epoch in range(n_epochs):
         optimizer.zero_grad()
