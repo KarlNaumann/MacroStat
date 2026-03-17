@@ -58,6 +58,7 @@ Using loss functions for Jacobian computation (for future LM optimizer):
 
 from __future__ import annotations
 
+from macrostat.estimation.lm import LevenbergMarquardt
 from macrostat.estimation.losses import (
     composite_loss,
     mse_loss,
@@ -67,6 +68,7 @@ from macrostat.estimation.result import EstimationResult
 
 __all__ = [
     "EstimationResult",
+    "LevenbergMarquardt",
     "mse_loss",
     "weighted_residuals",
     "composite_loss",
