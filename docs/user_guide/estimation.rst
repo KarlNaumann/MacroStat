@@ -14,11 +14,13 @@ flexible loss functions designed to work with both:
 
 * **Standard PyTorch optimizers** (Adam, SGD, etc.) for general-purpose
   calibration with gradient descent methods.
-* **Levenberg-Marquardt optimization** (future implementation) for fast,
-  accurate nonlinear least squares estimation.
+* **Levenberg-Marquardt optimization** for fast, accurate nonlinear least
+  squares estimation with automatic differentiation.
 
 The core components are:
 
+* :class:`macrostat.estimation.LevenbergMarquardt` – Trust-region nonlinear
+  least squares optimizer with Nielsen damping
 * :class:`macrostat.estimation.EstimationResult` – Dataclass for storing
   optimization results
 * :func:`macrostat.estimation.mse_loss` – Mean squared error loss with
@@ -312,27 +314,169 @@ computation:
     jac = JacobianAutograd(model, scenario=0)
     jacobian = jac.compute(loss_fn)
 
-This pattern will be used internally by the Levenberg-Marquardt optimizer to
+This pattern is used internally by the Levenberg-Marquardt optimizer to
 compute the Jacobian of residuals with respect to parameters, enabling efficient
 second-order optimization.
 
 
-Complete calibration example
------------------------------
+Levenberg-Marquardt optimization
+---------------------------------
 
-The following complete example demonstrates the full calibration workflow,
-including parameter perturbation, optimization, and result validation:
+The :class:`macrostat.estimation.LevenbergMarquardt` class provides trust-region
+nonlinear least squares optimization using the Nielsen damping strategy. This is
+the recommended method for parameter calibration when you have a well-defined
+target dataset and want fast, accurate convergence.
 
-.. literalinclude:: ../../examples/calibration_basic.py
-   :language: python
-   :linenos:
-   :lines: 29-
+Basic usage
+^^^^^^^^^^^
 
-This example can be run from the MacroStat repository:
+.. code-block:: python
+
+    from macrostat.models import get_model
+    from macrostat.estimation import LevenbergMarquardt, mse_loss
+
+    # Load model and target data
+    model = get_model("GL06SIM")()
+    target_output = {...}  # Your empirical data
+
+    # Define loss function (reduction="none" returns residual vector)
+    def loss_fn(output):
+        return mse_loss(
+            output,
+            target_output,
+            variables=["ConsumptionDemand", "DisposableIncome"],
+            timesteps=slice(5, 40),
+            reduction="none",  # Required for LM
+        )
+
+    # Run optimization
+    lm = LevenbergMarquardt(model, loss_fn, verbose=1)
+    result = lm.optimize()
+
+    print(f"Converged: {result.success}")
+    print(f"Final cost: {result.cost:.6e}")
+    print(f"Final parameters: {result.params}")
+
+The optimizer returns an :class:`EstimationResult` containing:
+
+* ``params`` – Final parameter values as dict
+* ``cost`` – Final cost (0.5 * ||residuals||²)
+* ``residuals`` – Final residual vector
+* ``jacobian`` – Final Jacobian matrix
+* ``nfev``, ``njev``, ``nit`` – Function/Jacobian evaluations and iterations
+* ``success`` – Convergence flag
+* ``message`` – Termination reason
+
+Convergence criteria
+^^^^^^^^^^^^^^^^^^^^^
+
+The optimizer terminates when any of these criteria are satisfied:
+
+* **ftol** (cost tolerance): ``|ΔF| < ftol * (F + ftol)``
+
+  Default: ``1e-8``. Triggers when cost change is negligible.
+
+* **xtol** (parameter tolerance): ``||δ|| < xtol * (||x|| + xtol)``
+
+  Default: ``1e-8``. Triggers when parameter change is negligible.
+
+* **gtol** (gradient tolerance): ``||J^T r||∞ < gtol``
+
+  Default: ``1e-8``. Triggers when gradient is near zero.
+
+* **max_nfev**: Maximum function evaluations.
+
+  Default: ``1000``.
+
+Example with custom tolerances:
+
+.. code-block:: python
+
+    lm = LevenbergMarquardt(
+        model,
+        loss_fn,
+        ftol=1e-10,      # Tighter cost tolerance
+        xtol=1e-10,      # Tighter parameter tolerance
+        gtol=1e-10,      # Tighter gradient tolerance
+        max_nfev=500,    # Limit iterations
+        verbose=1,       # Print progress
+    )
+    result = lm.optimize()
+
+Damping and scaling
+^^^^^^^^^^^^^^^^^^^
+
+The optimizer uses Nielsen damping for smooth, adaptive step size control:
+
+.. code-block:: python
+
+    lm = LevenbergMarquardt(
+        model,
+        loss_fn,
+        damping_init=1e-3,           # Initial damping (Nielsen: 1e-3)
+        damping_update_factor=2.0,   # Damping increase factor
+        scaling="marquardt",         # "marquardt" or "identity"
+    )
+
+* **damping_init**: Initial damping parameter (default: ``1e-3``).
+  Larger values make initial steps more conservative. For ill-conditioned
+  problems, try ``1e-7`` to ``1e-5``.
+
+* **scaling**: Damping matrix type:
+
+  - ``"marquardt"`` (default): ``J^T J + λ diag(J^T J)`` – scale-invariant
+  - ``"identity"``: ``J^T J + λI`` – Levenberg's original formulation
+
+Jacobian computation
+^^^^^^^^^^^^^^^^^^^^
+
+By default, the optimizer uses reverse-mode automatic differentiation. For
+problems with few parameters and many residuals, forward-mode may be faster:
+
+.. code-block:: python
+
+    lm = LevenbergMarquardt(
+        model,
+        loss_fn,
+        jacobian_mode="fwd",  # Forward-mode autodiff
+    )
+
+Interactive demo
+^^^^^^^^^^^^^^^^
+
+Run the interactive demo to see the optimizer in action:
+
+.. code-block:: bash
+
+    uv run python examples/lm_demo.py
+
+This demonstrates parameter recovery from synthetic data with detailed output
+showing iteration progress and final results.
+
+
+Complete calibration examples
+------------------------------
+
+Two complete examples are provided demonstrating different optimization approaches:
+
+**Levenberg-Marquardt optimization** (recommended for most use cases):
+
+.. code-block:: bash
+
+    uv run python examples/lm_demo.py
+
+This demonstrates the full LM workflow with detailed output showing parameter
+recovery from synthetic data, achieving <0.01% error in 10-15 iterations.
+
+**PyTorch optimizer (Adam)**:
 
 .. code-block:: bash
 
     uv run python examples/calibration_basic.py
+
+This demonstrates calibration using standard gradient descent with
+:func:`torch.optim.Adam`, useful for cases requiring custom optimization logic
+or integration with PyTorch training loops
 
 
 See also
