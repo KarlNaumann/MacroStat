@@ -185,47 +185,6 @@ consistent loss magnitudes across different numbers of components.
 Calibration best practices
 ---------------------------
 
-Use transition dynamics, not steady state
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-The steady state of a model contains limited information about parameter values
-because all dynamics have converged. The transition period (typically timesteps
-5-40 for a 50-period simulation) contains rich dynamics that are highly
-sensitive to parameter values.
-
-**Bad practice** (steady state only):
-
-.. code-block:: python
-
-    # Limited information – all variables have converged
-    loss = mse_loss(output, target, timesteps=slice(-10, None), reduction="mean")
-
-**Good practice** (transition period):
-
-.. code-block:: python
-
-    # Rich dynamics – captures parameter sensitivity
-    loss = mse_loss(output, target, timesteps=slice(5, 40), reduction="mean")
-
-
-Select informative variables
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-Not all variables are equally informative for calibration. Focus on variables
-that are directly influenced by the parameters you are estimating and avoid
-redundant accounting identities.
-
-For example, when calibrating consumption parameters in GL06SIM:
-
-.. code-block:: python
-
-    # Focus on consumption and income (directly related to parameters)
-    variables = ["ConsumptionDemand", "DisposableIncome"]
-
-    # Avoid including GDP (redundant with consumption + investment)
-    # Avoid including Savings (accounting identity: S = Y - C)
-
-
 Monitor parameter bounds
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -351,7 +310,7 @@ computation:
 
     # Compute Jacobian
     jac = JacobianAutograd(model, scenario=0)
-    jacobian = jac.complete(loss_fn=loss_fn, mode="rev")
+    jacobian = jac.compute(loss_fn)
 
 This pattern will be used internally by the Levenberg-Marquardt optimizer to
 compute the Jacobian of residuals with respect to parameters, enabling efficient

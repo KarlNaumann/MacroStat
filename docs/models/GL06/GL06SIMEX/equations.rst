@@ -253,3 +253,6 @@ the amount of taxes demanded. Equation (3.3) in the book
 	\begin{align}
 	T_s(t) = T_d(t)
 	\end{align}
+
+
+
