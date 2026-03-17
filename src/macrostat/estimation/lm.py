@@ -17,7 +17,6 @@ __maintainer__ = ["Karl Naumann-Woleske"]
 from typing import Callable, Literal
 
 import torch
-from torch.func import functional_call
 
 from macrostat.core.model import Model
 from macrostat.diff import JacobianAutograd
@@ -148,9 +147,6 @@ class LevenbergMarquardt:
         self.njev = 0
         self.nit = 0
 
-        # Get behavior instance for differentiation
-        self.behavior = model.get_model_training_instance(scenario=scenario)
-
         # Initialize Jacobian computer
         self.jac_computer = JacobianAutograd(model, scenario=scenario)
 
@@ -178,7 +174,7 @@ class LevenbergMarquardt:
 
         # Compute initial Jacobian
         jac_dict = self._compute_jacobian(params)
-        J = self._dict_to_matrix(jac_dict, params)
+        J = self._dict_to_matrix(jac_dict, params).detach()
 
         # Initialize damping parameter (Nielsen)
         JtJ = J.T @ J
@@ -221,13 +217,14 @@ class LevenbergMarquardt:
             # Decide whether to accept step
             if rho > 0:
                 # Accept step
+                cost_prev = cost  # Save for termination check
                 params = params_new
                 residuals = residuals_new
                 cost = cost_new
 
                 # Update Jacobian
                 jac_dict = self._compute_jacobian(params)
-                J = self._dict_to_matrix(jac_dict, params)
+                J = self._dict_to_matrix(jac_dict, params).detach()
                 JtJ = J.T @ J
                 diag_JtJ = torch.diag(JtJ)
 
@@ -238,6 +235,7 @@ class LevenbergMarquardt:
                 accepted = True
             else:
                 # Reject step
+                cost_prev = cost  # For rejected steps, use current cost
                 damping *= nu
                 nu *= 2.0
                 accepted = False
@@ -248,7 +246,7 @@ class LevenbergMarquardt:
 
             # Check termination criteria
             converged, status, message = self._check_termination(
-                cost, cost_new, step_dict, params, J, residuals, accepted
+                cost_prev, cost, step_dict, params, J, residuals, accepted
             )
 
             if converged:
@@ -269,7 +267,7 @@ class LevenbergMarquardt:
             success=(status >= 0),
             status=status,
             message=message,
-            params=params.copy(),
+            params={k: v.detach().clone() for k, v in params.items()},
             cost=cost,
             residuals=residuals,
             jacobian=jac_dict,
@@ -291,22 +289,27 @@ class LevenbergMarquardt:
         return result
 
     def _get_parameters(self) -> dict[str, torch.Tensor]:
-        """Get current parameter values from behavior."""
+        """Get current parameter values from model."""
         params = {}
-        for name, p in self.behavior.named_parameters():
-            if name.startswith("params."):
-                param_name = name.replace("params.", "")
-                params[param_name] = p.detach().clone()
+        for name in self.model.parameters.values.keys():
+            params[name] = torch.tensor(
+                self.model.parameters.values[name]["value"],
+                dtype=torch.float64,
+            )
         return params
 
     def _compute_residuals(self, params: dict[str, torch.Tensor]) -> torch.Tensor:
         """Compute residuals for given parameters."""
-        # Create parameter dict for functional_call
-        func_params = {f"params.{k}": v for k, v in params.items()}
+        # Update model parameters
+        for name, value in params.items():
+            self.model.parameters.values[name]["value"] = value.item()
 
-        # Run model with given parameters
+        # Get fresh behavior instance with updated parameters
+        behavior = self.model.get_model_training_instance(scenario=self.scenario)
+
+        # Run model
         with torch.no_grad():
-            output = functional_call(self.behavior, func_params, ())
+            output = behavior()
 
         # Compute residuals
         residuals = self.loss_fn(output)
@@ -361,7 +364,7 @@ class LevenbergMarquardt:
     ) -> dict[str, torch.Tensor]:
         """Convert vector to parameter dict."""
         param_names = list(params.keys())
-        vec_dict = {name: vec[i] for i, name in enumerate(param_names)}
+        vec_dict = {name: vec[i].detach() for i, name in enumerate(param_names)}
         return vec_dict
 
     def _solve_step(
