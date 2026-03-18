@@ -12,6 +12,7 @@ see :ref:`api`.
    Getting Started <getting_started>
    Core Model Structure <core/index>
    Differentiability and Jacobians <diff>
+   Parameter Estimation and Calibration <estimation>
    Causality Analysis <causality>
    Parameter Space Sampling <sample>
    LaTeX Interfaces <latex_interfaces>

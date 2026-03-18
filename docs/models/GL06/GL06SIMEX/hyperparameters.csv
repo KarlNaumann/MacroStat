@@ -6,4 +6,3 @@ sectors,,,"['Household', 'Production', 'Government']"
 seed,,,42
 timesteps,,,100
 timesteps_initialization,,,1
-vector_sectors,,,[]
