@@ -75,6 +75,3 @@ Compute the stabilizing real rate r_s consistent with output at potential.
 	\begin{align}
 	r_s = \frac{A - y_e}{a_1}
 	\end{align}
-
-
-

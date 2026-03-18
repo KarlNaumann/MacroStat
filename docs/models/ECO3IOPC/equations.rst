@@ -655,6 +655,3 @@ Calculate the wealth.
 	\begin{align}
 	V(t) = V(t-1) + YD(t) - C(t)
 	\end{align}
-
-
-
