@@ -13,13 +13,13 @@ __maintainer__ = ["Karl Naumann-Woleske"]
 
 import logging
 
-from macrostat.models.GL06LP2.variables import VariablesGL06LP2
+from macrostat.models.GL06LP2.variables import VariablesGL06LP2 as _VariablesGL06LP2
 from macrostat.models.GL06LP3.parameters import ParametersGL06LP3
 
 logger = logging.getLogger(__name__)
 
 
-class VariablesGL06LP3(VariablesGL06LP2):
+class VariablesGL06LP3(_VariablesGL06LP2):
     """Variables class for the Godley-Lavoie 2006 LP3 model.
 
     Extends LP2 variables with the PublicSectorBorrowingRequirement

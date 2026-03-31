@@ -20,12 +20,12 @@ import torch
 from macrostat.models.GL06LP2.parameters import ParametersGL06LP2
 from macrostat.models.GL06LP2.scenarios import ScenariosGL06LP2
 from macrostat.models.GL06LP2.variables import VariablesGL06LP2
-from macrostat.models.GL06LP.behavior import BehaviorGL06LP
+from macrostat.models.GL06LP.behavior import BehaviorGL06LP as _BehaviorGL06LP
 
 logger = logging.getLogger(__name__)
 
 
-class BehaviorGL06LP2(BehaviorGL06LP):
+class BehaviorGL06LP2(_BehaviorGL06LP):
     """Behavior class for the Godley-Lavoie 2006 LP2 model.
 
     Extends Model LP by making the bond price endogenous through a
@@ -67,8 +67,8 @@ class BehaviorGL06LP2(BehaviorGL06LP):
         if variables is None:
             variables = VariablesGL06LP2()
 
-        # Bypass BehaviorGL06LP.__init__ to pass our own types
-        super(BehaviorGL06LP, self).__init__(
+        # Bypass _BehaviorGL06LP.__init__ to pass our own types
+        super(_BehaviorGL06LP, self).__init__(
             parameters=parameters,
             scenarios=scenarios,
             variables=variables,

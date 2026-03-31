@@ -13,12 +13,12 @@ __maintainer__ = ["Karl Naumann-Woleske"]
 
 import logging
 
-from macrostat.models.GL06LP2.parameters import ParametersGL06LP2
+from macrostat.models.GL06LP2.parameters import ParametersGL06LP2 as _ParametersGL06LP2
 
 logger = logging.getLogger(__name__)
 
 
-class ParametersGL06LP3(ParametersGL06LP2):
+class ParametersGL06LP3(_ParametersGL06LP2):
     """Parameters class for the Godley-Lavoie 2006 LP3 model.
 
     Extends LP2 parameters with fiscal-rule parameters that make

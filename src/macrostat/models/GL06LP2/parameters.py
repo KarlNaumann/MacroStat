@@ -13,12 +13,12 @@ __maintainer__ = ["Karl Naumann-Woleske"]
 
 import logging
 
-from macrostat.models.GL06LP.parameters import ParametersGL06LP
+from macrostat.models.GL06LP.parameters import ParametersGL06LP as _ParametersGL06LP
 
 logger = logging.getLogger(__name__)
 
 
-class ParametersGL06LP2(ParametersGL06LP):
+class ParametersGL06LP2(_ParametersGL06LP):
     """Parameters class for the Godley-Lavoie 2006 LP2 model.
 
     Extends LP parameters with bond-price adjustment and target-proportion

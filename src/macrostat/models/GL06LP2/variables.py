@@ -14,12 +14,12 @@ __maintainer__ = ["Karl Naumann-Woleske"]
 import logging
 
 from macrostat.models.GL06LP2.parameters import ParametersGL06LP2
-from macrostat.models.GL06LP.variables import VariablesGL06LP
+from macrostat.models.GL06LP.variables import VariablesGL06LP as _VariablesGL06LP
 
 logger = logging.getLogger(__name__)
 
 
-class VariablesGL06LP2(VariablesGL06LP):
+class VariablesGL06LP2(_VariablesGL06LP):
     """Variables class for the Godley-Lavoie 2006 LP2 model.
 
     Extends LP variables with the TargetProportion variable.

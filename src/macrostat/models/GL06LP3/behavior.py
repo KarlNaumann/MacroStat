@@ -17,16 +17,16 @@ import logging
 
 import torch
 
-from macrostat.models.GL06LP2.behavior import BehaviorGL06LP2
+from macrostat.models.GL06LP2.behavior import BehaviorGL06LP2 as _BehaviorGL06LP2
 from macrostat.models.GL06LP3.parameters import ParametersGL06LP3
 from macrostat.models.GL06LP3.scenarios import ScenariosGL06LP3
 from macrostat.models.GL06LP3.variables import VariablesGL06LP3
-from macrostat.models.GL06LP.behavior import BehaviorGL06LP
+from macrostat.models.GL06LP.behavior import BehaviorGL06LP as _BehaviorGL06LP
 
 logger = logging.getLogger(__name__)
 
 
-class BehaviorGL06LP3(BehaviorGL06LP2):
+class BehaviorGL06LP3(_BehaviorGL06LP2):
     """Behavior class for the Godley-Lavoie 2006 LP3 model.
 
     Extends Model LP2 by making government expenditures endogenous
@@ -69,8 +69,8 @@ class BehaviorGL06LP3(BehaviorGL06LP2):
         if variables is None:
             variables = VariablesGL06LP3()
 
-        # Bypass BehaviorGL06LP2.__init__ and BehaviorGL06LP.__init__
-        super(BehaviorGL06LP, self).__init__(
+        # Bypass _BehaviorGL06LP2.__init__ and _BehaviorGL06LP.__init__
+        super(_BehaviorGL06LP, self).__init__(
             parameters=parameters,
             scenarios=scenarios,
             variables=variables,
