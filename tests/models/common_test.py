@@ -61,48 +61,57 @@ def discover_model_components() -> List[
             variables_class = None
             scenarios_class = None
 
-            # Find the model class
+            # Find the model class (defined in this module, not imported)
             for name, obj in inspect.getmembers(model_module):
-                if inspect.isclass(obj) and issubclass(obj, Model) and obj != Model:
+                if (
+                    inspect.isclass(obj)
+                    and issubclass(obj, Model)
+                    and obj != Model
+                    and obj.__module__ == model_module.__name__
+                ):
                     model_class = obj
                     break
 
-            # Find the parameters class
+            # Find the parameters class (defined in this module, not imported)
             for name, obj in inspect.getmembers(params_module):
                 if (
                     inspect.isclass(obj)
                     and issubclass(obj, Parameters)
                     and obj != Parameters
+                    and obj.__module__ == params_module.__name__
                 ):
                     params_class = obj
                     break
 
-            # Find the behavior class
+            # Find the behavior class (defined in this module, not imported)
             for name, obj in inspect.getmembers(behavior_module):
                 if (
                     inspect.isclass(obj)
                     and issubclass(obj, Behavior)
                     and obj != Behavior
+                    and obj.__module__ == behavior_module.__name__
                 ):
                     behavior_class = obj
                     break
 
-            # Find the variables class
+            # Find the variables class (defined in this module, not imported)
             for name, obj in inspect.getmembers(variables_module):
                 if (
                     inspect.isclass(obj)
                     and issubclass(obj, Variables)
                     and obj != Variables
+                    and obj.__module__ == variables_module.__name__
                 ):
                     variables_class = obj
                     break
 
-            # Find the scenarios class
+            # Find the scenarios class (defined in this module, not imported)
             for name, obj in inspect.getmembers(scenarios_module):
                 if (
                     inspect.isclass(obj)
                     and issubclass(obj, Scenarios)
                     and obj != Scenarios
+                    and obj.__module__ == scenarios_module.__name__
                 ):
                     scenarios_class = obj
                     break
