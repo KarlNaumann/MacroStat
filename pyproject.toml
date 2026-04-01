@@ -7,7 +7,7 @@ name = "MacroStat"
 description = "Tools for the statistical analysis and treatment of macroeconomic simulation models, with a focus on Agent-based and Stock-Flow Consistent Models"
 readme = "README.rst"
 license = "MIT"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 authors = [
     { name = "Karl Naumann-Woleske", email = "karl.naumann@icloud.com" },
 ]
@@ -37,6 +37,12 @@ testing = [
     "pytest",
     "pytest-cov",
 ]
+docs = [
+    "myst-nb>=1.4.0",
+    "pydata-sphinx-theme",
+    "sphinx-design>=0.7.0",
+    "sphinxcontrib-bibtex>=2.6.5",
+]
 
 [project.urls]
 Source = "https://github.com/KarlNaumann/MacroStat/"
@@ -54,10 +60,4 @@ dev = [
     "jupyterlab",
     "pytest>=9.0",
     "pytest-cov>=7.0.0",
-]
-docs = [
-    "myst-nb>=1.4.0",
-    "pydata-sphinx-theme",
-    "sphinx-design>=0.7.0",
-    "sphinxcontrib-bibtex>=2.6.5",
 ]
