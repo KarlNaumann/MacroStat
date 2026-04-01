@@ -50,6 +50,8 @@ version_scheme = "no-guess-dev"
 
 [dependency-groups]
 dev = [
+    "ipykernel",
+    "jupyterlab",
     "pytest>=9.0",
     "pytest-cov>=7.0.0",
 ]
