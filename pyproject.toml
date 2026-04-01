@@ -1,15 +1,56 @@
 [build-system]
-# AVOID CHANGING REQUIRES: IT WILL BE UPDATED BY PYSCAFFOLD!
 requires = ["setuptools>=46.1.0", "setuptools_scm[toml]>=5"]
 build-backend = "setuptools.build_meta"
 
+[project]
+name = "MacroStat"
+description = "Tools for the statistical analysis and treatment of macroeconomic simulation models, with a focus on Agent-based and Stock-Flow Consistent Models"
+readme = "README.rst"
+license = "MIT"
+requires-python = ">=3.12"
+authors = [
+    { name = "Karl Naumann-Woleske", email = "karl.naumann@icloud.com" },
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Programming Language :: Python",
+]
+dynamic = ["version"]
+dependencies = [
+    "dash",
+    "dash-cytoscape",
+    "matplotlib",
+    "networkx",
+    "numpy",
+    "pandas",
+    "scipy",
+    "torch",
+    "tqdm",
+]
+
+[project.optional-dependencies]
+io = [
+    "fastparquet",
+    "openpyxl",
+]
+testing = [
+    "pytest",
+    "pytest-cov",
+]
+
+[project.urls]
+Source = "https://github.com/KarlNaumann/MacroStat/"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+exclude = ["tests"]
+
 [tool.setuptools_scm]
-# For smarter version schemes and other configuration options,
-# check out https://github.com/pypa/setuptools_scm
 version_scheme = "no-guess-dev"
 
 [dependency-groups]
 dev = [
+    "pytest>=9.0",
     "pytest-cov>=7.0.0",
 ]
 docs = [
