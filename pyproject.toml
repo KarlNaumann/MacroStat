@@ -7,7 +7,7 @@ name = "MacroStat"
 description = "Tools for the statistical analysis and treatment of macroeconomic simulation models, with a focus on Agent-based and Stock-Flow Consistent Models"
 readme = "README.rst"
 license = "MIT"
-requires-python = ">=3.12"
+requires-python = ">=3.10"
 authors = [
     { name = "Karl Naumann-Woleske", email = "karl.naumann@icloud.com" },
 ]
