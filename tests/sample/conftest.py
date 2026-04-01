@@ -48,7 +48,7 @@ class MockModel(Model):
         variables=None,
         behavior=None,
         *args,
-        **kwargs
+        **kwargs,
     ):
         if parameters is None:
             parameters = MockParameters()

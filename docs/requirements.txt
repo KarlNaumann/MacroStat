@@ -1,6 +1,5 @@
-furo
-# Requirements file for ReadTheDocs, check .readthedocs.yml.
-# To build the module reference correctly, make sure every external package
-# under `install_requires` in `setup.cfg` is also listed here!
-sphinx>=3.2.1
-# sphinx_rtd_theme
+myst-nb>=1.4.0
+pydata-sphinx-theme
+sphinx>=7.0
+sphinx-design>=0.7.0
+sphinxcontrib-bibtex>=2.6.5
