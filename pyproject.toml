@@ -58,6 +58,7 @@ version_scheme = "no-guess-dev"
 dev = [
     "ipykernel",
     "jupyterlab",
+    "jupytext>=1.19.1",
     "pytest>=9.0",
     "pytest-cov>=7.0.0",
 ]
