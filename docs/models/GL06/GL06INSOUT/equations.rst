@@ -508,7 +508,7 @@ Calculate the endogenous loan rate based on bank profit margin.
 	\begin{align}
 	r_l(t) = r_l(t-1) + \zeta_l \cdot (z_6 - z_7)
 	+ (r_b(t) - r_b(t-1))
-	where :math:`z_6 = 1` if :math:`BPM(t-1) < bot_{pm}`,
+	where :math:`z_6 = 1` if :math:`BPM(t) < bot_{pm}`,
 	\end{align}
 
 
@@ -517,17 +517,17 @@ Calculate the endogenous loan rate based on bank profit margin.
 34. M1 Demand Tentative
 
 Calculate tentative M1 demand as the portfolio residual.
-M1 is the buffer-stock asset that absorbs whatever wealth remains after
-the three Tobin-allocated assets (M2, Bills, Bonds) are chosen. This
-ensures the non-cash portfolio always sums exactly to V^e_nc regardless
-of interest-rate sensitivity parameters.
+M1 is the buffer-stock asset that absorbs whatever *actual* wealth
+remains after the three Tobin-allocated assets (M2, Bills, Bonds).
+The R sfcr reference uses actual non-cash wealth (``Vnc = V - Hhh``),
+not expected, for this residual.
 
 .. math::
 	:label: m1_demand_tentative
 	:nowrap:
 
 	\begin{align}
-	M1^{dt}(t) = V^e_{nc}(t) - M2^d(t) - B^d(t) - p_{bl}(t) \cdot BL^d(t)
+	M1^{dt}(t) = V_{nc}(t) - M2^d(t) - B^d(t) - p_{bl}(t) \cdot BL^d(t)
 	\end{align}
 
 
@@ -562,7 +562,7 @@ residual non-cash wealth after bills and bonds.
 
 	\begin{align}
 	M2_h(t) = M2^d \cdot z_1
-	+ (V^e_{nc} - B^d - p_{bl} \cdot BL^d) \cdot z_2
+	+ (V_{nc} - B_h - p_{bl} \cdot BL^d) \cdot z_2
 	\end{align}
 
 
@@ -676,14 +676,18 @@ Calculate nominal household wealth.
 
 44. Non Cash Wealth
 
-Calculate actual non-cash wealth as sum of portfolio components.
+Calculate actual non-cash wealth available for portfolio allocation.
+In the R sfcr reference, M1 (the buffer-stock residual) is computed
+against actual non-cash wealth (``Vnc = V - Hhh``), not expected.
+Portfolio *demands* (M2d, Bhd, BLd) use expected wealth (VncE), but the
+realized residual uses actual wealth so that the portfolio identity holds.
 
 .. math::
 	:label: non_cash_wealth
 	:nowrap:
 
 	\begin{align}
-	V_{nc}(t) = M1_h + M2_h + B_h + p_{bl} \cdot BL_h
+	V_{nc}(t) = V(t) - Hh^d(t)
 	\end{align}
 
 
