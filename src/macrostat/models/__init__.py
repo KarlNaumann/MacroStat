@@ -6,6 +6,7 @@ The macrostat.models module consists of the following classes
     :toctree: models
 
     ECO3IOPC
+    GL06INSOUT
     GL06LP
     GL06LP2
     GL06LP3
