@@ -20,7 +20,6 @@ __maintainer__ = ["Mitja Devetak"]
 import logging
 
 import torch
-from tqdm import tqdm
 
 from macrostat.core.behavior import Behavior
 from macrostat.models.NK3E.parameters import ParametersNK3E
@@ -94,15 +93,15 @@ class BehaviorNK3E(Behavior):
         pi_ss = pi_T
         r_ss = r_s
 
-        self.state["y"] = torch.tensor([y_ss])
-        self.state["pi"] = torch.tensor([pi_ss])
-        self.state["r"] = torch.tensor([r_ss])
-        self.state["r_s"] = torch.tensor([r_s])
+        self.state["y"] = y_ss.reshape(1)
+        self.state["pi"] = pi_ss.reshape(1)
+        self.state["r"] = r_ss.reshape(1)
+        self.state["r_s"] = r_s.reshape(1)
         # a3 baseline for recording/graphing (depends on a1, a2, b)
         a2 = self.params["a2"]
         b = self.params["b"]
         a3 = 1.0 / (a1 * (1.0 / (a2 * b) + a2))
-        self.state["a3"] = torch.tensor([a3])
+        self.state["a3"] = a3.reshape(1)
 
     def step(self, t: int, scenario: dict, params: dict | None = None, **kwargs):
         """Advance the model by one period using the 3-equation system.
@@ -296,46 +295,3 @@ class BehaviorNK3E(Behavior):
         self.state["r"] = self.state["r_s"] + self.state["a3"] * (
             self.state["pi"] - pi_T
         )
-
-    def forward(self):
-        """Run the full simulation, optionally with a tqdm progress bar.
-
-        This mirrors the base class implementation but adds a progress bar when
-        ``parameters.hyper['use_tqdm']`` is True. At each step we:
-        1) build the scenario slice for time t,
-        2) apply parameter shocks (so ``params`` reflects current-time values),
-        3) call :meth:`step` to update the state,
-        4) record the new state into the timeseries and history buffers.
-        """
-        torch.manual_seed(self.hyper["seed"])
-        self.state, self.history = self.variables.initialize_tensors()
-
-        # initialize
-        self.initialize()
-        for t in range(self.hyper["timesteps_initialization"]):
-            self.variables.record_state(t, self.state)
-        for t in range(self.hyper["timesteps_initialization"]):
-            self.history = self.variables.update_history(self.state)
-        self.prior = self.state
-
-        iterator = range(
-            self.hyper["timesteps_initialization"] + 1, self.hyper["timesteps"]
-        )
-        if self.hyper.get("use_tqdm", False):
-            iterator = tqdm(iterator, desc="NK3E Simulation", leave=False)
-
-        for t in iterator:
-            self.state = self.variables.new_state()
-            idx = torch.where(
-                torch.arange(self.hyper["timesteps"]) == t,
-                torch.ones(1),
-                torch.zeros(1),
-            )
-            scenario = {k: idx @ v for k, v in self.scenarios.items()}
-            params = self.apply_parameter_shocks(t, scenario)
-            self.step(t=t, scenario=scenario, params=params)
-            self.variables.record_state(t, self.state)
-            self.history = self.variables.update_history(self.state)
-            self.prior = self.state
-
-        return None

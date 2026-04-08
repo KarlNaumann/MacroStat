@@ -60,7 +60,7 @@ class Parameters:
 
         self.hyper = self.get_default_hyperparameters()
         if hyperparameters is not None:
-            new = {k: v for k, v in hyperparameters.items() if k in self.values}
+            new = {k: v for k, v in hyperparameters.items() if k in self.hyper}
             self.hyper.update(new)
 
         self.verify_bounds()
