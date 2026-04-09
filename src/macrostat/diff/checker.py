@@ -7,11 +7,14 @@ This module provides a small API to compare:
 - Autograd vs numerical finite-difference Jacobians
 
 for a user-specified scalar loss function of model outputs.
+
+It also provides :func:`compare_jacobian_dicts` for element-wise,
+per-parameter comparison of two Jacobian dictionaries.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Callable, Dict, Literal, Optional
 
 import torch
@@ -216,3 +219,151 @@ def check_model_differentiability(
         raise RuntimeError(f"Differentiability check failed:\n{report.summary()}")
 
     return report
+
+
+# ---------------------------------------------------------------------------
+# Per-parameter Jacobian comparison
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class ParameterComparison:
+    """Element-wise comparison statistics for a single parameter's Jacobian."""
+
+    name: str
+    max_abs_diff: float
+    mean_abs_diff: float
+    max_rel_diff: float
+    mean_rel_diff: float
+    num_elements: int
+    num_close: int
+    has_nan_inf: bool
+
+
+@dataclass
+class JacobianComparisonReport:
+    """Per-parameter comparison of two Jacobian dictionaries.
+
+    Attributes
+    ----------
+    method_a, method_b :
+        Human-readable labels for the two methods being compared.
+    per_parameter :
+        Mapping from parameter name to its :class:`ParameterComparison`.
+    """
+
+    method_a: str
+    method_b: str
+    per_parameter: dict[str, ParameterComparison] = field(default_factory=dict)
+
+    # -- derived properties --------------------------------------------------
+
+    @property
+    def overall_max_abs_diff(self) -> float:
+        if not self.per_parameter:
+            return 0.0
+        return max(p.max_abs_diff for p in self.per_parameter.values())
+
+    @property
+    def overall_max_rel_diff(self) -> float:
+        if not self.per_parameter:
+            return 0.0
+        return max(p.max_rel_diff for p in self.per_parameter.values())
+
+    # -- utilities -----------------------------------------------------------
+
+    def worst_parameters(self, n: int = 5) -> list[ParameterComparison]:
+        """Return the *n* parameters with the largest ``max_rel_diff``."""
+        return sorted(
+            self.per_parameter.values(),
+            key=lambda p: p.max_rel_diff,
+            reverse=True,
+        )[:n]
+
+    def summary(self) -> str:
+        """Return a human-readable table of per-parameter comparison stats."""
+        lines: list[str] = []
+        lines.append(f"Jacobian comparison: {self.method_a} vs {self.method_b}")
+        lines.append(f"Parameters compared: {len(self.per_parameter)}")
+        lines.append(
+            f"Overall max abs diff: {self.overall_max_abs_diff:.3e}  "
+            f"max rel diff: {self.overall_max_rel_diff:.3e}"
+        )
+        lines.append("")
+
+        header = (
+            f"{'Parameter':<40s} {'max_abs':>10s} {'mean_abs':>10s} "
+            f"{'max_rel':>10s} {'mean_rel':>10s} {'close':>12s} {'nan/inf':>7s}"
+        )
+        lines.append(header)
+        lines.append("-" * len(header))
+
+        for pc in sorted(self.per_parameter.values(), key=lambda p: -p.max_rel_diff):
+            close_str = f"{pc.num_close}/{pc.num_elements}"
+            lines.append(
+                f"{pc.name:<40s} {pc.max_abs_diff:>10.3e} {pc.mean_abs_diff:>10.3e} "
+                f"{pc.max_rel_diff:>10.3e} {pc.mean_rel_diff:>10.3e} "
+                f"{close_str:>12s} {'YES' if pc.has_nan_inf else 'no':>7s}"
+            )
+
+        return "\n".join(lines)
+
+
+def compare_jacobian_dicts(
+    jac_a: Dict[str, torch.Tensor],
+    jac_b: Dict[str, torch.Tensor],
+    method_a: str = "A",
+    method_b: str = "B",
+    atol: float = 1e-8,
+    rtol: float = 1e-5,
+) -> JacobianComparisonReport:
+    """Element-wise, per-parameter comparison of two Jacobian dictionaries.
+
+    Only parameters present in **both** dictionaries are compared.
+
+    Parameters
+    ----------
+    jac_a, jac_b :
+        Jacobian dictionaries as returned by
+        :meth:`JacobianAutograd.compute` or :meth:`JacobianNumerical.compute`.
+    method_a, method_b :
+        Human-readable labels (used in the report).
+    atol, rtol :
+        Absolute and relative tolerances.  An element is "close" when
+        ``|a - b| <= atol + rtol * max(|a|, |b|)``.
+
+    Returns
+    -------
+    JacobianComparisonReport
+    """
+    shared_keys = sorted(jac_a.keys() & jac_b.keys())
+    per_parameter: dict[str, ParameterComparison] = {}
+
+    for name in shared_keys:
+        ga = jac_a[name]
+        gb = jac_b[name]
+
+        abs_diff = (ga - gb).abs()
+        scale = torch.maximum(ga.abs(), gb.abs()).clamp_min(1.0)
+        rel_diff = abs_diff / scale
+
+        has_nan_inf = not (torch.isfinite(ga).all() and torch.isfinite(gb).all())
+        num_elements = int(ga.numel())
+        num_close = int((abs_diff <= atol + rtol * scale).sum().item())
+
+        per_parameter[name] = ParameterComparison(
+            name=name,
+            max_abs_diff=float(abs_diff.max().item()),
+            mean_abs_diff=float(abs_diff.mean().item()),
+            max_rel_diff=float(rel_diff.max().item()),
+            mean_rel_diff=float(rel_diff.mean().item()),
+            num_elements=num_elements,
+            num_close=num_close,
+            has_nan_inf=has_nan_inf,
+        )
+
+    return JacobianComparisonReport(
+        method_a=method_a,
+        method_b=method_b,
+        per_parameter=per_parameter,
+    )

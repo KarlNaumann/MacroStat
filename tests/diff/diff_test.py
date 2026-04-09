@@ -4,8 +4,10 @@ import torch
 
 from macrostat.diff import (
     JacobianAutograd,
+    JacobianComparisonReport,
     JacobianNumerical,
     check_model_differentiability,
+    compare_jacobian_dicts,
 )
 from macrostat.models import get_model
 
@@ -513,3 +515,116 @@ class TestJacobianBase:
         )
         assert len(df_2d.index) == 6
         assert isinstance(df_2d.index, pd.MultiIndex)
+
+
+class TestCompareJacobianDicts:
+    """Unit tests for compare_jacobian_dicts using synthetic data."""
+
+    def test_identical_dicts(self):
+        """Identical Jacobians produce zero diffs and all elements close."""
+        jac = {"a": torch.tensor([1.0, 2.0, 3.0]), "b": torch.tensor([4.0, 5.0])}
+        report = compare_jacobian_dicts(jac, jac, "X", "Y")
+
+        assert isinstance(report, JacobianComparisonReport)
+        assert report.method_a == "X"
+        assert report.method_b == "Y"
+        assert report.overall_max_abs_diff == 0.0
+        assert report.overall_max_rel_diff == 0.0
+        for pc in report.per_parameter.values():
+            assert pc.max_abs_diff == 0.0
+            assert pc.num_close == pc.num_elements
+            assert not pc.has_nan_inf
+
+    def test_known_difference(self):
+        """Injected perturbation produces expected statistics."""
+        jac_a = {"p1": torch.tensor([10.0, 20.0])}
+        jac_b = {"p1": torch.tensor([10.1, 20.0])}
+
+        report = compare_jacobian_dicts(jac_a, jac_b)
+        pc = report.per_parameter["p1"]
+
+        assert pc.max_abs_diff == pytest.approx(0.1, abs=1e-6)
+        assert pc.mean_abs_diff == pytest.approx(0.05, abs=1e-6)
+        # rel_diff = 0.1 / max(10.0, 10.1) = 0.1/10.1 ≈ 0.0099
+        assert pc.max_rel_diff == pytest.approx(0.1 / 10.1, abs=1e-4)
+        assert pc.num_elements == 2
+
+    def test_nan_detection(self):
+        """NaN in one dict is flagged in has_nan_inf."""
+        jac_a = {"p1": torch.tensor([1.0, float("nan")])}
+        jac_b = {"p1": torch.tensor([1.0, 2.0])}
+
+        report = compare_jacobian_dicts(jac_a, jac_b)
+        assert report.per_parameter["p1"].has_nan_inf is True
+
+    def test_inf_detection(self):
+        """Inf in one dict is flagged in has_nan_inf."""
+        jac_a = {"p1": torch.tensor([1.0, float("inf")])}
+        jac_b = {"p1": torch.tensor([1.0, 2.0])}
+
+        report = compare_jacobian_dicts(jac_a, jac_b)
+        assert report.per_parameter["p1"].has_nan_inf is True
+
+    def test_missing_keys_only_shared(self):
+        """Only shared keys are compared; disjoint keys are ignored."""
+        jac_a = {"shared": torch.tensor([1.0]), "only_a": torch.tensor([2.0])}
+        jac_b = {"shared": torch.tensor([1.0]), "only_b": torch.tensor([3.0])}
+
+        report = compare_jacobian_dicts(jac_a, jac_b)
+        assert set(report.per_parameter.keys()) == {"shared"}
+
+    def test_scalar_jacobian(self):
+        """Scalar (0-dim) tensors are handled."""
+        jac_a = {"p": torch.tensor(5.0)}
+        jac_b = {"p": torch.tensor(5.5)}
+
+        report = compare_jacobian_dicts(jac_a, jac_b)
+        pc = report.per_parameter["p"]
+        assert pc.num_elements == 1
+        assert pc.max_abs_diff == pytest.approx(0.5, abs=1e-6)
+
+    def test_multidim_jacobian(self):
+        """2D tensors (T x V) are compared element-wise."""
+        jac_a = {"p": torch.ones(10, 5)}
+        jac_b = {"p": torch.ones(10, 5) + 0.01}
+
+        report = compare_jacobian_dicts(jac_a, jac_b)
+        pc = report.per_parameter["p"]
+        assert pc.num_elements == 50
+        assert pc.max_abs_diff == pytest.approx(0.01, abs=1e-6)
+
+    def test_worst_parameters_sorting(self):
+        """worst_parameters returns parameters sorted by max_rel_diff desc."""
+        jac_a = {
+            "good": torch.tensor([100.0]),
+            "bad": torch.tensor([100.0]),
+            "ugly": torch.tensor([100.0]),
+        }
+        jac_b = {
+            "good": torch.tensor([100.001]),  # tiny rel diff
+            "bad": torch.tensor([110.0]),  # 10% rel diff
+            "ugly": torch.tensor([150.0]),  # 50% rel diff
+        }
+
+        report = compare_jacobian_dicts(jac_a, jac_b)
+        worst = report.worst_parameters(n=3)
+        assert worst[0].name == "ugly"
+        assert worst[1].name == "bad"
+        assert worst[2].name == "good"
+
+    def test_empty_dicts(self):
+        """Empty dicts produce an empty report."""
+        report = compare_jacobian_dicts({}, {})
+        assert len(report.per_parameter) == 0
+        assert report.overall_max_abs_diff == 0.0
+        assert report.overall_max_rel_diff == 0.0
+
+    def test_summary_runs(self):
+        """summary() returns a non-empty string without errors."""
+        jac = {"a": torch.tensor([1.0, 2.0])}
+        report = compare_jacobian_dicts(jac, jac, "fwd", "rev")
+        text = report.summary()
+        assert isinstance(text, str)
+        assert "fwd" in text
+        assert "rev" in text
+        assert "a" in text
