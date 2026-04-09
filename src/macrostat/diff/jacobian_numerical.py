@@ -300,13 +300,33 @@ class JacobianNumerical(JacobianBase):
         jacobian: Dict[str, torch.Tensor] = {}
         for param_name in param_names:
             losses = results_by_param.get(param_name, {})
+            base_value = self.model.parameters[param_name]
+
+            # Compute the actual perturbation in parameter space.
+            # In direct space: delta = epsilon.
+            # In log space: p+ = p*exp(eps), p- = p*exp(-eps),
+            #   so delta_central = p*(exp(eps) - exp(-eps)),
+            #      delta_fwd    = p*(exp(eps) - 1),
+            #      delta_bwd    = p*(1 - exp(-eps)).
+            if self.parameter_space == "log" and base_value != 0:
+                # p+ = p*exp(eps), p- = p*exp(-eps), so:
+                # p+ - p- = p*(exp(eps) - exp(-eps))  [signed]
+                exp_pos = torch.exp(torch.tensor(self.epsilon)).item()
+                exp_neg = torch.exp(torch.tensor(-self.epsilon)).item()
+                delta_central = base_value * (exp_pos - exp_neg)
+                delta_fwd = base_value * (exp_pos - 1.0)
+                delta_bwd = base_value * (1.0 - exp_neg)
+            else:
+                delta_central = 2.0 * self.epsilon
+                delta_fwd = self.epsilon
+                delta_bwd = self.epsilon
 
             if all([mode == "central", "pos" in losses, "neg" in losses]):
-                grad = (losses["pos"] - losses["neg"]) / (2.0 * self.epsilon)
+                grad = (losses["pos"] - losses["neg"]) / delta_central
             elif mode == "forward" and "pos" in losses:
-                grad = (losses["pos"] - loss_base) / self.epsilon
+                grad = (losses["pos"] - loss_base) / delta_fwd
             elif mode == "backward" and "neg" in losses:
-                grad = (loss_base - losses["neg"]) / self.epsilon
+                grad = (loss_base - losses["neg"]) / delta_bwd
             else:
                 grad = torch.zeros_like(loss_base)
 
