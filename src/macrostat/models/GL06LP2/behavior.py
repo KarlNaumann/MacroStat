@@ -102,7 +102,8 @@ class BehaviorGL06LP2(_BehaviorGL06LP):
         BondPrice is set to BondPriceInitial from the scenario.
         """
         super().initialize()
-        self.state["TargetProportion"] = torch.zeros(1)
+        ref = next(iter(self.state.values()))
+        self.state["TargetProportion"] = torch.zeros_like(ref)
         # Set initial bond price from scenario so prior is available
         # self.scenarios is a ParameterDict; take the first element
         self.state["BondPrice"] = self.scenarios["BondPriceInitial"][0]
@@ -195,9 +196,10 @@ class BehaviorGL06LP2(_BehaviorGL06LP):
         bond_value = self.prior["HouseholdBondStock"] * self.prior["BondPrice"]
         total = bond_value + self.prior["HouseholdBillStock"]
 
+        safe_total = torch.where(total.abs() > 1e-10, total, torch.ones_like(total))
         self.state["TargetProportion"] = torch.where(
             total.abs() > 1e-10,
-            bond_value / total,
+            bond_value / safe_total,
             torch.zeros_like(total),
         )
 

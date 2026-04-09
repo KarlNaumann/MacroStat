@@ -101,7 +101,8 @@ class BehaviorGL06LP3(_BehaviorGL06LP2):
         All LP2 variables to zero/defaults, plus PSBR.
         """
         super().initialize()
-        self.state["PublicSectorBorrowingRequirement"] = torch.zeros(1)
+        ref = next(iter(self.state.values()))
+        self.state["PublicSectorBorrowingRequirement"] = torch.zeros_like(ref)
 
     ############################################################################
     # Step
@@ -205,8 +206,8 @@ class BehaviorGL06LP3(_BehaviorGL06LP2):
 
         if prior_y.abs().item() < 1e-10:
             # First period: use scenario value as initial G
-            self.state["ConsumptionGovernment"] = torch.tensor(
-                [scenario["GovernmentDemand"]], dtype=prior_y.dtype
+            self.state["ConsumptionGovernment"] = (
+                torch.ones_like(prior_y) * scenario["GovernmentDemand"]
             )
         else:
             ratio = self.prior["PublicSectorBorrowingRequirement"] / prior_y
