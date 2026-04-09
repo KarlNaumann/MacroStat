@@ -100,6 +100,7 @@ def check_model_differentiability(
     compare_numerical: bool = True,
     numerical_mode: Literal["central", "forward", "backward"] = "central",
     epsilon: float = 1e-5,
+    parameter_space: Literal["direct", "log"] = "direct",
     raise_on_failure: Optional[bool] = None,
 ) -> DifferentiabilityReport:
     """
@@ -125,6 +126,9 @@ def check_model_differentiability(
         Finite-difference scheme to use when comparing against numerical.
     epsilon :
         Step size for finite differences.
+    parameter_space :
+        Space in which to apply perturbations for numerical Jacobian.
+        Default ``"direct"`` is safe for all parameters including zeros.
     raise_on_failure :
         If True and checks fail, raise a RuntimeError instead of just returning
         the report. If None, do not raise.
@@ -176,7 +180,12 @@ def check_model_differentiability(
     rel_err_autodiff_num: Optional[float] = None
 
     if compare_numerical:
-        num = JacobianNumerical(model=model, scenario=scenario, epsilon=epsilon)
+        num = JacobianNumerical(
+            model=model,
+            scenario=scenario,
+            epsilon=epsilon,
+            parameter_space=parameter_space,
+        )
         grads_num = num.compute(loss_fn=loss_fn, mode=numerical_mode)
         max_abs_diff_autodiff_num = _max_abs_diff_dict(grads_rev, grads_num)
         scale = max(

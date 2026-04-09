@@ -49,7 +49,7 @@ class TestDiffLinear2D:
     def test_autograd_vs_numerical_close(self):
         loss_fn = self.make_loss_fn()
         auto = JacobianAutograd(self.model)
-        num = JacobianNumerical(self.model, epsilon=1e-5)
+        num = JacobianNumerical(self.model, epsilon=1e-5, parameter_space="direct")
 
         grads_auto = auto.compute(loss_fn=loss_fn, mode="rev")
         grads_num = num.compute(loss_fn=loss_fn, mode="central")
