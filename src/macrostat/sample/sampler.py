@@ -72,9 +72,12 @@ class BaseSampler:
 
         # Boundaries for the parameters
         self.logspace = logspace
-        self.bounds = (
-            bounds if bounds is not None else self.model.parameters.get_bounds()
-        )
+        if bounds is not None:
+            self.bounds = bounds
+        else:
+            all_bounds = self.model.parameters.get_bounds()
+            free_names = set(self.model.parameters.get_free_param_names())
+            self.bounds = {k: v for k, v in all_bounds.items() if k in free_names}
         self.verify_bounds(self.bounds)
 
         # Computation parameters

@@ -15,9 +15,18 @@ The macrostat.core module consists of the following classes
 """
 
 from .behavior import Behavior
+from .constraints import LinearConstraint
 from .model import Model
 from .parameters import BoundaryError, Parameters
 from .scenarios import Scenarios
 from .variables import Variables
 
-__all__ = ["Behavior", "Parameters", "Model", "Scenarios", "Variables", "BoundaryError"]
+__all__ = [
+    "Behavior",
+    "BoundaryError",
+    "LinearConstraint",
+    "Model",
+    "Parameters",
+    "Scenarios",
+    "Variables",
+]

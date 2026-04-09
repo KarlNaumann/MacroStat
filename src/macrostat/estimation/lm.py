@@ -289,9 +289,13 @@ class LevenbergMarquardt:
         return result
 
     def _get_parameters(self) -> dict[str, torch.Tensor]:
-        """Get current parameter values from model."""
+        """Get current free parameter values from model.
+
+        Excludes derived (constrained) parameters, which are computed
+        from free parameters via ``enforce_constraints()``.
+        """
         params = {}
-        for name in self.model.parameters.values.keys():
+        for name in self.model.parameters.get_free_param_names():
             params[name] = torch.tensor(
                 self.model.parameters.values[name]["value"],
                 dtype=torch.float64,

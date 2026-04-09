@@ -51,6 +51,7 @@ class Behavior(torch.nn.Module):
         # Initialize the parameters
         self.params = parameters.to_nn_parameters()
         self.hyper = parameters.hyper
+        self.constraints = parameters.get_constraints()
 
         # Initialize the scenarios
         self.scenarios = scenarios.to_nn_parameters(scenario=scenario)
@@ -226,6 +227,11 @@ class Behavior(torch.nn.Module):
                             add = add + (ix * scenario[f"{s}_{key}_add"])
 
             params[key] = value * mul + add
+
+        # Enforce adding-up constraints (differentiable)
+        for c in self.constraints:
+            c.enforce(params)
+
         return params
 
     ############################################################################

@@ -284,7 +284,7 @@ class JacobianNumerical(JacobianBase):
             )
 
         if param_names is None:
-            param_names = list(self.model.parameters.values.keys())
+            param_names = self.model.parameters.get_free_param_names()
 
         output_base = self.model.simulate(scenario=self.scenario)
         loss_base = loss_fn(output_base)

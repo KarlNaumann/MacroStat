@@ -14,7 +14,7 @@ import logging
 import pytest
 import torch
 
-from macrostat.core import BoundaryError, Parameters
+from macrostat.core import BoundaryError, LinearConstraint, Parameters
 
 
 @pytest.fixture
@@ -455,3 +455,262 @@ class TestParameters:
         """Test comparison with non-Parameters object"""
         with pytest.raises(AttributeError):
             mock_parameters.is_equal("not a Parameters object")
+
+
+class ConstrainedParameters(Parameters):
+    """Mock parameters with a sum-to-1 constraint."""
+
+    def get_default_parameters(self):
+        return {
+            "a": {
+                "value": 0.3,
+                "lower bound": -1.0,
+                "upper bound": 1.0,
+                "unit": ".",
+                "notation": "a",
+            },
+            "b": {
+                "value": 0.5,
+                "lower bound": -1.0,
+                "upper bound": 1.0,
+                "unit": ".",
+                "notation": "b",
+            },
+            "c": {
+                "value": 0.2,
+                "lower bound": -1.0,
+                "upper bound": 1.0,
+                "unit": ".",
+                "notation": "c",
+            },
+        }
+
+    def get_constraints(self):
+        return (LinearConstraint(param_names=("a", "b", "c"), target=1.0),)
+
+
+class TestConstraints:
+    """Tests for the LinearConstraint system."""
+
+    def test_get_constraints_default_empty(self):
+        """Base Parameters returns no constraints."""
+        p = Parameters()
+        assert p.get_constraints() == ()
+
+    def test_get_constraints_returns_tuple(self):
+        """Constrained parameters return a tuple of LinearConstraint."""
+        p = ConstrainedParameters()
+        constraints = p.get_constraints()
+        assert len(constraints) == 1
+        assert isinstance(constraints[0], LinearConstraint)
+
+    def test_linear_constraint_properties(self):
+        """Test free_params and derived_param properties."""
+        c = LinearConstraint(param_names=("a", "b", "c"), target=1.0)
+        assert c.free_params == ("a", "b")
+        assert c.derived_param == "c"
+
+    def test_enforce_constraints_adjusts_derived(self):
+        """Enforce adjusts derived param to satisfy constraint."""
+        p = ConstrainedParameters()
+        # Manually break the constraint
+        p.values["a"]["value"] = 0.6
+        p.enforce_constraints()
+        # c should be 1.0 - 0.6 - 0.5 = -0.1
+        assert abs(p.values["c"]["value"] - (-0.1)) < 1e-12
+
+    def test_enforce_constraints_noop_when_satisfied(self):
+        """Enforce does nothing when constraint is already satisfied."""
+        p = ConstrainedParameters()
+        old_c = p.values["c"]["value"]
+        p.enforce_constraints()
+        assert p.values["c"]["value"] == old_c
+
+    def test_init_enforces_constraints(self):
+        """Constraints are enforced during __init__."""
+        p = ConstrainedParameters()
+        # Mutate a free param after init, then re-enforce
+        p.values["a"]["value"] = 0.7
+        p.values["b"]["value"] = 0.1
+        p.enforce_constraints()
+        # c should be adjusted to 1.0 - 0.7 - 0.1 = 0.2
+        assert abs(p["c"] - 0.2) < 1e-12
+
+    def test_verify_constraints_duplicate_derived_raises(self):
+        """Error when same param is derived in two constraints."""
+
+        class BadParams(Parameters):
+            def get_default_parameters(self):
+                return {
+                    "a": {
+                        "value": 0.5,
+                        "lower bound": -1.0,
+                        "upper bound": 1.0,
+                        "unit": ".",
+                        "notation": "a",
+                    },
+                    "b": {
+                        "value": 0.3,
+                        "lower bound": -1.0,
+                        "upper bound": 1.0,
+                        "unit": ".",
+                        "notation": "b",
+                    },
+                    "c": {
+                        "value": 0.2,
+                        "lower bound": -1.0,
+                        "upper bound": 1.0,
+                        "unit": ".",
+                        "notation": "c",
+                    },
+                }
+
+            def get_constraints(self):
+                return (
+                    LinearConstraint(param_names=("a", "c"), target=1.0),
+                    LinearConstraint(param_names=("b", "c"), target=0.0),
+                )
+
+        with pytest.raises(ValueError, match="derived in multiple"):
+            BadParams()
+
+    def test_verify_constraints_derived_as_free_raises(self):
+        """Error when derived param in one constraint is free in another."""
+
+        class BadParams(Parameters):
+            def get_default_parameters(self):
+                return {
+                    "a": {
+                        "value": 0.5,
+                        "lower bound": -1.0,
+                        "upper bound": 1.0,
+                        "unit": ".",
+                        "notation": "a",
+                    },
+                    "b": {
+                        "value": 0.3,
+                        "lower bound": -1.0,
+                        "upper bound": 1.0,
+                        "unit": ".",
+                        "notation": "b",
+                    },
+                    "c": {
+                        "value": 0.2,
+                        "lower bound": -1.0,
+                        "upper bound": 1.0,
+                        "unit": ".",
+                        "notation": "c",
+                    },
+                    "d": {
+                        "value": 0.0,
+                        "lower bound": -1.0,
+                        "upper bound": 1.0,
+                        "unit": ".",
+                        "notation": "d",
+                    },
+                }
+
+            def get_constraints(self):
+                return (
+                    LinearConstraint(param_names=("a", "c"), target=1.0),
+                    LinearConstraint(param_names=("c", "d"), target=0.0),
+                )
+
+        with pytest.raises(ValueError, match="derived in one.*free in another"):
+            BadParams()
+
+    def test_verify_constraints_unknown_param_raises(self):
+        """Error when constraint references nonexistent parameter."""
+
+        class BadParams(Parameters):
+            def get_default_parameters(self):
+                return {
+                    "a": {
+                        "value": 0.5,
+                        "lower bound": 0.0,
+                        "upper bound": 1.0,
+                        "unit": ".",
+                        "notation": "a",
+                    },
+                }
+
+            def get_constraints(self):
+                return (LinearConstraint(param_names=("a", "nonexistent"), target=1.0),)
+
+        with pytest.raises(ValueError, match="unknown parameter"):
+            BadParams()
+
+    def test_verify_constraints_warns_on_violation(self, caplog):
+        """Warning when defaults don't satisfy constraint."""
+
+        class WarnParams(Parameters):
+            def get_default_parameters(self):
+                return {
+                    "a": {
+                        "value": 0.5,
+                        "lower bound": -1.0,
+                        "upper bound": 1.0,
+                        "unit": ".",
+                        "notation": "a",
+                    },
+                    "b": {
+                        "value": 0.3,
+                        "lower bound": -1.0,
+                        "upper bound": 1.0,
+                        "unit": ".",
+                        "notation": "b",
+                    },
+                    "c": {
+                        "value": 0.1,
+                        "lower bound": -1.0,
+                        "upper bound": 1.0,
+                        "unit": ".",
+                        "notation": "c",
+                    },
+                }
+
+            def get_constraints(self):
+                return (LinearConstraint(param_names=("a", "b", "c"), target=1.0),)
+
+        with caplog.at_level(logging.WARNING):
+            WarnParams()
+        assert "Constraint violation" in caplog.text
+
+    def test_get_free_param_names(self):
+        """Derived params excluded from free param names."""
+        p = ConstrainedParameters()
+        free = p.get_free_param_names()
+        assert "a" in free
+        assert "b" in free
+        assert "c" not in free
+
+    def test_get_values_enforces_constraints(self):
+        """get_values() returns constrained values even after mutation."""
+        p = ConstrainedParameters()
+        p.values["a"]["value"] = 0.7
+        vals = p.get_values()
+        assert abs(vals["a"] + vals["b"] + vals["c"] - 1.0) < 1e-12
+
+    def test_to_nn_parameters_enforces_constraints(self):
+        """to_nn_parameters() enforces before converting."""
+        p = ConstrainedParameters()
+        p.values["a"]["value"] = 0.7
+        nn_params = p.to_nn_parameters()
+        total = nn_params["a"].item() + nn_params["b"].item() + nn_params["c"].item()
+        assert abs(total - 1.0) < 1e-6
+
+    def test_enforce_differentiable(self):
+        """LinearConstraint.enforce() supports autograd."""
+        c = LinearConstraint(param_names=("a", "b", "c"), target=1.0)
+        a = torch.tensor(0.3, requires_grad=True)
+        b = torch.tensor(0.5, requires_grad=True)
+        params = {"a": a, "b": b, "c": torch.tensor(0.0)}
+        c.enforce(params)
+
+        # c = 1.0 - a - b = 0.2
+        assert torch.isclose(params["c"], torch.tensor(0.2))
+
+        # d(c)/d(a) = -1, d(c)/d(b) = -1
+        params["c"].backward()
+        assert torch.isclose(a.grad, torch.tensor(-1.0))
+        assert torch.isclose(b.grad, torch.tensor(-1.0))

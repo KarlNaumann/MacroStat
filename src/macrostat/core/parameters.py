@@ -16,6 +16,8 @@ import os
 import pandas as pd
 import torch
 
+from macrostat.core.constraints import LinearConstraint
+
 logger = logging.getLogger(__name__)
 
 
@@ -64,6 +66,8 @@ class Parameters:
             self.hyper.update(new)
 
         self.verify_bounds()
+        self.verify_constraints()
+        self.enforce_constraints()
         self.verify_parameters()
 
     def __contains__(self, key: str):
@@ -230,6 +234,114 @@ class Parameters:
         """
         return {}
 
+    def get_constraints(self) -> tuple[LinearConstraint, ...]:
+        """Return parameter constraints for this model.
+
+        Override in subclasses to declare adding-up constraints.
+        Default: no constraints.
+
+        Returns
+        -------
+        tuple[LinearConstraint, ...]
+            Constraints to enforce. Order matters if a derived param
+            in one constraint is free in another (topological ordering).
+        """
+        return ()
+
+    def verify_constraints(self):
+        """Verify that declared constraints are well-formed.
+
+        Raises
+        ------
+        ValueError
+            If a parameter appears as derived in more than one constraint,
+            or if a derived parameter in one constraint appears as a free
+            parameter in another constraint, or if a constraint references
+            a parameter not in self.values.
+        """
+        constraints = self.get_constraints()
+        if not constraints:
+            return
+
+        derived_params = []
+        for c in constraints:
+            # Check all param names exist
+            for name in c.param_names:
+                if name not in self.values:
+                    raise ValueError(
+                        f"Constraint references unknown parameter '{name}'. "
+                        f"Available: {sorted(self.values.keys())}"
+                    )
+            derived_params.append(c.derived_param)
+
+        # Check no duplicate derived params
+        if len(derived_params) != len(set(derived_params)):
+            seen = set()
+            duplicates = []
+            for p in derived_params:
+                if p in seen:
+                    duplicates.append(p)
+                seen.add(p)
+            raise ValueError(
+                f"Parameter(s) {duplicates} appear as derived in multiple "
+                f"constraints. Each parameter can be derived in at most one."
+            )
+
+        # Check no derived param is free in another constraint
+        derived_set = set(derived_params)
+        for c in constraints:
+            overlap = derived_set & set(c.free_params)
+            if overlap:
+                raise ValueError(
+                    f"Parameter(s) {sorted(overlap)} are derived in one "
+                    f"constraint but appear as free in another. This creates "
+                    f"circular dependencies."
+                )
+
+        # Warn if defaults violate constraints
+        for c in constraints:
+            actual_sum = sum(self.values[name]["value"] for name in c.param_names)
+            if abs(actual_sum - c.target) > 1e-6:
+                logger.warning(
+                    "Constraint violation in defaults: sum(%s) = %.8f, "
+                    "target = %.8f. Derived parameter '%s' will be adjusted.",
+                    c.param_names,
+                    actual_sum,
+                    c.target,
+                    c.derived_param,
+                )
+
+    def enforce_constraints(self):
+        """Enforce all constraints by adjusting derived parameter values.
+
+        Modifies ``self.values[derived_param]["value"]`` in place so that
+        the adding-up constraint is satisfied. Called during ``__init__``
+        and before any export (``to_nn_parameters``, ``to_json``, etc.).
+        """
+        for c in self.get_constraints():
+            free_sum = sum(self.values[name]["value"] for name in c.free_params)
+            new_value = c.target - free_sum
+            old_value = self.values[c.derived_param]["value"]
+            if abs(old_value - new_value) > 1e-12:
+                logger.debug(
+                    "Constraint: %s adjusted from %.8g to %.8g",
+                    c.derived_param,
+                    old_value,
+                    new_value,
+                )
+            self.values[c.derived_param]["value"] = new_value
+
+    def get_free_param_names(self) -> list[str]:
+        """Return parameter names excluding derived (constrained) parameters.
+
+        Returns
+        -------
+        list[str]
+            All parameter names that are free (not derived by any constraint).
+        """
+        derived = {c.derived_param for c in self.get_constraints()}
+        return [name for name in self.values if name not in derived]
+
     def get_bounds(self):
         """Return the bounds for the parameters."""
         return {
@@ -239,6 +351,7 @@ class Parameters:
 
     def get_values(self):
         """Return the values for the parameters."""
+        self.enforce_constraints()
         return {key: info["value"] for key, info in self.values.items()}
 
     def is_equal(self, other: "Parameters"):
@@ -277,6 +390,7 @@ class Parameters:
         sphinx_math: bool
             Whether to use Sphinx math notation in the CSV file.
         """
+        self.enforce_constraints()
         par = pd.DataFrame.from_dict(self.values, orient="index").sort_index()
         par = par[["notation", "unit", "value", "lower bound", "upper bound"]]
         par.columns = ["Notation", "Unit", "Value", "Lower Bound", "Upper Bound"]
@@ -310,6 +424,7 @@ class Parameters:
         file_path: os.PathLike
             The path to the JSON file to save the parameters to.
         """
+        self.enforce_constraints()
         with open(file_path, "w") as file:
             json.dump(
                 {
@@ -321,6 +436,7 @@ class Parameters:
 
     def to_nn_parameters(self):
         """Convert the parameters to a nn.ParameterDict."""
+        self.enforce_constraints()
         vectorized = self.vectorize_parameters()
         return torch.nn.ParameterDict(vectorized)
 
