@@ -13,6 +13,7 @@ __maintainer__ = ["Karl Naumann-Woleske"]
 
 import logging
 
+from macrostat.core.constraints import LinearConstraint
 from macrostat.core.parameters import Parameters
 
 logger = logging.getLogger(__name__)
@@ -407,6 +408,68 @@ class ParametersGL06INSOUT(Parameters):
                 "value": -0.06,
             },
         }
+
+    def get_constraints(self) -> tuple[LinearConstraint, ...]:
+        """Return adding-up constraints for the Tobin portfolio matrix.
+
+        The GL06INSOUT model has a 4-asset Tobin portfolio allocation
+        (M1, M2, Bills, Bonds). The Godley-Lavoie adding-up constraints
+        require constant shares to sum to 1, and each rate/income
+        sensitivity column to sum to 0. M1 (cash) is the buffer-stock
+        residual asset.
+        """
+        return (
+            # Constants: lambda_20 + lambda_30 + lambda_40 + lambda_10 = 1
+            LinearConstraint(
+                param_names=(
+                    "WealthShareM2_Constant",
+                    "WealthShareBills_Constant",
+                    "WealthShareBonds_Constant",
+                    "WealthShareM1_Constant",
+                ),
+                target=1.0,
+            ),
+            # Deposit rate sensitivities sum to 0
+            LinearConstraint(
+                param_names=(
+                    "WealthShareM2_DepositRate",
+                    "WealthShareBills_DepositRate",
+                    "WealthShareBonds_DepositRate",
+                    "WealthShareM1_DepositRate",
+                ),
+                target=0.0,
+            ),
+            # Bill rate sensitivities sum to 0
+            LinearConstraint(
+                param_names=(
+                    "WealthShareM2_BillRate",
+                    "WealthShareBills_BillRate",
+                    "WealthShareBonds_BillRate",
+                    "WealthShareM1_BillRate",
+                ),
+                target=0.0,
+            ),
+            # Bond yield sensitivities sum to 0
+            LinearConstraint(
+                param_names=(
+                    "WealthShareM2_BondYield",
+                    "WealthShareBills_BondYield",
+                    "WealthShareBonds_BondYield",
+                    "WealthShareM1_BondYield",
+                ),
+                target=0.0,
+            ),
+            # Income sensitivities sum to 0
+            LinearConstraint(
+                param_names=(
+                    "WealthShareM2_Income",
+                    "WealthShareBills_Income",
+                    "WealthShareBonds_Income",
+                    "WealthShareM1_Income",
+                ),
+                target=0.0,
+            ),
+        )
 
     def get_default_hyperparameters(self):
         """Return the default hyperparameter values."""
