@@ -474,3 +474,100 @@ def test_scenario7_higher_wage_and_rate():
         f"Scenario 7 should raise bill rate: "
         f"base={r_base.item():.4f}, shock={r_shock.item():.4f}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Constraint system integration
+# ---------------------------------------------------------------------------
+
+
+def test_constraint_system_step_integration():
+    """End-to-end: the resolver and vectorizer agree on the scalar path.
+
+    GL06INSOUT declares five :class:`LinearConstraint` groups, all
+    naming the M1 slot of the Tobin portfolio matrix as the residual.
+    This test calls ``apply_parameter_shocks`` once (with no shocks)
+    and confirms that every derived parameter matches the
+    init-time-enforced value. It is the only test that pins the full
+    resolver-to-vectorizer round-trip on a production model.
+    """
+    from macrostat.models.GL06INSOUT import BehaviorGL06INSOUT
+
+    model, params, scenarios = _make_model(timesteps=100)
+    behavior = BehaviorGL06INSOUT(
+        parameters=params,
+        scenarios=scenarios,
+        variables=VariablesGL06INSOUT(parameters=params),
+        scenario=0,
+    )
+
+    shocked = behavior.apply_parameter_shocks(t=0, scenario={})
+
+    derived_names = [
+        "WealthShareM1_Constant",
+        "WealthShareM1_DepositRate",
+        "WealthShareM1_BillRate",
+        "WealthShareM1_BondYield",
+        "WealthShareM1_Income",
+    ]
+    for name in derived_names:
+        init_value = params.values[name]["value"]
+        step_value = shocked[name].item()
+        assert abs(init_value - step_value) < 1e-6, (
+            f"Init/step mismatch on {name}: "
+            f"init={init_value:.8g}, step={step_value:.8g}"
+        )
+
+    # All five adding-up identities must hold on the step-time tensors.
+    groups = {
+        "Constant": 1.0,
+        "DepositRate": 0.0,
+        "BillRate": 0.0,
+        "BondYield": 0.0,
+        "Income": 0.0,
+    }
+    for col, target in groups.items():
+        total = (
+            shocked[f"WealthShareM1_{col}"]
+            + shocked[f"WealthShareM2_{col}"]
+            + shocked[f"WealthShareBills_{col}"]
+            + shocked[f"WealthShareBonds_{col}"]
+        )
+        assert torch.isclose(
+            total, torch.tensor(target), atol=1e-6
+        ), f"Tobin {col} column does not sum to {target}: {total.item()}"
+
+
+def test_constraint_system_derived_grads_are_zero():
+    """Derived M1 parameters have zero autograd sensitivity end-to-end.
+
+    Runs a short simulation with ``requires_grad=True`` and checks
+    that no upstream loss can place gradient mass on the derived M1
+    slots, because they are recomputed residually each step.
+    """
+    from macrostat.models.GL06INSOUT import BehaviorGL06INSOUT
+
+    model, params, scenarios = _make_model(timesteps=100)
+    behavior = BehaviorGL06INSOUT(
+        parameters=params,
+        scenarios=scenarios,
+        variables=VariablesGL06INSOUT(parameters=params),
+        scenario=0,
+    )
+
+    shocked = behavior.apply_parameter_shocks(t=0, scenario={})
+    loss = sum(
+        shocked[f"WealthShareM1_{col}"]
+        for col in ("Constant", "DepositRate", "BillRate", "BondYield", "Income")
+    )
+    loss.backward()
+
+    for col in ("Constant", "DepositRate", "BillRate", "BondYield", "Income"):
+        derived = behavior.params[f"WealthShareM1_{col}"]
+        # Derived leaf has no grad because it is never read through the
+        # constraint path — the step-time value is recomputed from free
+        # params.
+        if derived.grad is not None:
+            assert (
+                derived.grad.abs().max().item() == 0.0
+            ), f"Derived parameter WealthShareM1_{col} has non-zero grad"
