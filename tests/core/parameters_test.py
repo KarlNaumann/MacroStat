@@ -14,7 +14,14 @@ import logging
 import pytest
 import torch
 
-from macrostat.core import BoundaryError, LinearConstraint, Parameters
+from macrostat.core import (
+    BoundaryError,
+    ConstraintError,
+    ConstraintResolver,
+    LinearConstraint,
+    ParameterLocation,
+    Parameters,
+)
 
 
 @pytest.fixture
@@ -699,13 +706,20 @@ class TestConstraints:
         total = nn_params["a"].item() + nn_params["b"].item() + nn_params["c"].item()
         assert abs(total - 1.0) < 1e-6
 
-    def test_enforce_differentiable(self):
-        """LinearConstraint.enforce() supports autograd."""
+    def test_apply_differentiable(self):
+        """LinearConstraint.apply() supports autograd via the scalar path."""
         c = LinearConstraint(param_names=("a", "b", "c"), target=1.0)
+        resolver = ConstraintResolver(
+            {
+                "a": ParameterLocation("a", None),
+                "b": ParameterLocation("b", None),
+                "c": ParameterLocation("c", None),
+            }
+        )
         a = torch.tensor(0.3, requires_grad=True)
         b = torch.tensor(0.5, requires_grad=True)
         params = {"a": a, "b": b, "c": torch.tensor(0.0)}
-        c.enforce(params)
+        c.apply(params, resolver)
 
         # c = 1.0 - a - b = 0.2
         assert torch.isclose(params["c"], torch.tensor(0.2))
@@ -714,3 +728,263 @@ class TestConstraints:
         params["c"].backward()
         assert torch.isclose(a.grad, torch.tensor(-1.0))
         assert torch.isclose(b.grad, torch.tensor(-1.0))
+
+    # ------------------------------------------------------------------
+    # Resolver construction and caching
+    # ------------------------------------------------------------------
+
+    def test_get_constraint_resolver_caches(self):
+        """Two calls to get_constraint_resolver return the same object."""
+        p = ConstrainedParameters()
+        r1 = p.get_constraint_resolver()
+        r2 = p.get_constraint_resolver()
+        assert r1 is r2
+
+    def test_get_constraint_resolver_default_is_scalar(self):
+        """Without vector_sectors, every name resolves to a scalar slot."""
+        p = ConstrainedParameters()
+        r = p.get_constraint_resolver()
+        for name in ("a", "b", "c"):
+            loc = r.locate(name)
+            assert loc.index is None
+            assert loc.tensor_key == name
+
+    def test_get_constraint_resolver_builds_1d_for_sector_prefixed_names(self):
+        """Sector-prefixed names resolve to 1-D tensor slots."""
+
+        class VecParams(Parameters):
+            def get_default_parameters(self):
+                return {
+                    "Household.Share": {
+                        "value": 0.4,
+                        "lower bound": 0.0,
+                        "upper bound": 1.0,
+                        "unit": ".",
+                        "notation": "s_H",
+                    },
+                    "Firm.Share": {
+                        "value": 0.3,
+                        "lower bound": 0.0,
+                        "upper bound": 1.0,
+                        "unit": ".",
+                        "notation": "s_F",
+                    },
+                    "Bank.Share": {
+                        "value": 0.3,
+                        "lower bound": 0.0,
+                        "upper bound": 1.0,
+                        "unit": ".",
+                        "notation": "s_B",
+                    },
+                }
+
+            def get_default_hyperparameters(self):
+                h = super().get_default_hyperparameters()
+                h["vector_sectors"] = ["Household", "Firm", "Bank"]
+                return h
+
+        p = VecParams()
+        r = p.get_constraint_resolver()
+        # vsecs sorted: ['Bank', 'Firm', 'Household']
+        assert r.locate("Bank.Share") == ParameterLocation("Share", (0,))
+        assert r.locate("Firm.Share") == ParameterLocation("Share", (1,))
+        assert r.locate("Household.Share") == ParameterLocation("Share", (2,))
+
+    def test_get_constraint_resolver_builds_2d_for_matrix_names(self):
+        """Row-col-sector prefixed names resolve to 2-D tensor slots."""
+
+        class MatParams(Parameters):
+            def get_default_parameters(self):
+                return {
+                    "Household.Firm.Flow": {
+                        "value": 0.3,
+                        "lower bound": 0.0,
+                        "upper bound": 1.0,
+                        "unit": ".",
+                        "notation": "F_HF",
+                    },
+                    "Firm.Household.Flow": {
+                        "value": 0.2,
+                        "lower bound": 0.0,
+                        "upper bound": 1.0,
+                        "unit": ".",
+                        "notation": "F_FH",
+                    },
+                }
+
+            def get_default_hyperparameters(self):
+                h = super().get_default_hyperparameters()
+                h["vector_sectors"] = ["Household", "Firm"]
+                return h
+
+        p = MatParams()
+        r = p.get_constraint_resolver()
+        # vsecs sorted: ['Firm', 'Household']
+        assert r.locate("Household.Firm.Flow") == ParameterLocation("Flow", (1, 0))
+        assert r.locate("Firm.Household.Flow") == ParameterLocation("Flow", (0, 1))
+
+    # ------------------------------------------------------------------
+    # verify_constraints: new checks
+    # ------------------------------------------------------------------
+
+    def test_verify_constraints_rejects_derived_out_of_bounds(self):
+        """Init-time derived bounds check rejects infeasible constraint."""
+
+        class OutOfBoundsParams(Parameters):
+            def get_default_parameters(self):
+                return {
+                    "a": {
+                        "value": 0.8,
+                        "lower bound": 0.0,
+                        "upper bound": 1.0,
+                        "unit": ".",
+                        "notation": "a",
+                    },
+                    "b": {
+                        "value": 0.9,
+                        "lower bound": 0.0,
+                        "upper bound": 1.0,
+                        "unit": ".",
+                        "notation": "b",
+                    },
+                    "c": {
+                        "value": 0.0,
+                        "lower bound": 0.0,
+                        "upper bound": 1.0,
+                        "unit": ".",
+                        "notation": "c",
+                    },
+                }
+
+            def get_constraints(self):
+                # 1.0 - 0.8 - 0.9 = -0.7, below c's lower bound 0.0
+                return (LinearConstraint(("a", "b", "c"), target=1.0),)
+
+        with pytest.raises(ConstraintError, match="below its lower bound"):
+            OutOfBoundsParams()
+
+    def test_verify_constraints_rejects_derived_above_upper(self):
+        """Init-time derived bounds check rejects upper-bound violation."""
+
+        class AboveParams(Parameters):
+            def get_default_parameters(self):
+                return {
+                    "a": {
+                        "value": -1.0,
+                        "lower bound": -2.0,
+                        "upper bound": 2.0,
+                        "unit": ".",
+                        "notation": "a",
+                    },
+                    "b": {
+                        "value": -1.0,
+                        "lower bound": -2.0,
+                        "upper bound": 2.0,
+                        "unit": ".",
+                        "notation": "b",
+                    },
+                    "c": {
+                        "value": 0.0,
+                        "lower bound": 0.0,
+                        "upper bound": 1.0,
+                        "unit": ".",
+                        "notation": "c",
+                    },
+                }
+
+            def get_constraints(self):
+                # 1.0 - (-1) - (-1) = 3.0, above c's upper bound 1.0
+                return (LinearConstraint(("a", "b", "c"), target=1.0),)
+
+        with pytest.raises(ConstraintError, match="above its upper bound"):
+            AboveParams()
+
+    def test_verify_constraints_rejects_mixed_shape(self):
+        """Shape-homogeneity check rejects a constraint mixing scalar and indexed."""
+
+        class MixedShapeParams(Parameters):
+            def get_default_parameters(self):
+                return {
+                    "Global": {
+                        "value": 0.5,
+                        "lower bound": 0.0,
+                        "upper bound": 1.0,
+                        "unit": ".",
+                        "notation": "g",
+                    },
+                    "Household.Share": {
+                        "value": 0.3,
+                        "lower bound": 0.0,
+                        "upper bound": 1.0,
+                        "unit": ".",
+                        "notation": "s_H",
+                    },
+                    "Firm.Share": {
+                        "value": 0.2,
+                        "lower bound": 0.0,
+                        "upper bound": 1.0,
+                        "unit": ".",
+                        "notation": "s_F",
+                    },
+                }
+
+            def get_default_hyperparameters(self):
+                h = super().get_default_hyperparameters()
+                h["vector_sectors"] = ["Household", "Firm"]
+                return h
+
+            def get_constraints(self):
+                return (
+                    LinearConstraint(
+                        ("Global", "Household.Share", "Firm.Share"),
+                        target=1.0,
+                    ),
+                )
+
+        with pytest.raises(ConstraintError, match="mixes scalar and indexed"):
+            MixedShapeParams()
+
+    def test_verify_constraints_uses_constraint_error(self):
+        """verify_constraints raises ConstraintError (a ValueError subclass)."""
+
+        class BadParams(Parameters):
+            def get_default_parameters(self):
+                return {
+                    "a": {
+                        "value": 0.5,
+                        "lower bound": 0.0,
+                        "upper bound": 1.0,
+                        "unit": ".",
+                        "notation": "a",
+                    },
+                }
+
+            def get_constraints(self):
+                return (LinearConstraint(("a", "missing"), target=1.0),)
+
+        with pytest.raises(ConstraintError):
+            BadParams()
+        # Backward-compat: catching ValueError also works.
+        with pytest.raises(ValueError):
+            BadParams()
+
+    # ------------------------------------------------------------------
+    # Init-vs-step invariant
+    # ------------------------------------------------------------------
+
+    def test_init_vs_step_invariant(self):
+        """Post-init derived value equals post-apply value at step zero."""
+        p = ConstrainedParameters()
+        init_c = p.values["c"]["value"]
+
+        # Simulate step time: vectorize and apply the constraint freshly.
+        tensors = p.vectorize_parameters()
+        resolver = p.get_constraint_resolver()
+        constraints = p.get_constraints()
+        for constraint in constraints:
+            constraint.apply(tensors, resolver)
+
+        step_c = tensors["c"].item()
+        # float32 tensors vs float64 python floats; 1e-6 is the float32
+        # precision floor.
+        assert abs(init_c - step_c) < 1e-6
