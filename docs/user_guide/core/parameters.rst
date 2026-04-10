@@ -3,6 +3,12 @@ Parameters
 ================
 .. currentmodule:: macrostat.core.parameters
 
+.. seealso::
+
+   :doc:`constraints` documents the :class:`~macrostat.core.constraints.LinearConstraint`
+   system and the :meth:`Parameters.get_constraints` hook used to declare
+   adding-up relationships between parameters.
+
 This class is the base class for all parameter classes. It contains the common methods for all parameter classes.
 
 Constructor
@@ -36,6 +42,15 @@ Parameter Management
    Parameters.set_unit
    Parameters.verify_bounds
    Parameters.verify_parameters
+
+Constraints
+~~~~~~~~~~~
+.. autosummary::
+
+   Parameters.get_constraints
+   Parameters.verify_constraints
+   Parameters.enforce_constraints
+   Parameters.get_free_param_names
 
 Notes
 ~~~~~
