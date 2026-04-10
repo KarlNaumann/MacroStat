@@ -16,7 +16,12 @@ import os
 import pandas as pd
 import torch
 
-from macrostat.core.constraints import LinearConstraint
+from macrostat.core.constraints import (
+    ConstraintError,
+    ConstraintResolver,
+    LinearConstraint,
+    ParameterLocation,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +69,10 @@ class Parameters:
         if hyperparameters is not None:
             new = {k: v for k, v in hyperparameters.items() if k in self.hyper}
             self.hyper.update(new)
+
+        # Lazily built on first call to get_constraint_resolver; any future
+        # mutation API that changes self.values must call _invalidate_resolver.
+        self._constraint_resolver: ConstraintResolver | None = None
 
         self.verify_bounds()
         self.verify_constraints()
@@ -240,41 +249,135 @@ class Parameters:
         Override in subclasses to declare adding-up constraints.
         Default: no constraints.
 
+        Constraints are applied in declaration order. Chaining
+        (a derived parameter in one constraint appearing as a free
+        parameter in another) is explicitly rejected by
+        :meth:`verify_constraints`.
+
         Returns
         -------
         tuple[LinearConstraint, ...]
-            Constraints to enforce. Order matters if a derived param
-            in one constraint is free in another (topological ordering).
+            Constraints to enforce on this parameter set.
         """
         return ()
+
+    def get_constraint_resolver(self) -> ConstraintResolver:
+        """Return a :class:`ConstraintResolver` for the current parameter set.
+
+        Built lazily on first call and cached on the instance. The
+        resolver maps canonical (dotted) parameter names to their
+        :class:`ParameterLocation` in the step-time tensor dict that
+        :meth:`vectorize_parameters` produces. This lets the same
+        :class:`LinearConstraint` apply to scalar, 1-D sector-indexed,
+        and 2-D sector-by-sector parameter layouts uniformly.
+
+        The build logic mirrors :meth:`vectorize_parameters`:
+
+        * ``len(parts) == 2`` and first part in ``vector_sectors`` →
+          1-D slot at ``tensor_key=parts[1]`` indexed by the sector
+          position.
+        * ``len(parts) == 3`` and first two parts in ``vector_sectors`` →
+          2-D slot at ``tensor_key=parts[2]`` indexed by the row and
+          column sector positions.
+        * Otherwise → scalar slot at ``tensor_key=name.replace(".", "_")``
+          with ``index=None``.
+
+        Returns
+        -------
+        ConstraintResolver
+            Resolver over the current parameter set.
+        """
+        if self._constraint_resolver is not None:
+            return self._constraint_resolver
+
+        if "vector_sectors" in self.hyper:
+            vsecs = sorted(self.hyper["vector_sectors"])
+        else:
+            vsecs = []
+
+        mapping: dict[str, ParameterLocation] = {}
+        for name in self.values:
+            parts = name.split(".")
+
+            if len(parts) == 2 and parts[0] in vsecs:
+                sec, par = parts
+                mapping[name] = ParameterLocation(
+                    tensor_key=par,
+                    index=(vsecs.index(sec),),
+                )
+            elif len(parts) == 3 and parts[0] in vsecs and parts[1] in vsecs:
+                rowsec, colsec, par = parts
+                mapping[name] = ParameterLocation(
+                    tensor_key=par,
+                    index=(vsecs.index(rowsec), vsecs.index(colsec)),
+                )
+            else:
+                mapping[name] = ParameterLocation(
+                    tensor_key=name.replace(".", "_"),
+                    index=None,
+                )
+
+        self._constraint_resolver = ConstraintResolver(mapping)
+        return self._constraint_resolver
+
+    def _invalidate_resolver(self) -> None:
+        """Drop the cached :class:`ConstraintResolver`.
+
+        Call from any future mutation API that changes the key set of
+        ``self.values`` or the ``vector_sectors`` hyperparameter.
+        Currently unused because parameters are effectively frozen
+        after ``__init__``.
+        """
+        self._constraint_resolver = None
 
     def verify_constraints(self):
         """Verify that declared constraints are well-formed.
 
+        Runs seven checks against the declared constraint set:
+
+        1. Every referenced parameter exists in ``self.values``.
+        2. No parameter is derived in more than one constraint.
+        3. No derived parameter appears as a free parameter in another
+           constraint (chaining is not supported).
+        4. Every referenced parameter is locatable by the resolver
+           returned from :meth:`get_constraint_resolver`. This is a
+           defensive check against divergence between the parameter
+           dictionary and the resolver build rules.
+        5. Within each constraint, all parameter locations share a
+           compatible shape class: all scalar, or all 1-D slots of the
+           same ``tensor_key``, or all 2-D slots of the same
+           ``tensor_key``. Mixed-shape constraints are rejected.
+        6. The prospective post-enforcement value of the derived
+           parameter (``target - sum(free)``) lies within its declared
+           bounds. Catches misdeclared constraints at init time rather
+           than after enforcement.
+        7. If any constraint is violated by the provided defaults, a
+           warning is logged and the derived parameter will be
+           adjusted by :meth:`enforce_constraints`.
+
         Raises
         ------
-        ValueError
-            If a parameter appears as derived in more than one constraint,
-            or if a derived parameter in one constraint appears as a free
-            parameter in another constraint, or if a constraint references
-            a parameter not in self.values.
+        ConstraintError
+            If any of checks 1-6 fail. :class:`ConstraintError`
+            subclasses :class:`ValueError`, so callers that catch
+            ``ValueError`` continue to work.
         """
         constraints = self.get_constraints()
         if not constraints:
             return
 
+        # Check 1: all referenced parameter names exist.
         derived_params = []
         for c in constraints:
-            # Check all param names exist
             for name in c.param_names:
                 if name not in self.values:
-                    raise ValueError(
+                    raise ConstraintError(
                         f"Constraint references unknown parameter '{name}'. "
                         f"Available: {sorted(self.values.keys())}"
                     )
             derived_params.append(c.derived_param)
 
-        # Check no duplicate derived params
+        # Check 2: no duplicate derived params.
         if len(derived_params) != len(set(derived_params)):
             seen = set()
             duplicates = []
@@ -282,23 +385,88 @@ class Parameters:
                 if p in seen:
                     duplicates.append(p)
                 seen.add(p)
-            raise ValueError(
+            raise ConstraintError(
                 f"Parameter(s) {duplicates} appear as derived in multiple "
                 f"constraints. Each parameter can be derived in at most one."
             )
 
-        # Check no derived param is free in another constraint
+        # Check 3: no derived param is free in another constraint.
         derived_set = set(derived_params)
         for c in constraints:
             overlap = derived_set & set(c.free_params)
             if overlap:
-                raise ValueError(
+                raise ConstraintError(
                     f"Parameter(s) {sorted(overlap)} are derived in one "
-                    f"constraint but appear as free in another. This creates "
-                    f"circular dependencies."
+                    f"constraint but appear as free in another. Chained "
+                    f"constraints are not supported."
                 )
 
-        # Warn if defaults violate constraints
+        # Check 4: every name is resolvable. Uses a fresh resolver so
+        # any divergence between the cache and the current parameter
+        # dictionary surfaces here.
+        resolver = self.get_constraint_resolver()
+        for c in constraints:
+            for name in c.param_names:
+                if name not in resolver:
+                    raise ConstraintError(
+                        f"Constraint parameter '{name}' is not resolvable "
+                        f"to a tensor slot. This usually indicates a "
+                        f"mismatch between the parameter name and the "
+                        f"vector_sectors hyperparameter."
+                    )
+
+        # Check 5: shape homogeneity within each constraint.
+        for c in constraints:
+            locs = [resolver.locate(name) for name in c.param_names]
+            scalar_locs = [loc for loc in locs if loc.index is None]
+            indexed_locs = [loc for loc in locs if loc.index is not None]
+            if scalar_locs and indexed_locs:
+                raise ConstraintError(
+                    f"Constraint {c.param_names!r} mixes scalar and "
+                    f"indexed parameter locations. All parameters in a "
+                    f"single constraint must share the same shape class."
+                )
+            if indexed_locs:
+                tensor_keys = {loc.tensor_key for loc in indexed_locs}
+                if len(tensor_keys) > 1:
+                    raise ConstraintError(
+                        f"Constraint {c.param_names!r} spans multiple "
+                        f"tensor keys {sorted(tensor_keys)!r}. All "
+                        f"indexed parameters in a single constraint "
+                        f"must live in the same tensor."
+                    )
+                index_dims = {len(loc.index) for loc in indexed_locs}
+                if len(index_dims) > 1:
+                    raise ConstraintError(
+                        f"Constraint {c.param_names!r} mixes "
+                        f"{sorted(index_dims)!r}-dimensional index "
+                        f"shapes. All parameters must share the same "
+                        f"index rank."
+                    )
+
+        # Check 6: prospective derived value lies within bounds.
+        for c in constraints:
+            free_sum = sum(self.values[name]["value"] for name in c.free_params)
+            prospective = c.target - free_sum
+            info = self.values[c.derived_param]
+            lo = info.get("lower bound")
+            hi = info.get("upper bound")
+            if lo is not None and prospective < lo:
+                raise ConstraintError(
+                    f"Constraint would drive derived parameter "
+                    f"'{c.derived_param}' to {prospective:.8g}, below "
+                    f"its lower bound {lo:.8g}. Check the free "
+                    f"parameter defaults or the constraint target."
+                )
+            if hi is not None and prospective > hi:
+                raise ConstraintError(
+                    f"Constraint would drive derived parameter "
+                    f"'{c.derived_param}' to {prospective:.8g}, above "
+                    f"its upper bound {hi:.8g}. Check the free "
+                    f"parameter defaults or the constraint target."
+                )
+
+        # Check 7: warn if defaults violate constraints.
         for c in constraints:
             actual_sum = sum(self.values[name]["value"] for name in c.param_names)
             if abs(actual_sum - c.target) > 1e-6:
