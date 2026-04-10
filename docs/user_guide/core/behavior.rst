@@ -30,6 +30,18 @@ Differentiable Operations
    Behavior.diffmin_v
    Behavior.diffmax_v
 
+Parameter shocks and constraints
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+During every simulation step, :meth:`Behavior.apply_parameter_shocks`
+applies any active scenario shocks to the parameter tensors and then
+re-runs every :class:`~macrostat.core.constraints.LinearConstraint`
+returned by the model's parameters. This second pass keeps adding-up
+identities intact when scenarios shock free parameters in a
+constrained group, and the operation is differentiable so both
+autograd and finite-difference Jacobians see the residual relationship
+at every timestep. See :doc:`constraints` for details.
+
 Notes
 ~~~~~
 The Behavior class is designed to be a flexible base class that allows users to implement their own model behavior while maintaining a consistent interface. The key methods that users need to implement are `initialize()` and `step()`, which define the model's initialization and simulation behavior respectively.
