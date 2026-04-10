@@ -48,10 +48,14 @@ class Behavior(torch.nn.Module):
         # Initialize the parent class
         super().__init__()
 
-        # Initialize the parameters
+        # Initialize the parameters. Keep the Parameters instance itself
+        # so step-time calls can always ask for a fresh resolver and
+        # constraint list. Snapshotting them at init time would freeze
+        # the view of the parameter layout at construction and make any
+        # future mutation API silently desynchronise.
+        self.parameters = parameters
         self.params = parameters.to_nn_parameters()
         self.hyper = parameters.hyper
-        self.constraints = parameters.get_constraints()
 
         # Initialize the scenarios
         self.scenarios = scenarios.to_nn_parameters(scenario=scenario)
@@ -228,9 +232,15 @@ class Behavior(torch.nn.Module):
 
             params[key] = value * mul + add
 
-        # Enforce adding-up constraints (differentiable)
-        for c in self.constraints:
-            c.enforce(params)
+        # Enforce adding-up constraints (differentiable). The resolver
+        # and constraint list are fetched fresh on every call so the
+        # step-time view of the parameter layout always matches the
+        # current Parameters instance.
+        constraints = self.parameters.get_constraints()
+        if constraints:
+            resolver = self.parameters.get_constraint_resolver()
+            for c in constraints:
+                c.apply(params, resolver)
 
         return params
 
