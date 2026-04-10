@@ -20,6 +20,7 @@ The core pieces live in :mod:`macrostat.diff`:
 * :class:`macrostat.diff.JacobianAutograd`
 * :class:`macrostat.diff.JacobianNumerical`
 * :func:`macrostat.diff.check_model_differentiability`
+* :func:`macrostat.diff.compare_jacobian_dicts`
 
 
 Quick start
@@ -50,9 +51,68 @@ define a scalar loss and compute gradients as follows:
     jac_auto = JacobianAutograd(model)
     grads_rev = jac_auto.compute(loss_fn=loss_fn, mode="rev")
 
-    # Numerical finite-difference gradients
-    jac_num = JacobianNumerical(model, epsilon=1e-5)
-    grads_num = jac_num.compute(loss_fn=loss_fn, mode="central")
+    # Numerical finite-difference gradients (default: log-space, eps=1e-3)
+    jac_num_log = JacobianNumerical(model)
+    grads_num_log = jac_num_log.compute(loss_fn=loss_fn, mode="central")
+
+    # Or in direct space, useful when any parameter equals zero
+    jac_num_direct = JacobianNumerical(
+        model, epsilon=1e-5, parameter_space="direct"
+    )
+    grads_num_direct = jac_num_direct.compute(loss_fn=loss_fn, mode="central")
+
+
+Direct vs log-space perturbations
+---------------------------------
+
+:class:`~macrostat.diff.JacobianNumerical` supports two perturbation
+schemes, controlled by the ``parameter_space`` argument.
+
+**Direct space** ``parameter_space="direct"`` perturbs each parameter
+additively:
+
+.. math::
+
+    \frac{\partial f}{\partial p}
+    \approx \frac{f(p + \varepsilon) - f(p - \varepsilon)}{2\varepsilon}.
+
+This is the textbook central difference. It works for any parameter
+value, including zero, but the absolute step size has no relation to
+the parameter scale, so the same ``epsilon`` is too small for
+parameters with magnitudes near unity and too large for parameters
+near zero.
+
+**Log space** ``parameter_space="log"`` (the default) perturbs each
+parameter multiplicatively:
+
+.. math::
+
+    \frac{\partial f}{\partial p}
+    \approx \frac{f(p \cdot e^{\varepsilon}) - f(p \cdot e^{-\varepsilon})}
+                {p \cdot (e^{\varepsilon} - e^{-\varepsilon})}.
+
+The perturbation is now a fixed *fraction* of the parameter value,
+so the same ``epsilon`` (default ``1e-3``, roughly a 0.1% relative
+step) is appropriate across parameters of very different magnitudes.
+This is the recommended default for SFC and behavioral models, where
+parameter scales differ by many orders of magnitude.
+
+Choice of ``epsilon`` is a tradeoff: large values amplify
+truncation error from the finite-difference formula, small values
+amplify floating-point roundoff. For float32 in log space, values
+between ``1e-4`` and ``1e-2`` typically work well; ``1e-3`` is the
+package default.
+
+**Zero-parameter caveat.** Log-space perturbation is undefined when a
+parameter equals zero (you cannot take the log of zero, and the
+denominator vanishes). :class:`~macrostat.diff.JacobianNumerical`
+detects this case during ``compute`` and raises
+``ValueError: Cannot use log-space with zero parameters: [...]``.
+For example, the :class:`~macrostat.models.LINEAR2D` test model has
+a parameter ``x0_2`` that defaults to zero, so its tests must
+explicitly pass ``parameter_space="direct"``. Negative parameters
+are handled in log space using a sign-preserving transformation
+``sign(p) * exp(log(abs(p)) +/- eps)``.
 
 
 High-level differentiability check
@@ -74,22 +134,101 @@ For a more complete diagnostic, use
         compare_forward_reverse=True,
         compare_numerical=True,
         numerical_mode="central",
-        epsilon=1e-5,
+        epsilon=1e-3,
+        parameter_space="log",
     )
 
     print(report.summary())
 
 The resulting :class:`macrostat.diff.DifferentiabilityReport` contains:
 
-* ``nan_or_inf`` – whether any gradient contains NaNs or Infs.
-* ``rel_err_fwd_rev`` – relative discrepancy between forward- and reverse-mode
+* ``nan_or_inf`` -- whether any gradient contains NaNs or Infs.
+* ``rel_err_fwd_rev`` -- relative discrepancy between forward- and reverse-mode
   autograd gradients.
-* ``rel_err_autodiff_num`` – relative discrepancy between autograd and
+* ``rel_err_autodiff_num`` -- relative discrepancy between autograd and
   numerical finite-difference gradients.
 
 Rather than only returning a pass/fail flag, the report is intended to help
 you interpret *how accurate* the gradients are (e.g. "accurate to about
 ``1e-3`` relative error" on a given model and loss).
+
+Set ``parameter_space="direct"`` if your model has any parameter
+equal to zero. The default is ``"log"``.
+
+
+Per-parameter Jacobian comparison
+---------------------------------
+
+When the high-level check reports a disagreement, the next question
+is *which parameter* is responsible.
+:func:`~macrostat.diff.compare_jacobian_dicts` performs an
+element-wise, per-parameter comparison of two Jacobian dictionaries
+and returns a :class:`~macrostat.diff.JacobianComparisonReport` with
+the following fields per parameter:
+
+* ``max_abs_diff``, ``mean_abs_diff`` -- absolute differences across
+  all elements of the parameter's Jacobian slice.
+* ``max_rel_diff``, ``mean_rel_diff`` -- the same, normalised by
+  ``max(|a|, |b|)`` clipped to one.
+* ``num_close`` / ``num_elements`` -- how many entries are within
+  the ``atol``/``rtol`` tolerance.
+* ``has_nan_inf`` -- whether either Jacobian contains NaNs or Infs.
+
+A typical workflow:
+
+.. code-block:: python
+
+    from macrostat.diff import (
+        JacobianAutograd, JacobianNumerical, compare_jacobian_dicts,
+    )
+
+    jac_auto = JacobianAutograd(model).compute(loss_fn=loss_fn, mode="rev")
+    jac_num = JacobianNumerical(model).compute(loss_fn=loss_fn, mode="central")
+
+    report = compare_jacobian_dicts(
+        jac_auto, jac_num, method_a="autograd", method_b="numerical"
+    )
+    print(report.summary())
+
+The summary prints one row per parameter, sorted by descending
+relative disagreement, so the offending parameters are at the top.
+See :doc:`jacobian_diagnostics` for a runnable walkthrough that
+applies this workflow to LINEAR2D and several GL06 variants.
+
+
+Expected disagreements
+----------------------
+
+Two classes of "disagreement" between autograd and numerical
+Jacobians are expected and not bugs.
+
+**Constraint-derived parameters.** When a model declares a
+:class:`~macrostat.core.constraints.LinearConstraint`, the derived
+(residual) parameter is no longer free: its value is fixed by the
+adding-up identity. Autograd correctly reports a zero gradient for
+the derived parameter and absorbs the sensitivity into the free
+parameters of the same group. Numerical Jacobians computed by
+perturbing the *free* parameters agree with autograd; numerical
+Jacobians computed by perturbing the *derived* parameter directly
+will disagree, because such a perturbation would violate the
+constraint. See :doc:`core/constraints` for the residual
+parameterization and :doc:`constraints_example` for a worked
+example.
+
+**Step-function operations.** Operations like
+``torch.where(x > 0, a, b)``, ``torch.clamp``, and any other
+discontinuous switch are non-differentiable through the condition
+argument. Autograd reports zero gradient at the discontinuity, while
+finite differences see a finite jump whenever the perturbation
+straddles it. The disagreement is real but local, and it disappears
+when the step function is replaced by a smooth approximation. The
+:class:`~macrostat.core.behavior.Behavior` base class provides
+:meth:`~macrostat.core.behavior.Behavior.diffwhere`,
+:meth:`~macrostat.core.behavior.Behavior.tanhmask`,
+:meth:`~macrostat.core.behavior.Behavior.diffmin`, and
+:meth:`~macrostat.core.behavior.Behavior.diffmax` for this purpose.
+:doc:`jacobian_diagnostics` shows how to localize this kind of
+disagreement to a specific parameter, timestep, and output.
 
 
 Test model: LINEAR2D
@@ -109,3 +248,7 @@ in the test suite to confirm that:
 * Forward and reverse autograd agree to high precision, and
 * Autograd gradients match finite-difference gradients up to a small relative
   error.
+
+Because LINEAR2D has a parameter (``x0_2``) that defaults to zero,
+log-space perturbation is undefined for it, and its differentiability
+tests set ``parameter_space="direct"`` explicitly.
