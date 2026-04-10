@@ -81,14 +81,16 @@ class BehaviorGL06INSOUT(Behavior):
         Matches the R sfcr reference: ``initial = sfcr_set(p ~ 1, W ~ 1, UC ~ 1, BPM ~ 0.0035)``.
         Everything else starts at zero.
         """
+        # Use a reference tensor for device/dtype consistency
+        ref = next(iter(self.state.values()))
         for key in self.state:
-            self.state[key] = torch.zeros(1)
+            self.state[key] = torch.zeros_like(ref)
 
         # Non-zero initial conditions (matching R sfcr)
-        self.state["PriceLevel"] = torch.ones(1)
-        self.state["NominalWage"] = torch.ones(1)
-        self.state["UnitCost"] = torch.ones(1)
-        self.state["BankProfitMargin"] = torch.tensor(0.0035)
+        self.state["PriceLevel"] = torch.ones_like(ref)
+        self.state["NominalWage"] = torch.ones_like(ref)
+        self.state["UnitCost"] = torch.ones_like(ref)
+        self.state["BankProfitMargin"] = torch.ones_like(ref) * 0.0035
 
     ############################################################################
     # Step
@@ -317,9 +319,10 @@ class BehaviorGL06INSOUT(Behavior):
             + self.prior["M2Supply"]
             + self.prior["LaggedM2Supply"]
         )
+        safe_denom = torch.where(denom > 0, denom, torch.ones_like(denom))
         self.state["BankProfitMargin"] = torch.where(
             denom > 0,
-            (self.state["BankProfits"] + self.prior["BankProfits"]) / denom,
+            (self.state["BankProfits"] + self.prior["BankProfits"]) / safe_denom,
             self.prior["BankProfitMargin"],
         )
 
@@ -348,16 +351,17 @@ class BehaviorGL06INSOUT(Behavior):
         -----
         - DepositRate
         """
-        ones = torch.ones(1)
-        zeros = torch.zeros(1)
+        ref = self.prior["BankLiquidityRatioTentative"]
+        ones = torch.ones_like(ref)
+        zeros = torch.zeros_like(ref)
 
         z4 = torch.where(
-            self.prior["BankLiquidityRatioTentative"] < params["BankLiquidityFloor"],
+            ref < params["BankLiquidityFloor"],
             ones,
             zeros,
         )
         z5 = torch.where(
-            self.prior["BankLiquidityRatioTentative"] > params["BankLiquidityCeiling"],
+            ref > params["BankLiquidityCeiling"],
             ones,
             zeros,
         )
@@ -392,15 +396,12 @@ class BehaviorGL06INSOUT(Behavior):
         -----
         - LoanRate
         """
-        ones = torch.ones(1)
-        zeros = torch.zeros(1)
+        ref = self.state["BankProfitMargin"]
+        ones = torch.ones_like(ref)
+        zeros = torch.zeros_like(ref)
 
-        z6 = torch.where(
-            self.state["BankProfitMargin"] < params["BankProfitFloor"], ones, zeros
-        )
-        z7 = torch.where(
-            self.state["BankProfitMargin"] > params["BankProfitCeiling"], ones, zeros
-        )
+        z6 = torch.where(ref < params["BankProfitFloor"], ones, zeros)
+        z7 = torch.where(ref > params["BankProfitCeiling"], ones, zeros)
 
         self.state["LoanRate"] = (
             self.prior["LoanRate"]
@@ -451,10 +452,12 @@ class BehaviorGL06INSOUT(Behavior):
         -----
         - BondPrice
         """
+        by = self.state["BondYield"]
+        safe_by = torch.where(by > 0, by, torch.ones_like(by))
         self.state["BondPrice"] = torch.where(
-            self.state["BondYield"] > 0,
-            1.0 / self.state["BondYield"],
-            torch.zeros(1),
+            by > 0,
+            1.0 / safe_by,
+            torch.zeros_like(by),
         )
 
     def expected_return_on_bonds(
@@ -646,11 +649,12 @@ class BehaviorGL06INSOUT(Behavior):
         -----
         - InflationRate
         """
+        pp = self.prior["PriceLevel"]
+        safe_pp = torch.where(pp > 0, pp, torch.ones_like(pp))
         self.state["InflationRate"] = torch.where(
-            self.prior["PriceLevel"] > 0,
-            (self.state["PriceLevel"] - self.prior["PriceLevel"])
-            / self.prior["PriceLevel"],
-            torch.zeros(1),
+            pp > 0,
+            (self.state["PriceLevel"] - pp) / safe_pp,
+            torch.zeros_like(pp),
         )
 
     ############################################################################
@@ -703,14 +707,11 @@ class BehaviorGL06INSOUT(Behavior):
         -----
         - NominalExpectedDisposableIncome
         """
-        self.state["NominalExpectedDisposableIncome"] = self.state[
-            "ExpectedRealDisposableIncome"
-        ] * self.state["PriceLevel"] + self.state["InflationRate"] * self.prior[
-            "NominalWealth"
-        ] / torch.where(
-            self.state["PriceLevel"] > 0,
-            self.state["PriceLevel"],
-            torch.ones(1),
+        pl = self.state["PriceLevel"]
+        safe_pl = torch.where(pl > 0, pl, torch.ones_like(pl))
+        self.state["NominalExpectedDisposableIncome"] = (
+            self.state["ExpectedRealDisposableIncome"] * pl
+            + self.state["InflationRate"] * self.prior["NominalWealth"] / safe_pl
         )
 
     ############################################################################
@@ -831,10 +832,12 @@ class BehaviorGL06INSOUT(Behavior):
         -----
         - Employment
         """
+        lp = params["LaborProductivity"]
+        safe_lp = torch.where(lp > 0, lp, torch.ones_like(lp))
         self.state["Employment"] = torch.where(
-            params["LaborProductivity"] > 0,
-            self.state["RealOutput"] / params["LaborProductivity"],
-            torch.zeros(1),
+            lp > 0,
+            self.state["RealOutput"] / safe_lp,
+            torch.zeros_like(lp),
         )
 
     def target_real_wage(
@@ -858,19 +861,20 @@ class BehaviorGL06INSOUT(Behavior):
         -----
         - TargetRealWage
         """
-        log_pr = torch.log(
-            torch.where(
-                params["LaborProductivity"] > 0,
-                params["LaborProductivity"],
-                torch.tensor(1e-6),
-            )
+        lp = params["LaborProductivity"]
+        safe_lp = torch.where(lp > 0, lp, torch.ones_like(lp))
+        log_pr = torch.where(
+            lp > 0,
+            torch.log(safe_lp),
+            torch.zeros_like(lp),
         )
-        log_ratio = torch.log(
-            torch.where(
-                self.state["Employment"] > 0,
-                self.state["Employment"] / params["FullEmployment"],
-                torch.tensor(1e-6),
-            )
+        emp = self.state["Employment"]
+        fe = params["FullEmployment"]
+        safe_ratio = torch.where(emp > 0, emp / fe, torch.ones_like(emp))
+        log_ratio = torch.where(
+            emp > 0,
+            torch.log(safe_ratio),
+            torch.zeros_like(emp),
         )
         self.state["TargetRealWage"] = torch.exp(
             params["RealWageTargetConstant"]
@@ -899,10 +903,12 @@ class BehaviorGL06INSOUT(Behavior):
         -----
         - NominalWage
         """
+        ppl = self.prior["PriceLevel"]
+        safe_ppl = torch.where(ppl > 0, ppl, torch.ones_like(ppl))
         prior_real_wage = torch.where(
-            self.prior["PriceLevel"] > 0,
-            self.prior["NominalWage"] / self.prior["PriceLevel"],
-            torch.zeros(1),
+            ppl > 0,
+            self.prior["NominalWage"] / safe_ppl,
+            torch.zeros_like(ppl),
         )
         self.state["NominalWage"] = self.prior["NominalWage"] * (
             1.0
@@ -946,9 +952,11 @@ class BehaviorGL06INSOUT(Behavior):
         """
         # UC = WB/y = (N*W)/y = ((y/pr)*W)/y = W/pr.
         # When y = 0, WB/y is 0/0; use W/pr as the equivalent fallback.
+        ro = self.state["RealOutput"]
+        safe_ro = torch.where(ro > 0, ro, torch.ones_like(ro))
         self.state["UnitCost"] = torch.where(
-            self.state["RealOutput"] > 0,
-            self.state["WageBill"] / self.state["RealOutput"],
+            ro > 0,
+            self.state["WageBill"] / safe_ro,
             self.state["NominalWage"] / params["LaborProductivity"],
         )
 
@@ -968,10 +976,12 @@ class BehaviorGL06INSOUT(Behavior):
         -----
         - RealWage
         """
+        pl = self.state["PriceLevel"]
+        safe_pl = torch.where(pl > 0, pl, torch.ones_like(pl))
         self.state["RealWage"] = torch.where(
-            self.state["PriceLevel"] > 0,
-            self.state["NominalWage"] / self.state["PriceLevel"],
-            torch.zeros(1),
+            pl > 0,
+            self.state["NominalWage"] / safe_pl,
+            torch.zeros_like(pl),
         )
 
     ############################################################################
@@ -1042,10 +1052,12 @@ class BehaviorGL06INSOUT(Behavior):
         -----
         - ActualInventorySalesRatio
         """
+        rs = self.state["RealSales"]
+        safe_rs = torch.where(rs > 0, rs, torch.ones_like(rs))
         self.state["ActualInventorySalesRatio"] = torch.where(
-            self.state["RealSales"] > 0,
-            self.prior["RealInventories"] / self.state["RealSales"],
-            torch.zeros(1),
+            rs > 0,
+            self.prior["RealInventories"] / safe_rs,
+            torch.zeros_like(rs),
         )
 
     def nominal_inventories(
@@ -1314,12 +1326,13 @@ class BehaviorGL06INSOUT(Behavior):
         -----
         - RealRegularDisposableIncome
         """
+        pl = self.state["PriceLevel"]
+        safe_pl = torch.where(pl > 0, pl, torch.ones_like(pl))
         self.state["RealRegularDisposableIncome"] = torch.where(
-            self.state["PriceLevel"] > 0,
-            self.state["RegularDisposableIncome"] / self.state["PriceLevel"]
-            - self.state["InflationRate"]
-            * (self.prior["NominalWealth"] / self.state["PriceLevel"]),
-            torch.zeros(1),
+            pl > 0,
+            self.state["RegularDisposableIncome"] / safe_pl
+            - self.state["InflationRate"] * (self.prior["NominalWealth"] / safe_pl),
+            torch.zeros_like(pl),
         )
 
     def real_wealth(self, t: int, scenario: dict, params: dict | None = None, **kwargs):
@@ -1338,10 +1351,12 @@ class BehaviorGL06INSOUT(Behavior):
         -----
         - RealWealth
         """
+        pl = self.state["PriceLevel"]
+        safe_pl = torch.where(pl > 0, pl, torch.ones_like(pl))
         self.state["RealWealth"] = torch.where(
-            self.state["PriceLevel"] > 0,
-            self.state["NominalWealth"] / self.state["PriceLevel"],
-            torch.zeros(1),
+            pl > 0,
+            self.state["NominalWealth"] / safe_pl,
+            torch.zeros_like(pl),
         )
 
     def expected_nominal_wealth(
@@ -1520,11 +1535,13 @@ class BehaviorGL06INSOUT(Behavior):
             + params["WealthShareBonds_Income"]
             * self.state["NominalExpectedDisposableIncome"]
         )
+        bp = self.state["BondPrice"]
+        safe_bp = torch.where(bp > 0, bp, torch.ones_like(bp))
         self.state["BondsDemand"] = torch.clamp(
             torch.where(
-                self.state["BondPrice"] > 0,
-                value_demand / self.state["BondPrice"],
-                torch.zeros(1),
+                bp > 0,
+                value_demand / safe_bp,
+                torch.zeros_like(bp),
             ),
             min=0.0,
         )
@@ -1591,14 +1608,11 @@ class BehaviorGL06INSOUT(Behavior):
         -----
         - SwitchM1Positive, SwitchM2Absorber
         """
-        ones = torch.ones(1)
-        zeros = torch.zeros(1)
-        self.state["SwitchM1Positive"] = torch.where(
-            self.state["M1DemandTentative"] > 0, ones, zeros
-        )
-        self.state["SwitchM2Absorber"] = torch.where(
-            self.state["M1DemandTentative"] > 0, zeros, ones
-        )
+        ref = self.state["M1DemandTentative"]
+        ones = torch.ones_like(ref)
+        zeros = torch.zeros_like(ref)
+        self.state["SwitchM1Positive"] = torch.where(ref > 0, ones, zeros)
+        self.state["SwitchM2Absorber"] = torch.where(ref > 0, zeros, ones)
 
     def m1_household(
         self, t: int, scenario: dict, params: dict | None = None, **kwargs
@@ -1961,10 +1975,11 @@ class BehaviorGL06INSOUT(Behavior):
         - BankLiquidityRatioTentative
         """
         denom = self.state["M1Supply"] + self.state["M2Supply"]
+        safe_denom = torch.where(denom > 0, denom, torch.ones_like(denom))
         self.state["BankLiquidityRatioTentative"] = torch.where(
             denom > 0,
-            self.state["BillsBankTentative"] / denom,
-            torch.zeros(1),
+            self.state["BillsBankTentative"] / safe_denom,
+            torch.zeros_like(denom),
         )
 
     def switch_bank_below_floor(
@@ -1983,10 +1998,11 @@ class BehaviorGL06INSOUT(Behavior):
         -----
         - SwitchBankBelowFloor
         """
-        ones = torch.ones(1)
-        zeros = torch.zeros(1)
+        ref = self.state["BankLiquidityRatioTentative"]
+        ones = torch.ones_like(ref)
+        zeros = torch.zeros_like(ref)
         self.state["SwitchBankBelowFloor"] = torch.where(
-            self.state["BankLiquidityRatioTentative"] < params["BankLiquidityFloor"],
+            ref < params["BankLiquidityFloor"],
             ones,
             zeros,
         )
@@ -2060,10 +2076,11 @@ class BehaviorGL06INSOUT(Behavior):
         - BankLiquidityRatio
         """
         denom = self.state["M1Supply"] + self.state["M2Supply"]
+        safe_denom = torch.where(denom > 0, denom, torch.ones_like(denom))
         self.state["BankLiquidityRatio"] = torch.where(
             denom > 0,
-            self.state["BillsBank"] / denom,
-            torch.zeros(1),
+            self.state["BillsBank"] / safe_denom,
+            torch.zeros_like(denom),
         )
 
     def lagged_m1_supply(

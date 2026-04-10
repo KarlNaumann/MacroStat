@@ -100,37 +100,9 @@ class BehaviorGL06LP(Behavior):
         -----
         All model variables to zero.
         """
-        # Flows
-        self.state["ConsumptionHousehold"] = torch.zeros(1)
-        self.state["ConsumptionGovernment"] = torch.zeros(1)
-        self.state["NationalIncome"] = torch.zeros(1)
-        self.state["Taxes"] = torch.zeros(1)
-        self.state["InterestOnBillsHousehold"] = torch.zeros(1)
-        self.state["BondCouponIncomeHousehold"] = torch.zeros(1)
-        self.state["CentralBankProfits"] = torch.zeros(1)
-        self.state["CapitalGains"] = torch.zeros(1)
-        self.state["ExpectedCapitalGains"] = torch.zeros(1)
-        # Stocks
-        self.state["Wealth"] = torch.zeros(1)
-        self.state["HouseholdBillStock"] = torch.zeros(1)
-        self.state["GovernmentBillStock"] = torch.zeros(1)
-        self.state["CentralBankBillStock"] = torch.zeros(1)
-        self.state["HouseholdBondStock"] = torch.zeros(1)
-        self.state["GovernmentBondSupply"] = torch.zeros(1)
-        self.state["HouseholdCashStock"] = torch.zeros(1)
-        self.state["CentralBankMoneyStock"] = torch.zeros(1)
-        # Indices
-        self.state["DisposableIncome"] = torch.zeros(1)
-        self.state["ExpectedDisposableIncome"] = torch.zeros(1)
-        self.state["ExpectedWealth"] = torch.zeros(1)
-        self.state["HouseholdBillDemand"] = torch.zeros(1)
-        self.state["HouseholdBondDemand"] = torch.zeros(1)
-        self.state["HouseholdCashDemand"] = torch.zeros(1)
-        self.state["InterestRateBills"] = torch.zeros(1)
-        self.state["BondPrice"] = torch.zeros(1)
-        self.state["BondYield"] = torch.zeros(1)
-        self.state["ExpectedBondPrice"] = torch.zeros(1)
-        self.state["ExpectedReturnOnBonds"] = torch.zeros(1)
+        ref = next(iter(self.state.values()))
+        for key in self.state:
+            self.state[key] = torch.zeros_like(ref)
 
     ############################################################################
     # Step
@@ -284,10 +256,12 @@ class BehaviorGL06LP(Behavior):
         -----
         - BondYield
         """
+        bp = self.state["BondPrice"]
+        safe_bp = torch.where(bp > 0, bp, torch.ones_like(bp))
         self.state["BondYield"] = torch.where(
-            self.state["BondPrice"] > 0,
-            1.0 / self.state["BondPrice"],
-            torch.zeros_like(self.state["BondPrice"]),
+            bp > 0,
+            1.0 / safe_bp,
+            torch.zeros_like(bp),
         )
 
     def expected_bond_price(
@@ -339,13 +313,14 @@ class BehaviorGL06LP(Behavior):
         -----
         - ExpectedReturnOnBonds
         """
+        bp = self.state["BondPrice"]
+        safe_bp = torch.where(bp > 0, bp, torch.ones_like(bp))
         self.state["ExpectedReturnOnBonds"] = self.state["BondYield"] + (
             params["ExpectationWeightBondPrice"]
             * torch.where(
-                self.state["BondPrice"] > 0,
-                (self.state["ExpectedBondPrice"] - self.state["BondPrice"])
-                / self.state["BondPrice"],
-                torch.zeros_like(self.state["BondPrice"]),
+                bp > 0,
+                (self.state["ExpectedBondPrice"] - bp) / safe_bp,
+                torch.zeros_like(bp),
             )
         )
 
@@ -728,23 +703,27 @@ class BehaviorGL06LP(Behavior):
         - HouseholdBondDemand
         """
         # Compute the bond share of wealth (in value terms)
-        bond_value_demand = self.state["ExpectedWealth"] * (
+        ew = self.state["ExpectedWealth"]
+        safe_ew = torch.where(ew.abs() > 1e-10, ew, torch.ones_like(ew))
+        bond_value_demand = ew * (
             params["WealthShareBonds_Constant"]
             + params["WealthShareBonds_BillRate"] * self.state["InterestRateBills"]
             + params["WealthShareBonds_BondReturn"]
             * self.state["ExpectedReturnOnBonds"]
             + params["WealthShareBonds_Income"]
             * torch.where(
-                self.state["ExpectedWealth"].abs() > 1e-10,
-                self.state["ExpectedDisposableIncome"] / self.state["ExpectedWealth"],
+                ew.abs() > 1e-10,
+                self.state["ExpectedDisposableIncome"] / safe_ew,
                 torch.zeros_like(self.state["ExpectedDisposableIncome"]),
             )
         )
 
         # Convert from value to number of bonds
+        bp = self.state["BondPrice"]
+        safe_bp = torch.where(bp.abs() > 1e-10, bp, torch.ones_like(bp))
         self.state["HouseholdBondDemand"] = torch.where(
-            self.state["BondPrice"].abs() > 1e-10,
-            bond_value_demand / self.state["BondPrice"],
+            bp.abs() > 1e-10,
+            bond_value_demand / safe_bp,
             torch.zeros_like(bond_value_demand),
         )
 

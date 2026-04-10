@@ -62,8 +62,8 @@ class JacobianNumerical(JacobianBase):
         self,
         model,
         scenario: int | str = 0,
-        epsilon: float = 1e-5,
-        parameter_space: Literal["direct", "log"] = "direct",
+        epsilon: float = 1e-3,
+        parameter_space: Literal["direct", "log"] = "log",
     ):
         """
         Initialize numerical Jacobian computation.
@@ -75,9 +75,27 @@ class JacobianNumerical(JacobianBase):
         scenario : int | str, optional
             Scenario to use for computation, by default 0
         epsilon : float, optional
-            Perturbation size for finite differences, by default 1e-5
+            Perturbation size for finite differences, by default 1e-3.
+            In log-space, this gives a relative perturbation of ~0.1%,
+            which balances truncation error against float32 noise for
+            typical SFC models running 50-200 timesteps.
+
+            Epsilon guidance (log-space, float32):
+            - 1e-3: Best general-purpose choice. Verified accurate for
+              parameters spanning 4 orders of magnitude (2e-4 to 1.0).
+            - 1e-4: Better for smooth, weakly-nonlinear parameters but
+              noisier for small parameters (< 1e-3).
+            - 1e-2: More robust to noise but higher truncation error
+              for strongly nonlinear parameters.
+
+            For float64 computation, 1e-5 to 1e-7 are viable.
         parameter_space : {"direct", "log"}, optional
-            Space in which to apply perturbations, by default "direct"
+            Space in which to apply perturbations, by default "log".
+            Log-space (p -> p*exp(±eps)) gives scale-invariant relative
+            perturbations, avoiding the problem where a fixed eps is too
+            large for small parameters and too small for large ones.
+            Use "direct" only for parameters that are exactly zero or
+            when you need additive perturbations for a specific reason.
         """
         super().__init__(model, scenario)
         self.epsilon = epsilon
@@ -300,13 +318,33 @@ class JacobianNumerical(JacobianBase):
         jacobian: Dict[str, torch.Tensor] = {}
         for param_name in param_names:
             losses = results_by_param.get(param_name, {})
+            base_value = self.model.parameters[param_name]
+
+            # Compute the actual perturbation in parameter space.
+            # In direct space: delta = epsilon.
+            # In log space: p+ = p*exp(eps), p- = p*exp(-eps),
+            #   so delta_central = p*(exp(eps) - exp(-eps)),
+            #      delta_fwd    = p*(exp(eps) - 1),
+            #      delta_bwd    = p*(1 - exp(-eps)).
+            if self.parameter_space == "log" and base_value != 0:
+                # p+ = p*exp(eps), p- = p*exp(-eps), so:
+                # p+ - p- = p*(exp(eps) - exp(-eps))  [signed]
+                exp_pos = torch.exp(torch.tensor(self.epsilon)).item()
+                exp_neg = torch.exp(torch.tensor(-self.epsilon)).item()
+                delta_central = base_value * (exp_pos - exp_neg)
+                delta_fwd = base_value * (exp_pos - 1.0)
+                delta_bwd = base_value * (1.0 - exp_neg)
+            else:
+                delta_central = 2.0 * self.epsilon
+                delta_fwd = self.epsilon
+                delta_bwd = self.epsilon
 
             if all([mode == "central", "pos" in losses, "neg" in losses]):
-                grad = (losses["pos"] - losses["neg"]) / (2.0 * self.epsilon)
+                grad = (losses["pos"] - losses["neg"]) / delta_central
             elif mode == "forward" and "pos" in losses:
-                grad = (losses["pos"] - loss_base) / self.epsilon
+                grad = (losses["pos"] - loss_base) / delta_fwd
             elif mode == "backward" and "neg" in losses:
-                grad = (loss_base - losses["neg"]) / self.epsilon
+                grad = (loss_base - losses["neg"]) / delta_bwd
             else:
                 grad = torch.zeros_like(loss_base)
 

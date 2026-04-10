@@ -14,7 +14,13 @@ The module consists of the following classes
     JacobianAutograd
 """
 
-from .checker import DifferentiabilityReport, check_model_differentiability
+from .checker import (
+    DifferentiabilityReport,
+    JacobianComparisonReport,
+    ParameterComparison,
+    check_model_differentiability,
+    compare_jacobian_dicts,
+)
 from .jacobian_autograd import JacobianAutograd
 from .jacobian_base import JacobianBase
 from .jacobian_numerical import JacobianNumerical
@@ -24,5 +30,8 @@ __all__ = [
     "JacobianNumerical",
     "JacobianAutograd",
     "DifferentiabilityReport",
+    "JacobianComparisonReport",
+    "ParameterComparison",
     "check_model_differentiability",
+    "compare_jacobian_dicts",
 ]
