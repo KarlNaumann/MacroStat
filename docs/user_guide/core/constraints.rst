@@ -11,11 +11,14 @@ a model declare these relationships once, and MacroStat enforces them
 both at parameter initialization and inside every simulation step,
 without breaking autograd.
 
-Constructor
-~~~~~~~~~~~
+Public API
+~~~~~~~~~~
 .. autosummary::
 
+   ConstraintError
    LinearConstraint
+   ParameterLocation
+   ConstraintResolver
 
 Properties and methods
 ~~~~~~~~~~~~~~~~~~~~~~
@@ -23,7 +26,10 @@ Properties and methods
 
    LinearConstraint.free_params
    LinearConstraint.derived_param
-   LinearConstraint.enforce
+   LinearConstraint.apply
+   ParameterLocation.read
+   ParameterLocation.write
+   ConstraintResolver.locate
 
 
 Residual parameterization
@@ -82,11 +88,76 @@ Each :class:`LinearConstraint` accepts:
   before it is free.
 * ``target`` (``float``): the value the group must sum to.
 
-The order of constraints in the returned tuple is preserved. If a
-parameter is the derived parameter in one constraint and a free
-parameter in another, MacroStat does not topologically reorder for
-you. The user is responsible for ordering such that each constraint
-is well-defined when it runs.
+Constraints are applied in declaration order. Chaining — where the
+derived parameter of one constraint appears as a free parameter in
+another — is explicitly rejected by
+:meth:`~macrostat.core.parameters.Parameters.verify_constraints`
+and will raise :class:`ConstraintError` at init time. If you need
+cascading relationships, collapse them into a single constraint or
+restructure the parameter group.
+
+
+Vector and matrix constraints
+=============================
+
+A constraint does not need to live at the scalar layer. Parameters
+that follow the sectoral naming convention ``sector.name`` or
+``rowsec.colsec.name`` are vectorised by
+:meth:`~macrostat.core.parameters.Parameters.vectorize_parameters`
+into 1-D or 2-D tensors at step time, and the same
+:class:`LinearConstraint` can enforce an adding-up identity across
+those tensor slots.
+
+The seam that makes this work is the
+:class:`ConstraintResolver`. At step time, each constraint asks the
+resolver to map its canonical parameter names to
+:class:`ParameterLocation` records: a ``(tensor_key, index)`` pair
+that says where the parameter lives inside the step-time tensor
+dictionary. Scalar parameters resolve to ``index=None``; sector-
+indexed parameters resolve to ``index=(i,)``; sector-by-sector
+parameters resolve to ``index=(i, j)``. :meth:`LinearConstraint.apply`
+reads the free slots, computes ``target - sum(free)``, and writes
+the residual into the derived slot via
+:func:`torch.Tensor.index_put`, which is out-of-place and
+differentiable.
+
+As an example, consider a two-sector household share that must sum
+to one:
+
+.. code-block:: python
+
+   from macrostat.core import LinearConstraint, Parameters
+
+   class HouseholdShares(Parameters):
+       def get_default_parameters(self):
+           return {
+               "Household.Share": {"value": 0.6, ...},
+               "Firm.Share":      {"value": 0.4, ...},
+           }
+
+       def get_default_hyperparameters(self):
+           h = super().get_default_hyperparameters()
+           h["vector_sectors"] = ["Household", "Firm"]
+           return h
+
+       def get_constraints(self):
+           return (
+               LinearConstraint(
+                   param_names=("Household.Share", "Firm.Share"),
+                   target=1.0,
+               ),
+           )
+
+When the model initialises, the resolver is built lazily by
+:meth:`~macrostat.core.parameters.Parameters.get_constraint_resolver`
+and cached on the :class:`~macrostat.core.parameters.Parameters`
+instance. At step time,
+:meth:`~macrostat.core.behavior.Behavior.apply_parameter_shocks`
+calls :meth:`LinearConstraint.apply` with that resolver. All
+parameters inside one constraint must share a shape class: all
+scalar, or all indexed into the same tensor with the same rank.
+Mixing shapes is rejected at init time by
+:meth:`~macrostat.core.parameters.Parameters.verify_constraints`.
 
 
 Adding a constraint to your own model
@@ -123,17 +194,27 @@ parameter lifecycle.
 **Init-time verification.**
 :meth:`~macrostat.core.parameters.Parameters.verify_constraints` is
 called once when a :class:`~macrostat.core.parameters.Parameters`
-instance is constructed. It catches three classes of error:
+instance is constructed. It runs six structural checks and one
+soft check, all of which raise :class:`ConstraintError` (a
+:class:`ValueError` subclass) on failure:
 
 * A constraint references a parameter name that does not exist in
-  ``self.values``. The raised :class:`ValueError` lists the unknown
-  name and the available parameters.
-* The same parameter is declared as the derived (residual)
-  parameter in two or more constraints. The raised
-  :class:`ValueError` lists the duplicate names.
-* A parameter is the derived parameter in one constraint and a
-  free parameter in another. The raised :class:`ValueError`
-  describes the circular dependency.
+  ``self.values``. The error lists the unknown name and the
+  available parameters.
+* The same parameter is declared as the derived parameter in two or
+  more constraints. The error lists the duplicates.
+* A parameter is the derived parameter in one constraint and a free
+  parameter in another; chained constraints are not supported.
+* A constraint references a parameter name that cannot be located
+  by the resolver. This is a defensive check against divergence
+  between :meth:`vectorize_parameters` and
+  :meth:`get_constraint_resolver`.
+* A constraint mixes scalar and indexed parameter locations, spans
+  multiple tensor keys, or mixes index ranks. All parameters in one
+  constraint must share a shape class.
+* The prospective post-enforcement value of the derived parameter
+  lies outside its declared bounds. Catches misdeclared constraints
+  at init time rather than after enforcement.
 
 If the default values stored in ``self.values`` do not satisfy a
 declared constraint, ``verify_constraints`` does not raise. It
@@ -152,11 +233,16 @@ modifies ``self.values`` in place.
 **Step-time enforcement.** During simulation,
 :meth:`~macrostat.core.behavior.Behavior.apply_parameter_shocks`
 applies any scenario shocks to the parameter tensors and then runs
-each constraint's :meth:`LinearConstraint.enforce` again on the
-shocked tensors. This second pass keeps the adding-up identity
-intact even when scenarios shock free parameters in the group, and
-because it operates on tensors with ``requires_grad=True``, autograd
-sees the residual relationship at every timestep.
+each constraint's :meth:`LinearConstraint.apply` on the shocked
+tensors, handing in the resolver obtained from
+:meth:`~macrostat.core.parameters.Parameters.get_constraint_resolver`.
+The resolver and constraint list are fetched fresh on every call,
+so the step-time view of the parameter layout always matches the
+current :class:`~macrostat.core.parameters.Parameters` instance.
+This second pass keeps the adding-up identity intact even when
+scenarios shock free parameters in the group, and because it
+operates on tensors with ``requires_grad=True``, autograd sees the
+residual relationship at every timestep.
 
 **Helpers for callers.**
 :meth:`~macrostat.core.parameters.Parameters.get_free_param_names`
