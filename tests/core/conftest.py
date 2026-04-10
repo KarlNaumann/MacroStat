@@ -8,7 +8,7 @@ __license__ = "MIT"
 __version__ = "0.1.0"
 __maintainer__ = ["Karl Naumann-Woleske"]
 
-from macrostat.core import Model, Parameters, Scenarios, Variables
+from macrostat.core import LinearConstraint, Model, Parameters, Scenarios, Variables
 
 
 class MockScenarios(Scenarios):
@@ -72,3 +72,79 @@ class MockModel(Model):
     parameters = MockParameters()
     variables = MockVariables(parameters=parameters)
     scenarios = MockScenarios(parameters=parameters)
+
+
+class VectorMockParameters(Parameters):
+    """Mock parameters with a 1-D sector-indexed constraint.
+
+    Two sectors (``Household`` and ``Firm``), one sector-indexed
+    parameter ``Share``, constrained to sum to 1. Exercises the
+    1-D resolver path through init and step time uniformly.
+    """
+
+    def get_default_parameters(self):
+        return {
+            "Household.Share": {
+                "value": 0.6,
+                "lower bound": 0.0,
+                "upper bound": 1.0,
+                "unit": ".",
+                "notation": r"s_H",
+            },
+            "Firm.Share": {
+                "value": 0.4,
+                "lower bound": 0.0,
+                "upper bound": 1.0,
+                "unit": ".",
+                "notation": r"s_F",
+            },
+        }
+
+    def get_default_hyperparameters(self):
+        return {
+            "timesteps": 100,
+            "timesteps_initialization": 10,
+            "scenario_trigger": 0,
+            "seed": 42,
+            "device": "cpu",
+            "requires_grad": False,
+            "vector_sectors": ["Household", "Firm"],
+        }
+
+    def get_constraints(self):
+        return (
+            LinearConstraint(
+                param_names=("Household.Share", "Firm.Share"),
+                target=1.0,
+            ),
+        )
+
+
+class VectorMockVariables(Variables):
+    """Minimal variables for a two-sector vector-capable mock model."""
+
+    def get_default_variables(self) -> dict:
+        return {
+            "output": {
+                "notation": r"Y",
+                "unit": "USD",
+                "history": 0,
+                "sectors": ["Household", "Firm"],
+                "sfc": [("Index", "Household"), ("Index", "Firm")],
+            }
+        }
+
+
+class VectorMockScenarios(Scenarios):
+    """Scenarios for the two-sector vector-capable mock model."""
+
+    def get_default_scenario_values(self) -> dict:
+        return {"shock": 0.0}
+
+
+class VectorMockModel(Model):
+    """Two-sector mock model with a 1-D adding-up constraint on ``Share``."""
+
+    parameters = VectorMockParameters()
+    variables = VectorMockVariables(parameters=parameters)
+    scenarios = VectorMockScenarios(parameters=parameters)

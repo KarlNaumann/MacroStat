@@ -10,9 +10,16 @@ __maintainer__ = ["Karl Naumann-Woleske"]
 
 import pytest
 import torch
-from conftest import MockParameters, MockScenarios, MockVariables
+from conftest import (
+    MockParameters,
+    MockScenarios,
+    MockVariables,
+    VectorMockParameters,
+    VectorMockScenarios,
+    VectorMockVariables,
+)
 
-from macrostat.core import Behavior, Variables
+from macrostat.core import Behavior, LinearConstraint, Parameters, Variables
 
 
 class TestBehavior:
@@ -252,3 +259,143 @@ class TestBehavior:
 
         with pytest.raises(NotImplementedError):
             behavior_instance.step(t=0, scenario={})
+
+
+class ConstrainedScalarParameters(Parameters):
+    """Parameters with a scalar sum-to-1 constraint on three entries."""
+
+    def get_default_parameters(self):
+        return {
+            "a": {
+                "value": 0.3,
+                "lower bound": -1.0,
+                "upper bound": 1.0,
+                "unit": ".",
+                "notation": "a",
+            },
+            "b": {
+                "value": 0.5,
+                "lower bound": -1.0,
+                "upper bound": 1.0,
+                "unit": ".",
+                "notation": "b",
+            },
+            "c": {
+                "value": 0.2,
+                "lower bound": -1.0,
+                "upper bound": 1.0,
+                "unit": ".",
+                "notation": "c",
+            },
+        }
+
+    def get_constraints(self):
+        return (LinearConstraint(param_names=("a", "b", "c"), target=1.0),)
+
+
+class ConstrainedScalarVariables(Variables):
+    def get_default_variables(self) -> dict:
+        return {
+            "output": {
+                "notation": r"Y",
+                "unit": "USD",
+                "history": 0,
+                "sectors": ["Household"],
+                "sfc": [("Index", "Household")],
+            }
+        }
+
+
+class TestBehaviorConstraints:
+    """Step-time constraint enforcement through ``apply_parameter_shocks``."""
+
+    def _make_behavior(self, ParamCls, VarCls, ScnCls):
+        p = ParamCls()
+        return Behavior(
+            parameters=p,
+            scenarios=ScnCls(parameters=p),
+            variables=VarCls(parameters=p),
+            scenario=0,
+        )
+
+    def test_does_not_snapshot_constraints(self):
+        """Behavior holds the Parameters instance, not a frozen list."""
+        b = self._make_behavior(
+            ConstrainedScalarParameters,
+            ConstrainedScalarVariables,
+            MockScenarios,
+        )
+        assert not hasattr(b, "constraints")
+        assert b.parameters is not None
+
+    def test_scalar_constraint_survives_shock(self):
+        """Adding-up holds after a free parameter is shocked."""
+        b = self._make_behavior(
+            ConstrainedScalarParameters,
+            ConstrainedScalarVariables,
+            MockScenarios,
+        )
+        scenario = {"a_add": torch.tensor(0.2)}
+        params = b.apply_parameter_shocks(t=0, scenario=scenario)
+        total = params["a"] + params["b"] + params["c"]
+        assert torch.isclose(total, torch.tensor(1.0), atol=1e-6)
+        # Derived parameter absorbed the shock: c = 1 - 0.5 - 0.5 = 0
+        assert torch.isclose(params["c"], torch.tensor(0.0), atol=1e-6)
+
+    def test_scalar_constraint_noop_without_shock(self):
+        """With no shocks, derived value equals the init-time value."""
+        b = self._make_behavior(
+            ConstrainedScalarParameters,
+            ConstrainedScalarVariables,
+            MockScenarios,
+        )
+        params = b.apply_parameter_shocks(t=0, scenario={})
+        total = params["a"] + params["b"] + params["c"]
+        assert torch.isclose(total, torch.tensor(1.0), atol=1e-6)
+
+    def test_vector_constraint_survives_shock(self):
+        """1-D sector-indexed constraint holds after a sectoral shock."""
+        b = self._make_behavior(
+            VectorMockParameters,
+            VectorMockVariables,
+            VectorMockScenarios,
+        )
+        # Initial: Household=0.6, Firm=0.4, summing to 1.
+        # Shock one sector's multiplier; derived sector (sorted order
+        # makes Household the second entry) absorbs it.
+        scenario = {"Firm_Share_multiply": torch.tensor(0.5)}
+        params = b.apply_parameter_shocks(t=0, scenario=scenario)
+        # Share is 1-D with two sectors; must sum to 1 after apply.
+        assert torch.isclose(params["Share"].sum(), torch.tensor(1.0), atol=1e-6)
+
+    def test_vector_constraint_grad_flow(self):
+        """Gradient from derived slot flows to free slot with sign -1."""
+        p = VectorMockParameters()
+        # Make the free parameter a leaf that requires grad. Identify it
+        # by asking the resolver which slot the derived parameter is in:
+        # free_params[0] is the other one.
+        constraint = p.get_constraints()[0]
+        resolver = p.get_constraint_resolver()
+        free_loc = resolver.locate(constraint.free_params[0])
+        derived_loc = resolver.locate(constraint.derived_param)
+        assert free_loc.tensor_key == "Share"
+        assert derived_loc.tensor_key == "Share"
+
+        # Build a fresh params dict with a grad-tracking free slot.
+        share = torch.zeros(2, requires_grad=False)
+        free_leaf = torch.tensor(0.6, requires_grad=True)
+        # Compose via stack so the resulting tensor is non-leaf and
+        # tracks gradients into free_leaf.
+        if free_loc.index == (0,):
+            share = torch.stack([free_leaf, torch.zeros(())])
+        else:
+            share = torch.stack([torch.zeros(()), free_leaf])
+        params = {"Share": share}
+        constraint.apply(params, resolver)
+
+        # Loss depends only on the derived slot; grad should flow back
+        # to the free leaf with value -1.
+        loss = params["Share"][derived_loc.index[0]]
+        loss.backward()
+        assert free_leaf.grad is not None
+        assert torch.isclose(free_leaf.grad, torch.tensor(-1.0))
