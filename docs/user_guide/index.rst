@@ -13,6 +13,7 @@ see :ref:`api`.
    Core Model Structure <core/index>
    Differentiability and Jacobians <diff>
    Parameter constraints example <constraints_example>
+   Jacobian diagnostics <jacobian_diagnostics>
    Parameter Estimation and Calibration <estimation>
    Causality Analysis <causality>
    Parameter Space Sampling <sample>
