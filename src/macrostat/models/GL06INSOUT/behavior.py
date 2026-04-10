@@ -1451,7 +1451,7 @@ class BehaviorGL06INSOUT(Behavior):
         -----
         - M2Demand
         """
-        self.state["M2Demand"] = torch.clamp(
+        self.state["M2Demand"] = (
             self.state["ExpectedNonCashWealth"]
             * (
                 params["WealthShareM2_Constant"]
@@ -1461,8 +1461,7 @@ class BehaviorGL06INSOUT(Behavior):
                 * self.state["ExpectedReturnOnBonds"]
             )
             + params["WealthShareM2_Income"]
-            * self.state["NominalExpectedDisposableIncome"],
-            min=0.0,
+            * self.state["NominalExpectedDisposableIncome"]
         )
 
     def bills_demand(
@@ -1487,7 +1486,7 @@ class BehaviorGL06INSOUT(Behavior):
         -----
         - BillsDemand
         """
-        self.state["BillsDemand"] = torch.clamp(
+        self.state["BillsDemand"] = (
             self.state["ExpectedNonCashWealth"]
             * (
                 params["WealthShareBills_Constant"]
@@ -1497,8 +1496,7 @@ class BehaviorGL06INSOUT(Behavior):
                 * self.state["ExpectedReturnOnBonds"]
             )
             + params["WealthShareBills_Income"]
-            * self.state["NominalExpectedDisposableIncome"],
-            min=0.0,
+            * self.state["NominalExpectedDisposableIncome"]
         )
 
     def bonds_demand(
@@ -1537,13 +1535,10 @@ class BehaviorGL06INSOUT(Behavior):
         )
         bp = self.state["BondPrice"]
         safe_bp = torch.where(bp > 0, bp, torch.ones_like(bp))
-        self.state["BondsDemand"] = torch.clamp(
-            torch.where(
-                bp > 0,
-                value_demand / safe_bp,
-                torch.zeros_like(bp),
-            ),
-            min=0.0,
+        self.state["BondsDemand"] = torch.where(
+            bp > 0,
+            value_demand / safe_bp,
+            torch.zeros_like(bp),
         )
 
     def m1_demand_tentative(
