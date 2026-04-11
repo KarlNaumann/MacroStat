@@ -150,7 +150,7 @@ class Scenarios:
             # If the timeseries is a vector, assume it starts at the trigger
             elif isinstance(v, torch.Tensor):
                 t = min(len(v), self.parameters["timesteps"] - trigger)
-                self.timeseries[scID][k][trigger : trigger + t, 0] = v.squeeze()[:t]
+                self.timeseries[scID][k][trigger : trigger + t, 0] = v.reshape(-1)[:t]
             elif isinstance(v, (pd.Series, pd.DataFrame)):
                 t = min(len(v), self.parameters["timesteps"] - trigger)
                 self.timeseries[scID][k][trigger : trigger + t, 0] = torch.tensor(
