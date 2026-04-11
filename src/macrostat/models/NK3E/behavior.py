@@ -128,8 +128,25 @@ class BehaviorNK3E(Behavior):
         self.central_bank_slope(t=t, scenario=scenario, params=params)
         self.stabilizing_real_rate(t=t, scenario=scenario, params=params)
         self.is_curve_output(t=t, scenario=scenario, params=params)
+        # Additive state-variable shocks (see ScenariosNK3E.get_default_scenario_values).
+        # Apply each shock immediately after its equation so the perturbation
+        # propagates within the same period through the downstream equations:
+        #   OutputShock  -> y_t is seen by Phillips (pi_t) and, via r_t, next IS
+        #   InflationShock -> pi_t is seen by the policy rule (r_t)
+        #   RateShock    -> r_t is seen by next period's IS curve
+        # Use .get() so user-built scenarios that bypass the default values
+        # still work, and fall back to a same-shape zero tensor on the state.
+        self.state["y"] = self.state["y"] + scenario.get(
+            "OutputShock", torch.zeros_like(self.state["y"])
+        )
         self.phillips_curve_inflation(t=t, scenario=scenario, params=params)
+        self.state["pi"] = self.state["pi"] + scenario.get(
+            "InflationShock", torch.zeros_like(self.state["pi"])
+        )
         self.monetary_policy_rate(t=t, scenario=scenario, params=params)
+        self.state["r"] = self.state["r"] + scenario.get(
+            "RateShock", torch.zeros_like(self.state["r"])
+        )
 
     def central_bank_slope(self, t: int, scenario: dict, params: dict | None = None):
         r"""Compute the monetary policy reaction slope a3 from structural parameters.

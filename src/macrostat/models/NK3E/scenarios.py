@@ -7,6 +7,8 @@ __maintainer__ = ["Mitja Devetak"]
 
 import logging
 
+import torch
+
 from macrostat.core.scenarios import Scenarios
 from macrostat.models.NK3E.parameters import ParametersNK3E
 
@@ -40,16 +42,31 @@ class ScenariosNK3E(Scenarios):
         self.add_three_parameterizations()
 
     def get_default_scenario_values(self):
-        """Return the default scenario values."""
-        # Baseline (no shock): A=10, pi_T=2, y_e=5
+        """Return the default scenario values.
+
+        Two families coexist:
+
+        - Parameter-step shocks (``A_add``, ``pi_T_add``, ``y_e_add``): these
+          shift structural parameters from ``scenario_trigger`` onward, and
+          flow through ``Behavior.apply_parameter_shocks``.
+        - State-variable shocks (``InflationShock``, ``RateShock``,
+          ``OutputShock``): these are additive perturbations of the
+          corresponding state variables ``pi``, ``r``, ``y`` inside
+          ``BehaviorNK3E.step``, and default to zero everywhere. Register
+          them as one-period impulses by passing a length-1 list, e.g.
+          ``{"InflationShock": [1.0]}``.
+        """
         return {
             "A_add": 0.0,
             "pi_T_add": 0.0,
             "y_e_add": 0.0,
+            "InflationShock": 0.0,
+            "RateShock": 0.0,
+            "OutputShock": 0.0,
         }
 
     def add_three_parameterizations(self):
-        """Register the three default NK3E scenarios."""
+        """Register the three default NK3E scenarios plus one state-shock scenario."""
         # Scenario 1: rise in A (A: 12 vs baseline 10 -> +2)
         self.add_scenario(
             timeseries={
@@ -72,4 +89,25 @@ class ScenariosNK3E(Scenarios):
                 "y_e_add": 2.0,
             },
             name="Scenario.3: Rise in y_e",
+        )
+
+        # Scenario 4: one-period inflation impulse (+1 on pi).
+        # The impulse fires at t = max(trigger, init_t) — the first step that
+        # is both within the scenario window and in the sim loop. The offset
+        # into the timeseries vector is fire_offset = max(0, init_t - trigger),
+        # which is 0 when trigger >= init_t (fires right at the trigger) and
+        # positive when trigger < init_t (fires at the first sim step instead).
+        # This is safe for all trigger/init_t combinations, including the common
+        # notebook case trigger=25, init_t=1 where the earlier formula crashed
+        # with a negative tensor index.
+        trigger = self.parameters["scenario_trigger"]
+        init_t = self.parameters.hyper.get("timesteps_initialization", 0)
+        fire_offset = max(0, init_t - trigger)
+        impulse = torch.zeros(fire_offset + 1)
+        impulse[fire_offset] = 1.0
+        self.add_scenario(
+            timeseries={
+                "InflationShock": impulse,
+            },
+            name="Scenario.4: Inflation impulse",
         )

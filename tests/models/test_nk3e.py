@@ -105,6 +105,99 @@ def test_scenario2_higher_piT_raises_r_first_step():
     assert torch.isclose(ts["r"][2, 0], torch.tensor(r_t), atol=1e-6)
 
 
+def test_state_shock_scenario_zero_matches_baseline():
+    """With all shock variables at zero, simulation must equal the baseline.
+
+    Guards against accidental coupling introduced by the shock plumbing.
+    """
+    model_a, _, _ = _make_model(timesteps=5)
+    model_b, _, _ = _make_model(timesteps=5)
+
+    model_a.simulate(scenario=0)
+    model_b.simulate(scenario=0)
+
+    for key in ("y", "pi", "r", "r_s", "a3"):
+        ts_a = model_a.variables.timeseries[key]
+        ts_b = model_b.variables.timeseries[key]
+        assert torch.allclose(ts_a, ts_b, atol=1e-10)
+
+
+def test_inflation_impulse_raises_pi_by_one_at_trigger():
+    """One-period InflationShock of +1 at the trigger lifts pi by exactly 1.
+
+    The baseline is a no-shock steady state, so at the first simulated step
+    Phillips returns pi_T and the impulse then adds 1, giving pi = pi_T + 1.
+    After the impulse period pi decays per the Phillips rule.
+    """
+    model, params, scenarios = _make_model(timesteps=5)
+    sc = scenarios.get_scenario_index("Scenario.4: Inflation impulse")
+
+    model.simulate(scenario=sc)
+    ts = model.variables.timeseries
+
+    pi_T = params["pi_T"]
+    # First simulated step (index 2): pi starts at steady state, Phillips adds
+    # a2*(y_t - y_e) which is zero at SS, impulse of +1 applies, so pi = pi_T+1.
+    assert torch.isclose(ts["pi"][2, 0], torch.tensor(pi_T) + 1.0, atol=1e-6)
+    # Subsequent steps: impulse is zero, y and r dynamics reflect the one-off
+    # perturbation, and pi must differ from pi_T (decay regime, not a jump).
+    assert ts["pi"][3, 0].item() != pi_T
+    assert abs(ts["pi"][3, 0].item() - (pi_T + 1.0)) > 1e-6
+
+
+def test_inflation_impulse_preserves_parameters():
+    """An InflationShock scenario must not shift A, pi_T, or y_e.
+
+    Contrast with Scenario.2 which moves pi_T — here the structural parameters
+    are untouched so the long-run target stays at pi_T.
+    """
+    model, params, scenarios = _make_model(timesteps=50)
+    sc = scenarios.get_scenario_index("Scenario.4: Inflation impulse")
+
+    model.simulate(scenario=sc)
+    ts = model.variables.timeseries
+
+    pi_T = params["pi_T"]
+    # Decay to target over many periods
+    assert torch.isclose(ts["pi"][-1, 0], torch.tensor(pi_T), atol=1e-3)
+
+
+def test_inflation_impulse_at_late_trigger():
+    """InflationShock fires at t=trigger when trigger > timesteps_initialization.
+
+    This is the notebook configuration: trigger=25, timesteps=70, init_t=1.
+    The impulse vector has length 1 with fire_offset=0, placing 1.0 at
+    ts_scenario[25]. The sim loop reaches t=25 at timeseries index
+    init_t + 1 + (25 - init_t) = 26.
+    """
+    params = ParametersNK3E(
+        hyperparameters={
+            "timesteps": 70,
+            "timesteps_initialization": 1,
+            "scenario_trigger": 25,
+            "use_tqdm": False,
+        }
+    )
+    variables = VariablesNK3E(parameters=params)
+    scenarios = ScenariosNK3E(parameters=params)
+    model = NK3E(parameters=params, variables=variables, scenarios=scenarios)
+
+    sc = scenarios.get_scenario_index("Scenario.4: Inflation impulse")
+    model.simulate(scenario=sc)
+    ts = model.variables.timeseries
+
+    pi_T = params["pi_T"]
+    # Index in gathered tensor: init records t=0 and t=1 (2 entries),
+    # then sim steps t=1..69 give indices 2..70. Sim step t=25 is at index
+    # 2 + (25 - 1) = 26.
+    shock_idx = 2 + (25 - 1)
+    assert torch.isclose(ts["pi"][shock_idx, 0], torch.tensor(pi_T) + 1.0, atol=1e-6)
+    # Period before trigger: still at steady state
+    assert torch.isclose(ts["pi"][shock_idx - 1, 0], torch.tensor(pi_T), atol=1e-6)
+    # Long run: decays back to target
+    assert torch.isclose(ts["pi"][-1, 0], torch.tensor(pi_T), atol=1e-3)
+
+
 def test_initialize_preserves_autograd_graph():
     """Verify that initialize() keeps the computation graph from parameters to state.
 

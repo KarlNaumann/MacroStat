@@ -6,7 +6,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.16.1
+#       jupytext_version: 1.19.1
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -103,14 +103,21 @@
 #
 # 1. **Six parameters** (fixed constants): $a_1$, $a_2$, $b$, $A$, $\pi^T$,
 #    $y_e$ (see [Parameters](parameters.rst))
-# 2. **Three scenario variables** that shock the parameters additively:
-#    `A_add`, `pi_T_add`, `y_e_add` (see [Scenarios](scenarios.rst))
+# 2. **Six scenario keys** divided into two families (see [Scenarios](scenarios.rst)):
+#    - *Parameter-step shocks* (`A_add`, `pi_T_add`, `y_e_add`): additive offsets
+#      applied to structural parameters from `scenario_trigger` onward.
+#    - *State-variable shocks* (`InflationShock`, `RateShock`, `OutputShock`): additive
+#      perturbations applied directly to $\pi$, $r$, $y$ inside `BehaviorNK3E.step`.
+#      These default to zero; `Scenario.4` registers a one-period impulse on $\pi$.
+#      `OutputShock` and `RateShock` follow the same pattern and are available but
+#      not exercised here.
 # 3. **Five tracked variables**: $y$, $\pi$, $r$, $r_s$, $a_3$
 #    (see [Variables](variables.rst))
 #
 # The derived quantities $r_s$ and $a_3$ are recomputed every period from the
-# (possibly shocked) parameters, so they respond immediately to policy or
-# structural changes.
+# (possibly shocked) parameters, so they respond immediately to parameter-step
+# shocks. State-variable shocks bypass the parameter layer and perturb the
+# system directly within a single period.
 
 # %% [markdown]
 # ## Model Dynamics
@@ -377,5 +384,74 @@ axs[2].set_title(r"Real rate $r$ and stabilizing rate $r_s$")
 axs[2].legend(frameon=False)
 
 fig.suptitle(r"Scenario 3: Rise in equilibrium output ($y_e$: 5 → 7)")
+plt.tight_layout()
+plt.show()
+
+# %% [markdown]
+# ### Perturbation 4: Inflation impulse
+
+# %% [markdown]
+# The first three perturbations change a structural parameter permanently from
+# `scenario_trigger` onward. This perturbation differs in kind. It injects a
+# one-period additive shock of $+1$ directly into $\pi_t$ at the trigger, leaving
+# all parameters unchanged. After that single period the shock value returns to
+# zero and the model evolves freely.
+#
+# Economically, this captures an exogenous inflation surprise — a cost-push
+# impulse or an expectation shock — not driven by any change in demand, potential
+# output, or the inflation target. The structural parameters $A$, $y_e$, and
+# $\pi^T$ are identical to the baseline throughout, so $r_s$ and $a_3$ are
+# unaffected.
+#
+# The expected dynamics follow from the three equations. In the shock period
+# $\pi_t$ rises by $+1$. The monetary policy rule raises $r_t$ above $r_s$. In the
+# next period the higher $r$ suppresses output via the IS curve, the negative
+# output gap pulls $\pi$ back toward target, and the central bank relaxes the rate.
+# The economy converges monotonically to the original steady state with no
+# permanent shift in any variable.
+
+# %%
+sc4 = scenarios.get_scenario_index("Scenario.4: Inflation impulse")
+model_sc4 = NK3E(parameters=params, scenarios=scenarios)
+model_sc4.simulate(scenario=sc4)
+output_sc4 = model_sc4.variables.to_pandas()
+
+# %%
+fig, axs = plt.subplots(1, 3, figsize=(14, 4))
+
+axs[0].plot(
+    output.loc[t_slice].index, output.loc[t_slice, "y"], "k--", label="Baseline"
+)
+axs[0].plot(
+    output_sc4.loc[t_slice].index, output_sc4.loc[t_slice, "y"], "k-", label="Shock"
+)
+axs[0].axvline(x=trigger, color="grey", linestyle=":", alpha=0.5)
+axs[0].set_title(r"Output $y$")
+axs[0].legend(frameon=False)
+
+axs[1].plot(
+    output.loc[t_slice].index, output.loc[t_slice, "pi"], "k--", label="Baseline"
+)
+axs[1].plot(
+    output_sc4.loc[t_slice].index, output_sc4.loc[t_slice, "pi"], "k-", label="Shock"
+)
+axs[1].axvline(x=trigger, color="grey", linestyle=":", alpha=0.5)
+axs[1].set_title(r"Inflation $\pi$")
+axs[1].legend(frameon=False)
+
+axs[2].plot(
+    output.loc[t_slice].index, output.loc[t_slice, "r"], "k--", label="Baseline $r$"
+)
+axs[2].plot(
+    output_sc4.loc[t_slice].index, output_sc4.loc[t_slice, "r"], "k-", label="Shock $r$"
+)
+axs[2].plot(
+    output_sc4.loc[t_slice].index, output_sc4.loc[t_slice, "r_s"], "r-", label=r"$r_s$"
+)
+axs[2].axvline(x=trigger, color="grey", linestyle=":", alpha=0.5)
+axs[2].set_title(r"Real rate $r$ and stabilizing rate $r_s$")
+axs[2].legend(frameon=False)
+
+fig.suptitle(r"Perturbation 4: Inflation impulse ($\pi$: $+1$ at trigger)")
 plt.tight_layout()
 plt.show()
