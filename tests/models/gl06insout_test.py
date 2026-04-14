@@ -674,14 +674,17 @@ def test_ss_portfolio_shares_sum():
 
 
 def test_ss_shock_dispatch():
-    """SS values change after parameter shock for each scenario."""
-    model_base, _, _ = _make_model(timesteps=2000)
+    """SS values change after parameter shock (spot-check two scenarios).
+
+    Uses short timesteps — SS convergence only needs ~200 outer-loop steps.
+    Full 8-scenario accuracy is covered by test_ss_all_scenarios_match_simulation.
+    """
+    model_base, _, _ = _make_model(timesteps=200)
     model_base.compute_theoretical_steady_state()
     y_base = model_base.variables.timeseries["RealOutput"][-1].item()
 
-    # Skip baseline (idx 0), test scenarios 1-7
-    for sc_idx in range(1, 8):
-        model_sc, _, _ = _make_model(timesteps=2000)
+    for sc_idx in [2, 5]:  # fiscal shock + wealth shock
+        model_sc, _, _ = _make_model(timesteps=200)
         model_sc.compute_theoretical_steady_state(scenario=sc_idx)
         y_sc = model_sc.variables.timeseries["RealOutput"][-1].item()
 
