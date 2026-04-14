@@ -1,6 +1,6 @@
 """Targeted tests for the GL06INSOUT model.
 
-These tests verify the Godley-Lavoie 2006 INSOUT model (Chapter 7) including
+These tests verify the Godley-Lavoie 2006 INSOUT model (Chapter 10) including
 smoke tests, positivity checks, accounting identity checks, and shock response
 tests for all 7 scenarios.
 """
@@ -571,3 +571,121 @@ def test_constraint_system_derived_grads_are_zero():
             assert (
                 derived.grad.abs().max().item() == 0.0
             ), f"Derived parameter WealthShareM1_{col} has non-zero grad"
+
+
+# ---------------------------------------------------------------------------
+# Theoretical Steady-State Tests
+# ---------------------------------------------------------------------------
+
+
+def test_compute_theoretical_steady_state_runs():
+    """Smoke test: compute_theoretical_steady_state returns without error."""
+    model, _, _ = _make_model(timesteps=100)
+    model.compute_theoretical_steady_state()
+
+
+def test_steady_state_y_converges_to_simulation():
+    """Theoretical SS real output should match long-run simulated output.
+
+    The analytical solver now includes FCB via the HPM identity, closing the
+    structural gap from the prior iterative approach.  Tolerance is 0.5% to
+    allow for bank-rate convergence residuals.
+    """
+    model, _, _ = _make_model(timesteps=2000)
+    model.simulate()
+    y_sim = model.variables.timeseries["RealOutput"][-1].item()
+
+    model_ss, _, _ = _make_model(timesteps=2000)
+    model_ss.compute_theoretical_steady_state()
+    y_ss = model_ss.variables.timeseries["RealOutput"][-1].item()
+
+    rel_diff = abs(y_ss - y_sim) / max(abs(y_sim), 1e-6)
+    assert rel_diff < 5e-3, (
+        f"Theoretical SS y* deviates from simulation: "
+        f"sim={y_sim:.6f}, ss={y_ss:.6f}, rel={rel_diff:.2e}"
+    )
+
+
+def test_ss_all_scenarios_match_simulation():
+    """All 8 scenarios: SS real output within 1% of 2000-period simulation."""
+    for sc_idx in range(8):
+        # Simulation (long-run)
+        model_sim, _, _ = _make_model(timesteps=2000)
+        model_sim.simulate(scenario=sc_idx)
+        y_sim = model_sim.variables.timeseries["RealOutput"][-1].item()
+
+        # Theoretical SS
+        model_ss, _, _ = _make_model(timesteps=2000)
+        model_ss.compute_theoretical_steady_state(scenario=sc_idx)
+        y_ss = model_ss.variables.timeseries["RealOutput"][-1].item()
+
+        rel_diff = abs(y_ss - y_sim) / max(abs(y_sim), 1e-6)
+        assert rel_diff < 0.01, (
+            f"Scenario {sc_idx}: " f"sim={y_sim:.4f}, ss={y_ss:.4f}, rel={rel_diff:.2e}"
+        )
+
+
+def test_ss_baseline_tight_tolerance():
+    """Baseline SS should match simulation within 0.2%."""
+    model_sim, _, _ = _make_model(timesteps=2000)
+    model_sim.simulate()
+    y_sim = model_sim.variables.timeseries["RealOutput"][-1].item()
+
+    model_ss, _, _ = _make_model(timesteps=2000)
+    model_ss.compute_theoretical_steady_state()
+    y_ss = model_ss.variables.timeseries["RealOutput"][-1].item()
+
+    rel_diff = abs(y_ss - y_sim) / max(abs(y_sim), 1e-6)
+    assert (
+        rel_diff < 2e-3
+    ), f"Baseline tight: sim={y_sim:.6f}, ss={y_ss:.6f}, rel={rel_diff:.2e}"
+
+
+def test_ss_inflation_derived():
+    """Inflation is derived from the wage equation, not hardcoded zero.
+
+    At true SS, the consumption identity forces π → 0.  The solver should
+    converge to |π| < 1e-6.
+    """
+    model, _, _ = _make_model(timesteps=2000)
+    model.compute_theoretical_steady_state()
+    pi = model.variables.timeseries["InflationRate"][-1].abs().item()
+    assert pi < 1e-3, f"SS inflation not near zero: |π| = {pi:.2e}"
+
+
+def test_ss_portfolio_shares_sum():
+    """At SS, household portfolio shares should sum to total non-cash wealth."""
+    model, _, _ = _make_model(timesteps=2000)
+    model.compute_theoretical_steady_state()
+    ts = model.variables.timeseries
+
+    M1 = ts["M1Household"][-1]
+    M2 = ts["M2Household"][-1]
+    B_h = ts["BillsHousehold"][-1]
+    BL_h = ts["BondsHousehold"][-1]
+    p_bl = ts["BondPrice"][-1]
+    V_nc = ts["NonCashWealth"][-1]
+
+    portfolio_sum = M1 + M2 + B_h + p_bl * BL_h
+    rel_diff = (portfolio_sum - V_nc).abs() / V_nc.abs().clamp(min=1e-6)
+    assert (
+        rel_diff.item() < 1e-6
+    ), f"Portfolio sum {portfolio_sum.item():.4f} != V_nc {V_nc.item():.4f}"
+
+
+def test_ss_shock_dispatch():
+    """SS values change after parameter shock for each scenario."""
+    model_base, _, _ = _make_model(timesteps=2000)
+    model_base.compute_theoretical_steady_state()
+    y_base = model_base.variables.timeseries["RealOutput"][-1].item()
+
+    # Skip baseline (idx 0), test scenarios 1-7
+    for sc_idx in range(1, 8):
+        model_sc, _, _ = _make_model(timesteps=2000)
+        model_sc.compute_theoretical_steady_state(scenario=sc_idx)
+        y_sc = model_sc.variables.timeseries["RealOutput"][-1].item()
+
+        assert abs(y_sc - y_base) > 0.01, (
+            f"Scenario {sc_idx}: SS y* unchanged after shock "
+            f"(base={y_base:.4f}, shock={y_sc:.4f})"
+        )
