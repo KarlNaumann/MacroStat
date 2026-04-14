@@ -1,5 +1,5 @@
 """
-Behavior class for the Godley-Lavoie 2006 INSOUT model (Chapter 7).
+Behavior class for the Godley-Lavoie 2006 INSOUT model (Chapter 10).
 """
 
 # Copyright (c) 2025 Karl Naumann-Woleske
@@ -12,6 +12,7 @@ __license__ = "MIT"
 __maintainer__ = ["Karl Naumann-Woleske"]
 
 import logging
+import warnings
 
 import torch
 
@@ -26,7 +27,7 @@ logger = logging.getLogger(__name__)
 class BehaviorGL06INSOUT(Behavior):
     """Behavior class for the Godley-Lavoie 2006 INSOUT model.
 
-    Implements the INSOUT model from Chapter 7 of Godley & Lavoie (2006),
+    Implements the INSOUT model from Chapter 10 of Godley & Lavoie (2006),
     featuring 5 sectors (Household, Firm, Government, CentralBank, Bank),
     endogenous bank interest rates, inventory dynamics, and wage-price dynamics.
     """
@@ -2202,3 +2203,512 @@ class BehaviorGL06INSOUT(Behavior):
         - BankReservesSupply
         """
         self.state["BankReservesSupply"] = self.state["CashBanksSupply"]
+
+    ############################################################################
+    # Theoretical Steady State
+    ############################################################################
+
+    @torch.no_grad()
+    def _ss_solve(self, params: dict, scenario: dict) -> dict:
+        r"""Analytical steady-state solver for GL06INSOUT.
+
+        Computes all state variables from parameters alone (no iterative
+        convergence needed for real quantities).  The solver:
+
+        1. Computes UC/p analytically from the markup identity.
+        2. Expresses all portfolio quantities as linear functions of y*.
+        3. Derives r_check(y*) as a rational function via Tobin portfolio
+           algebra and the HPM identity (cf. step methods: bills_demand,
+           bonds_demand, bills_central_bank, government_debt).
+        4. Substitutes into corrected GL06 eq. 10.98 → quadratic in y*.
+        5. Iterates on π via Picard: π = Ω₃·(ωᵀ(y*) − ω*(π)).
+
+        Bank rates (r_m, r_l) are inherited from self.prior — they are
+        path-dependent through the corridor mechanism (cf. deposit_rate,
+        loan_rate) and converge in the outer base-class loop (~20 steps).
+
+        Parameters
+        ----------
+        params : dict
+            Current-period parameters.
+        scenario : dict
+            Current-period scenario values.
+
+        Returns
+        -------
+        dict
+            Complete state dictionary with all variable keys.
+        """
+        # ── Phase 0: Extract parameters ──────────────────────────────────────
+        alpha1 = params["PropensityToConsumeIncome"]
+        alpha2 = params["PropensityToConsumeWealth"]
+        tau = params["TaxRate"]
+        phi = params["MarkupRate"]
+        pr = params["LaborProductivity"]
+        N_fe = params["FullEmployment"]
+        sigma0 = params["InventorySalesRatioBaseline"]
+        sigma1 = params["InventorySalesRatioInterestSens"]
+        lam_c = params["CashToConsumptionRatio"]
+        ro1 = params["ReserveRatioM1"]
+        ro2 = params["ReserveRatioM2"]
+        Omega0 = params["RealWageTargetConstant"]
+        Omega1 = params["RealWageProductivityElasticity"]
+        Omega2 = params["RealWageEmploymentElasticity"]
+        Omega3 = params["WageAdjustmentSpeed"]
+        bot = params["BankLiquidityFloor"]
+
+        # Tobin portfolio lambdas (cf. m2_demand, bills_demand, bonds_demand)
+        lam20 = params["WealthShareM2_Constant"]
+        lam22 = params["WealthShareM2_DepositRate"]
+        lam23 = params["WealthShareM2_BillRate"]
+        lam24 = params["WealthShareM2_BondYield"]
+        lam25 = params["WealthShareM2_Income"]
+        lam30 = params["WealthShareBills_Constant"]
+        lam32 = params["WealthShareBills_DepositRate"]
+        lam33 = params["WealthShareBills_BillRate"]
+        lam34 = params["WealthShareBills_BondYield"]
+        lam35 = params["WealthShareBills_Income"]
+        lam40 = params["WealthShareBonds_Constant"]
+        lam42 = params["WealthShareBonds_DepositRate"]
+        lam43 = params["WealthShareBonds_BillRate"]
+        lam44 = params["WealthShareBonds_BondYield"]
+        lam45 = params["WealthShareBonds_Income"]
+
+        # Exogenous scenario values (cf. set_bill_rate, etc.)
+        g = scenario["RealGovernmentSpending"]
+        r_b = scenario["BillRate"]
+        r_bl = scenario["BondYield"]
+
+        # Derived constants
+        safe_a2 = torch.where(alpha2 > 0, alpha2, torch.ones_like(alpha2))
+        alpha3 = torch.where(
+            alpha2 > 0,
+            (1.0 - alpha1) / safe_a2,
+            torch.zeros_like(alpha2),
+        )
+
+        # Bond price (cf. bond_price): p_bl = 1/r_bl
+        safe_rbl = torch.where(r_bl > 0, r_bl, torch.ones_like(r_bl))
+        p_bl = torch.where(r_bl > 0, 1.0 / safe_rbl, torch.zeros_like(r_bl))
+        ERr_bl = r_bl  # static expectations (cf. expected_return_on_bonds)
+
+        # ── Phase 1: Bank rates and inventory ratio ──────────────────────────
+        # Bank rates are path-dependent (corridor mechanism). Read from
+        # self.state — the wrapper calls the actual deposit_rate/loan_rate
+        # methods before _ss_solve so they converge via the outer loop.
+        r_m = self.state["DepositRate"]
+        r_l = self.state["LoanRate"]
+        r_a = r_b  # advance rate = bill rate (cf. advance_rate)
+
+        # Target inventory-sales ratio (cf. target_inventory_sales_ratio)
+        sigmaT = sigma0 - sigma1 * r_l
+
+        # ── Phase 2: Picard iteration on (y*, π) ────────────────────────────
+        pi = torch.zeros_like(g)
+        max_iter = 50
+        tol_pi = 1e-10
+
+        for _picard_iter in range(max_iter):
+            pi_old = pi.clone()
+
+            # UC/p(π): analytical from markup identity
+            # At SS: NHUC = UC·[(1-σᵀ) + σᵀ·(1+r_l)/(1+π)]
+            # p = (1+τ)(1+φ)·NHUC, so UC/p = 1/((1+τ)(1+φ)·nhuc_factor)
+            # (cf. normal_historic_unit_cost, price_level)
+            safe_pi = torch.clamp(1.0 + pi, min=0.5)
+            nhuc_factor = (1.0 - sigmaT) + sigmaT * (1.0 + r_l) / safe_pi
+            uc_over_p = 1.0 / ((1.0 + tau) * (1.0 + phi) * nhuc_factor)
+
+            # ── Portfolio ξ coefficients (p-normalized, linear in c*) ────
+            # V_nc/f = α₃ − λ_c where f = c*·p  (cf. cash_demand)
+            vnc_frac = alpha3 - lam_c
+
+            # Portfolio share constants at current rates
+            share_B = lam30 + lam32 * r_m + lam33 * r_b + lam34 * ERr_bl
+            share_BL = lam40 + lam42 * r_m + lam43 * r_b + lam44 * ERr_bl
+            share_M2 = lam20 + lam22 * r_m + lam23 * r_b + lam24 * ERr_bl
+
+            # ξ: fraction of f = c*·p allocated to each asset
+            # (cf. bills_demand, bonds_demand, m2_demand, m1_demand_tentative)
+            # At SS: YD_e = f·(1+π·α₃) because yd_r = c* but
+            # YD_r/p = c* + π·v* = c*·(1+π·α₃) (cf. eq 10.32, 10.26)
+            yde_factor = 1.0 + pi * alpha3
+            xi_B = vnc_frac * share_B + lam35 * yde_factor
+            xi_BL = vnc_frac * share_BL + lam45 * yde_factor
+            xi_M2 = vnc_frac * share_M2 + lam25 * yde_factor
+            xi_M1 = vnc_frac - xi_M2 - xi_B - xi_BL  # buffer stock residual
+
+            # Portfolio switch: when M1 demand < 0, M1 = 0 and M2 absorbs
+            # residual (cf. portfolio_switches, m1_household, m2_household).
+            # This changes bank BS and HPM coefficients.
+            switch = xi_M1 < 0
+            xi_M1 = torch.where(switch, torch.zeros_like(xi_M1), xi_M1)
+            xi_M2 = torch.where(switch, vnc_frac - xi_B - xi_BL, xi_M2)
+
+            # ── Bank balance sheet (p-normalized) ────────────────────────
+            # B_b/p = μ₁·y* + μ₀
+            # (cf. loans_supply, required_reserves, bank_bills_tentative)
+            mu1 = (1.0 - ro1) * xi_M1 + (1.0 - ro2) * xi_M2 - sigmaT * uc_over_p
+            mu0 = -g * ((1.0 - ro1) * xi_M1 + (1.0 - ro2) * xi_M2)
+
+            # B_cb/p = κ·c* via HPM identity (A_s = 0 assumption)
+            # H_s = Hh + Hb = (λ_c + ρ₁·ξ_M1 + ρ₂·ξ_M2)·c*·p
+            # (cf. bills_central_bank, high_powered_money)
+            kappa = lam_c + ro1 * xi_M1 + ro2 * xi_M2
+
+            # B_s/p = B_h/p + B_b/p + B_cb/p = χ_s·y* + χ₀
+            # (cf. bill market clearing: B_s = B_h + B_b + B_cb)
+            chi_s = xi_B + kappa + mu1
+            chi_0 = -g * (xi_B + kappa) + mu0
+
+            # ── r_check as rational function of y* ───────────────────────
+            # DS/p = c*·(r_b·ξ_B + r_bl·ξ_BL)  [debt service to households]
+            # (cf. regular_disposable_income: r_b·B_h + BL_h coupon)
+            ds = r_b * xi_B + r_bl * xi_BL
+            a_n = ds
+            b_n = -g * ds
+
+            # GD/p = B_s/p + c*·ξ_BL  (cf. government_debt: B_s + p_bl·BL_s)
+            a_d = chi_s + xi_BL
+            b_d = chi_0 - g * xi_BL
+
+            # ── Quadratic coefficients ───────────────────────────────────
+            # Eq. 10.98: y* = g·(1 − α₃·R) / (T − R·Q)
+            # where R = r_check − π, T = τ/(1+τ), Q = α₃ − σᵀ·UC/p
+            # Cross-multiplying with r_check = (a_n·y*+b_n)/(a_d·y*+b_d)
+            # yields A·y*² + B·y* + C = 0
+            T_tax = tau / (1.0 + tau)
+            Q_inv = alpha3 - sigmaT * uc_over_p
+
+            a_R = a_n - pi * a_d
+            b_R = b_n - pi * b_d
+
+            A_coeff = T_tax * a_d - Q_inv * a_R
+            B_coeff = T_tax * b_d - Q_inv * b_R - g * (a_d - alpha3 * a_R)
+            C_coeff = -g * (b_d - alpha3 * b_R)
+
+            # ── Solve quadratic ──────────────────────────────────────────
+            discriminant = B_coeff**2 - 4.0 * A_coeff * C_coeff
+            safe_disc = torch.clamp(discriminant, min=0.0)
+            sqrt_disc = torch.sqrt(safe_disc)
+
+            safe_A = torch.where(
+                A_coeff.abs() > 1e-12,
+                A_coeff,
+                torch.ones_like(A_coeff) * 1e-12,
+            )
+            y1 = (-B_coeff + sqrt_disc) / (2.0 * safe_A)
+            y2 = (-B_coeff - sqrt_disc) / (2.0 * safe_A)
+
+            # Select positive root with c* = y* − g > 0.
+            # When A_coeff < 0 (large α₃, e.g. Scenario 5), the +√ root
+            # is the smaller one.  Always prefer the larger valid root.
+            valid1 = (y1 > g) & (y1 > 0)
+            valid2 = (y2 > g) & (y2 > 0)
+            y_star = torch.where(
+                valid1 & valid2,
+                torch.max(y1, y2),
+                torch.where(
+                    valid1,
+                    y1,
+                    torch.where(valid2, y2, torch.clamp(torch.max(y1, y2), min=0.0)),
+                ),
+            )
+
+            # ── Inflation update ─────────────────────────────────────────
+            # ω* = pr·UC/p  [markup-implied real wage] (cf. real_wage, unit_cost)
+            # ωᵀ = exp(Ω₀ + Ω₁·log(pr) + Ω₂·log(N*/N_fe))
+            #      (cf. target_real_wage)
+            # π = Ω₃·(ωᵀ − ω*)  [from nominal_wage at SS: W(t)/W(t-1) = 1+π]
+            omega_star = uc_over_p * pr
+            N_star = y_star / pr
+            safe_ratio = torch.clamp(N_star / N_fe, min=1e-10)
+            omega_T = torch.exp(
+                Omega0
+                + Omega1 * torch.log(torch.clamp(pr, min=1e-10))
+                + Omega2 * torch.log(safe_ratio)
+            )
+            pi_raw = Omega3 * (omega_T - omega_star)
+            pi_raw = torch.clamp(pi_raw, min=-0.5)
+            # Damped update: undamped Picard has spectral radius > 1
+            # when α₃ is large (e.g. Scenario 5, α₃=4).
+            pi = 0.7 * pi + 0.3 * pi_raw
+
+            # Check convergence
+            pi_err = (pi - pi_old).abs().max()
+            if pi_err.item() < tol_pi:
+                break
+
+        # ── Phase 3: Derive all state variables from (y*, π) ────────────────
+        c_star = y_star - g
+        inv_star = sigmaT * y_star
+
+        # Nominal anchor: W from prior + inflation adjustment
+        # (cf. nominal_wage; model has unit root in nominal level)
+        W = self.prior["NominalWage"] * (1.0 + pi)
+        UC = W / pr  # cf. unit_cost
+        NHUC = UC * nhuc_factor  # cf. normal_historic_unit_cost
+        p = (1.0 + tau) * (1.0 + phi) * NHUC  # cf. price_level
+
+        # Common nominal factor
+        f = c_star * p
+
+        # ── Build output dictionary ──────────────────────────────────────────
+        ss: dict[str, torch.Tensor] = {}
+        zero = torch.zeros_like(g)
+
+        # Block 0: Exogenous (cf. set_bill_rate, set_bond_yield, etc.)
+        ss["RealGovernmentSpending"] = g
+        ss["BillRate"] = r_b
+        ss["BondYield"] = r_bl
+
+        # Block 2: Bond pricing (cf. bond_price, expected_return_on_bonds)
+        ss["BondPrice"] = p_bl
+        ss["ExpectedReturnOnBonds"] = ERr_bl
+
+        # Block 3: Firm output and inventory (cf. real_output, real_sales, etc.)
+        ss["TargetInventorySalesRatio"] = sigmaT
+        ss["RealOutput"] = y_star
+        ss["RealSales"] = y_star  # s* = y* at SS
+        ss["RealConsumption"] = c_star
+        ss["RealInventories"] = inv_star
+        ss["TargetInventories"] = inv_star
+        ss["ExpectedInventories"] = inv_star
+        ss["ExpectedSales"] = y_star
+        ss["ActualInventorySalesRatio"] = sigmaT
+
+        # Block 6: Wages, prices, employment
+        # (cf. employment, nominal_wage, wage_bill, unit_cost, price_level, etc.)
+        ss["Employment"] = N_star
+        ss["NominalWage"] = W
+        WB = N_star * W
+        ss["WageBill"] = WB
+        ss["UnitCost"] = UC
+        ss["NormalHistoricUnitCost"] = NHUC
+        ss["PriceLevel"] = p
+        ss["InflationRate"] = pi
+        ss["RealWage"] = W / p
+        ss["TargetRealWage"] = omega_T
+
+        # Block 7: Nominal aggregates (cf. nominal_consumption, taxes, etc.)
+        C_nom = c_star * p
+        S_nom = y_star * p  # s* = y* at SS
+        G_nom = g * p
+        INV_nom = inv_star * UC
+        ss["NominalConsumption"] = C_nom
+        ss["NominalSales"] = S_nom
+        ss["GovernmentSpending"] = G_nom
+        TX = tau / (1.0 + tau) * S_nom  # cf. taxes
+        ss["Taxes"] = TX
+        ss["NominalInventories"] = INV_nom
+        ss["LoanDemand"] = INV_nom  # cf. loan_demand: L^d = INV
+        ss["NominalOutput"] = S_nom  # at SS, inv change = 0
+
+        # Firm profits: S − TX − WB − r_l·L_s  (cf. firm_profits; inv change=0)
+        L_s = INV_nom  # cf. loans_supply: L_s = L^d
+        FP = S_nom - TX - WB - r_l * L_s
+        ss["FirmProfits"] = FP
+
+        # Block 8: Household income and wealth
+        # (cf. regular_disposable_income, nominal_wealth, etc.)
+        V_star = alpha3 * f  # V* = α₃·c*·p
+        v_star = alpha3 * c_star  # real wealth
+
+        # Portfolio asset holdings (from ξ coefficients)
+        B_h = f * xi_B  # cf. bills_household
+        BL_h_val = f * xi_BL  # bond value = BL_h·p_bl
+        BL_h = BL_h_val * r_bl  # number of bonds (cf. bonds_demand)
+        M2_h = f * xi_M2  # cf. m2_household
+        M1_h = f * xi_M1  # cf. m1_household
+        Hh = lam_c * C_nom  # cf. cash_demand
+
+        # Bank balance sheet (cf. loans_supply through bank_liquidity_ratio)
+        M1_s = M1_h
+        M2_s = M2_h
+        RR = ro1 * M1_s + ro2 * M2_s  # cf. required_reserves
+        Hb = RR  # cf. cash_banks_supply
+        B_b_tent = M1_s + M2_s - L_s - Hb  # cf. bank_bills_tentative
+
+        # Bank profits at SS (cf. bank_profits)
+        # FBP = r_l·L_s + r_b·B_b − r_m·M2_s − r_a·A_s
+        A_s = zero  # A_s = 0 assumption
+        B_b = B_b_tent + A_s  # cf. bank_bill_holdings
+        FBP = r_l * L_s + r_b * B_b - r_m * M2_s - r_a * A_s
+        ss["BankProfits"] = FBP
+
+        # Bank profit margin: FBP/(M1+M2) at SS (cf. bank_profit_margin)
+        dep_base = M1_s + M2_s
+        safe_dep = torch.where(dep_base > 0, dep_base, torch.ones_like(dep_base))
+        BPM = torch.where(dep_base > 0, FBP / safe_dep, zero)
+        ss["BankProfitMargin"] = BPM
+
+        # Total dividends (cf. total_dividends: FD = FP + FBP)
+        FD = FP + FBP
+        ss["TotalDividends"] = FD
+
+        # Capital gains = 0 (constant bond price at SS; cf. capital_gains)
+        ss["CapitalGains"] = zero
+
+        # Disposable income: YD_r = WB + FD + r_m·M2 + r_b·B_h + BL_h
+        # (cf. regular_disposable_income)
+        YD_r = WB + FD + r_m * M2_h + r_b * B_h + BL_h
+        ss["RegularDisposableIncome"] = YD_r
+        ss["HaigSimonsDisposableIncome"] = YD_r  # no CG at SS
+
+        ss["NominalWealth"] = V_star
+
+        # Real disposable income: yd_r = YD_r/p − π·V/p
+        # (cf. real_regular_disposable_income)
+        safe_p = torch.where(p > 0, p, torch.ones_like(p))
+        yd_r_real = torch.where(
+            p > 0,
+            YD_r / safe_p - pi * V_star / safe_p,
+            zero,
+        )
+        ss["RealRegularDisposableIncome"] = yd_r_real
+        ss["RealWealth"] = v_star
+
+        # Expected income/wealth (converged at SS)
+        ss["ExpectedRealDisposableIncome"] = yd_r_real
+        # YD_e = f·(1+π·α₃): nominal income includes inflation erosion
+        # of wealth (cf. eq 10.32: YD_r^e = p·yd_r^e + π·V/p)
+        ss["NominalExpectedDisposableIncome"] = f * (1.0 + pi * alpha3)
+        ss["ExpectedNominalWealth"] = V_star
+
+        # Portfolio details (cf. cash_demand through bonds_household)
+        ss["CashDemand"] = Hh
+        V_nc = V_star - Hh
+        ss["ExpectedNonCashWealth"] = V_nc
+        ss["NonCashWealth"] = V_nc
+
+        ss["M2Demand"] = M2_h
+        ss["BillsDemand"] = B_h
+        ss["BondsDemand"] = BL_h
+        M1_tent = V_nc - M2_h - B_h - BL_h_val
+        ss["M1DemandTentative"] = M1_tent
+
+        # Portfolio switches (cf. portfolio_switches)
+        z1 = torch.where(M1_tent > 0, torch.ones_like(M1_tent), zero)
+        z2 = 1.0 - z1
+        ss["SwitchM1Positive"] = z1
+        ss["SwitchM2Absorber"] = z2
+
+        ss["CashHousehold"] = Hh
+        ss["M1Household"] = M1_h
+        ss["M2Household"] = M2_h
+        ss["BillsHousehold"] = B_h
+        ss["BondsHousehold"] = BL_h
+
+        # Block 1: Bank rates (cf. deposit_rate, loan_rate, advance_rate)
+        ss["DepositRate"] = r_m
+        ss["LoanRate"] = r_l
+        ss["AdvanceRate"] = r_a
+
+        # Block 10: Government (cf. government_spending through government_debt)
+        ss["BondsSupply"] = BL_h  # BL_s = BL_h at SS
+        B_cb = Hh + Hb  # HPM identity with A_s = 0
+        B_s = B_h + B_b + B_cb  # bill market clearing
+        ss["BillsSupply"] = B_s
+        ss["PublicSectorBorrowingRequirement"] = zero
+        GD = B_s + p_bl * BL_h  # cf. government_debt
+        ss["GovernmentDebt"] = GD
+
+        # Central bank profits: FCB = r_b·B_cb (+ r_a·A_s = 0)
+        # (cf. central_bank_profits)
+        FCB = r_b * B_cb
+        ss["CentralBankProfits"] = FCB
+
+        # Block 11: Bank balance sheet details
+        ss["LoansSupply"] = L_s
+        ss["M1Supply"] = M1_s
+        ss["M2Supply"] = M2_s
+        ss["RequiredReserves"] = RR
+        ss["CashBanksSupply"] = Hb
+        ss["BillsBankTentative"] = B_b_tent
+
+        BLR_tent = B_b_tent / torch.clamp(dep_base, min=1e-10)
+        ss["BankLiquidityRatioTentative"] = BLR_tent
+        z3 = torch.where(BLR_tent < bot, torch.ones_like(BLR_tent), zero)
+        ss["SwitchBankBelowFloor"] = z3
+        ss["AdvancesDemand"] = A_s
+        ss["BillsBank"] = B_b
+        BLR = B_b / torch.clamp(dep_base, min=1e-10)
+        ss["BankLiquidityRatio"] = BLR
+        ss["LaggedM1Supply"] = M1_s  # at SS, lag = current
+        ss["LaggedM2Supply"] = M2_s
+
+        # Block 12: Central bank (cf. advances_supply through bank_reserves)
+        ss["AdvancesSupply"] = A_s
+        ss["BillsCentralBank"] = B_cb
+        H_s = Hh + Hb
+        ss["HighPoweredMoney"] = H_s
+        ss["BankReservesSupply"] = Hb
+
+        # ── Warnings ─────────────────────────────────────────────────────────
+        if A_s.abs().max().item() > 0 or z3.max().item() > 0:
+            warnings.warn(
+                "SS solver assumes A_s = 0 (bank within liquidity corridor). "
+                "Banking corridor may be binding — results approximate.",
+                stacklevel=2,
+            )
+        denom_check = (a_d * y_star + b_d).abs().min().item()
+        if denom_check < 1e-6:
+            warnings.warn(
+                f"Small GD denominator in r_check ({denom_check:.4f}). "
+                "SS formula may be numerically unstable.",
+                stacklevel=2,
+            )
+
+        return ss
+
+    def compute_theoretical_steady_state_per_step(
+        self, t: int, params: dict, scenario: dict
+    ):
+        r"""Compute steady-state values for one timestep.
+
+        Runs bank-rate blocks (0-2) first so that the corridor mechanism
+        updates r_m and r_l in ``self.state``, then calls :meth:`_ss_solve`
+        for all remaining variables.  The base-class outer loop calls this
+        at each timestep, updating ``self.prior`` between steps.
+
+        Parameters
+        ----------
+        t : int
+            Current timestep index.
+        params : dict
+            Current-period parameters.
+        scenario : dict
+            Current-period scenario values.
+        """
+        kwargs = dict(t=t, params=params, scenario=scenario)
+
+        # Block 0: Exogenous scenario variables
+        self.set_bill_rate(**kwargs)
+        self.set_bond_yield(**kwargs)
+        self.set_real_government_spending(**kwargs)
+
+        # Block 1: Bank profits → profit margin → endogenous rates
+        # These read from self.prior and write updated r_m, r_l to self.state.
+        self.bank_profits(**kwargs)
+        self.bank_profit_margin(**kwargs)
+        self.deposit_rate(**kwargs)
+        self.loan_rate(**kwargs)
+        self.central_bank_profits(**kwargs)
+
+        # Block 2: Bond pricing
+        self.bond_price(**kwargs)
+        self.expected_return_on_bonds(**kwargs)
+
+        # Analytical solver reads r_m, r_l from self.state (set above)
+        ss = self._ss_solve(params, scenario)
+
+        # Hard assert: returned keys must match state keys
+        state_keys = set(self.state.keys())
+        ss_keys = set(ss.keys())
+        missing = state_keys - ss_keys
+        extra = ss_keys - state_keys
+        assert not missing, f"_ss_solve missing keys: {missing}"
+        assert not extra, f"_ss_solve extra keys: {extra}"
+
+        for key, val in ss.items():
+            self.state[key] = val
