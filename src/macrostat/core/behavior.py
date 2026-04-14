@@ -267,15 +267,21 @@ class Behavior(torch.nn.Module):
         torch.manual_seed(self.hyper["seed"])
 
         # Initialize the output tensors
-        self.state, _ = self.variables.initialize_tensors()
+        self.state, self.history = self.variables.initialize_tensors()
 
         # Initialize the model
         info = f"(t=0...{self.hyper['timesteps_initialization']})"
         logger.debug(f"Initializing model {info}")
         self.initialize()
 
-        for t in range(self.hyper["timesteps_initialization"]):
+        for t in range(self.hyper["timesteps_initialization"] + 1):
             self.variables.record_state(t, self.state)
+
+        for t in range(self.hyper["timesteps_initialization"] + 1):
+            self.history = self.variables.update_history(self.state)
+
+        # Initialize prior from the initialization state
+        self.prior = self.state
 
         # Compute the steady state
         info = f"(t={self.hyper['timesteps_initialization'] + 1}...{self.hyper['timesteps']})"
@@ -304,6 +310,8 @@ class Behavior(torch.nn.Module):
 
             # Store the outputs
             self.variables.record_state(t, self.state)
+            self.history = self.variables.update_history(self.state)
+            self.prior = self.state
 
         return None
 
