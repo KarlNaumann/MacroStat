@@ -17,8 +17,6 @@ Calculate the actual inventory-sales ratio (beginning-of-period).
 	\end{align}
 
 
-
-
 2. Advances Demand
 
 Calculate bank demand for central bank advances.
@@ -31,8 +29,6 @@ When the tentative liquidity ratio is below floor, bank borrows from CB.
 	\begin{align}
 	A^d(t) = \max(bot \cdot (M1_s + M2_s) - B_b^T, 0) \cdot z_3
 	\end{align}
-
-
 
 
 3. Bank Bill Holdings
@@ -48,8 +44,6 @@ Calculate actual bank bill holdings after advances.
 	\end{align}
 
 
-
-
 4. Bank Bills Tentative
 
 Calculate tentative bank bill holdings (residual of bank balance sheet).
@@ -61,8 +55,6 @@ Calculate tentative bank bill holdings (residual of bank balance sheet).
 	\begin{align}
 	B_b^T(t) = M1_s + M2_s - L_s - Hb_s
 	\end{align}
-
-
 
 
 5. Bank Liquidity Ratio
@@ -78,8 +70,6 @@ Calculate the actual bank liquidity ratio.
 	\end{align}
 
 
-
-
 6. Bank Liquidity Ratio Tentative
 
 Calculate the tentative bank liquidity ratio.
@@ -91,8 +81,6 @@ Calculate the tentative bank liquidity ratio.
 	\begin{align}
 	BLR^T(t) = B_b^T(t) / (M1_s(t) + M2_s(t))
 	\end{align}
-
-
 
 
 7. Bank Profit Margin
@@ -110,8 +98,6 @@ Calculate the bank profit margin as a share of the prior deposit base.
 	\end{align}
 
 
-
-
 8. Bank Profits
 
 Calculate bank profits from prior-period stocks and rates.
@@ -126,8 +112,6 @@ Calculate bank profits from prior-period stocks and rates.
 	\end{align}
 
 
-
-
 9. Bills Central Bank
 
 Calculate central bank bill holdings as residual.
@@ -139,8 +123,6 @@ Calculate central bank bill holdings as residual.
 	\begin{align}
 	B_{cb}(t) = B_s(t) - B_h(t) - B_b(t)
 	\end{align}
-
-
 
 
 10. Bills Demand
@@ -158,8 +140,6 @@ Calculate bills demand via Tobin portfolio choice.
 	\end{align}
 
 
-
-
 11. Bills Supply
 
 Calculate bill supply as residual government financing.
@@ -174,8 +154,6 @@ Calculate bill supply as residual government financing.
 	\end{align}
 
 
-
-
 12. Bond Price
 
 Calculate the bond price as the inverse of the bond yield.
@@ -187,8 +165,6 @@ Calculate the bond price as the inverse of the bond yield.
 	\begin{align}
 	p_{bl}(t) = \frac{1}{r_{bl}(t)}
 	\end{align}
-
-
 
 
 13. Bonds Demand
@@ -206,8 +182,6 @@ Calculate bond demand (in number of bonds) via Tobin portfolio choice.
 	\end{align}
 
 
-
-
 14. Bonds Supply
 
 Set bond supply equal to household bond demand.
@@ -219,8 +193,6 @@ Set bond supply equal to household bond demand.
 	\begin{align}
 	BL_s(t) = BL_h(t)
 	\end{align}
-
-
 
 
 15. Capital Gains
@@ -236,8 +208,6 @@ Calculate capital gains on bond holdings.
 	\end{align}
 
 
-
-
 16. Cash Demand
 
 Calculate household cash demand proportional to consumption.
@@ -251,8 +221,6 @@ Calculate household cash demand proportional to consumption.
 	\end{align}
 
 
-
-
 17. Central Bank Profits
 
 Calculate central bank profits from prior-period stocks and rates.
@@ -264,8 +232,6 @@ Calculate central bank profits from prior-period stocks and rates.
 	\begin{align}
 	FCB(t) = r_b(t-1) \cdot B_{cb}(t-1) + r_a(t-1) \cdot A_s(t-1)
 	\end{align}
-
-
 
 
 18. Deposit Rate
@@ -283,8 +249,6 @@ Calculate the endogenous deposit rate based on bank liquidity.
 	\end{align}
 
 
-
-
 19. Employment
 
 Calculate employment from real output and labor productivity.
@@ -296,8 +260,6 @@ Calculate employment from real output and labor productivity.
 	\begin{align}
 	N(t) = \frac{y(t)}{pr}
 	\end{align}
-
-
 
 
 20. Expected Inventories
@@ -313,8 +275,6 @@ Calculate expected end-of-period inventories via partial adjustment.
 	\end{align}
 
 
-
-
 21. Expected Nominal Wealth
 
 Calculate expected nominal wealth for portfolio allocation.
@@ -328,8 +288,6 @@ Calculate expected nominal wealth for portfolio allocation.
 	\end{align}
 
 
-
-
 22. Expected Non Cash Wealth
 
 Calculate expected non-cash wealth available for portfolio allocation.
@@ -341,8 +299,6 @@ Calculate expected non-cash wealth available for portfolio allocation.
 	\begin{align}
 	V^e_{nc}(t) = V^e(t) - Hh^d(t)
 	\end{align}
-
-
 
 
 23. Expected Real Disposable Income
@@ -359,8 +315,6 @@ Calculate expected real disposable income via adaptive expectations.
 	\end{align}
 
 
-
-
 24. Expected Return On Bonds
 
 Calculate the expected return on bonds (static expectations).
@@ -374,8 +328,6 @@ Calculate the expected return on bonds (static expectations).
 	\end{align}
 
 
-
-
 25. Expected Sales
 
 Calculate expected real sales using adaptive expectations.
@@ -387,8 +339,6 @@ Calculate expected real sales using adaptive expectations.
 	\begin{align}
 	s^e(t) = \beta \cdot s(t-1) + (1 - \beta) \cdot s^e(t-1)
 	\end{align}
-
-
 
 
 26. Firm Profits
@@ -405,8 +355,6 @@ Calculate firm profits.
 	\end{align}
 
 
-
-
 27. Government Debt
 
 Calculate total government debt.
@@ -418,8 +366,6 @@ Calculate total government debt.
 	\begin{align}
 	GD(t) = B_s(t) + p_{bl}(t) \cdot BL_s(t)
 	\end{align}
-
-
 
 
 28. Government Spending
@@ -435,8 +381,6 @@ Calculate nominal government spending.
 	\end{align}
 
 
-
-
 29. Haig Simons Disposable Income
 
 Calculate Haig-Simons disposable income (including capital gains).
@@ -448,8 +392,6 @@ Calculate Haig-Simons disposable income (including capital gains).
 	\begin{align}
 	YD_{hs}(t) = YD_r(t) + CG(t)
 	\end{align}
-
-
 
 
 30. High Powered Money
@@ -465,8 +407,6 @@ Calculate high-powered money supply.
 	\end{align}
 
 
-
-
 31. Inflation Rate
 
 Calculate the inflation rate.
@@ -478,8 +418,6 @@ Calculate the inflation rate.
 	\begin{align}
 	\pi(t) = \frac{p(t) - p(t-1)}{p(t-1)}
 	\end{align}
-
-
 
 
 32. Loan Demand
@@ -495,8 +433,6 @@ Set firm loan demand equal to nominal inventories.
 	\end{align}
 
 
-
-
 33. Loan Rate
 
 Calculate the endogenous loan rate based on bank profit margin.
@@ -510,8 +446,6 @@ Calculate the endogenous loan rate based on bank profit margin.
 	+ (r_b(t) - r_b(t-1))
 	where :math:`z_6 = 1` if :math:`BPM(t) < bot_{pm}`,
 	\end{align}
-
-
 
 
 34. M1 Demand Tentative
@@ -531,8 +465,6 @@ not expected, for this residual.
 	\end{align}
 
 
-
-
 35. M2 Demand
 
 Calculate M2 demand via Tobin portfolio choice.
@@ -546,8 +478,6 @@ Calculate M2 demand via Tobin portfolio choice.
 	+ \lambda_{22} \cdot r_b + \lambda_{23} \cdot ERr_{bl})
 	+ \lambda_{24} \cdot YD^e
 	\end{align}
-
-
 
 
 36. M2 Household
@@ -566,8 +496,6 @@ residual non-cash wealth after bills and bonds.
 	\end{align}
 
 
-
-
 37. Nominal Consumption
 
 Calculate nominal consumption.
@@ -579,8 +507,6 @@ Calculate nominal consumption.
 	\begin{align}
 	C(t) = c(t) \cdot p(t)
 	\end{align}
-
-
 
 
 38. Nominal Expected Disposable Income
@@ -596,8 +522,6 @@ Calculate the nominal expected disposable income.
 	\end{align}
 
 
-
-
 39. Nominal Inventories
 
 Calculate nominal inventories valued at current unit cost.
@@ -609,8 +533,6 @@ Calculate nominal inventories valued at current unit cost.
 	\begin{align}
 	INV(t) = inv(t) \cdot UC(t)
 	\end{align}
-
-
 
 
 40. Nominal Output
@@ -626,8 +548,6 @@ Calculate nominal output (sales at price + inventory change at cost).
 	\end{align}
 
 
-
-
 41. Nominal Sales
 
 Calculate nominal sales.
@@ -639,8 +559,6 @@ Calculate nominal sales.
 	\begin{align}
 	S(t) = s(t) \cdot p(t)
 	\end{align}
-
-
 
 
 42. Nominal Wage
@@ -657,8 +575,6 @@ Calculate the nominal wage via partial adjustment to target real wage.
 	\end{align}
 
 
-
-
 43. Nominal Wealth
 
 Calculate nominal household wealth.
@@ -670,8 +586,6 @@ Calculate nominal household wealth.
 	\begin{align}
 	V(t) = V(t-1) + YD_{hs}(t) - C(t)
 	\end{align}
-
-
 
 
 44. Non Cash Wealth
@@ -691,8 +605,6 @@ realized residual uses actual wealth so that the portfolio identity holds.
 	\end{align}
 
 
-
-
 45. Normal Historic Unit Cost
 
 Calculate the normal historic unit cost.
@@ -709,8 +621,6 @@ financing cost applied to the prior component.
 	\end{align}
 
 
-
-
 46. Price Level
 
 Calculate the price level as a markup over normal historic unit cost.
@@ -722,8 +632,6 @@ Calculate the price level as a markup over normal historic unit cost.
 	\begin{align}
 	p(t) = (1 + \tau) \cdot (1 + \phi) \cdot NHUC(t)
 	\end{align}
-
-
 
 
 47. Public Sector Borrowing Requirement
@@ -740,8 +648,6 @@ Calculate the public sector borrowing requirement.
 	\end{align}
 
 
-
-
 48. Real Consumption
 
 Calculate real consumption.
@@ -753,8 +659,6 @@ Calculate real consumption.
 	\begin{align}
 	c(t) = \alpha_0 + \alpha_1 \cdot yd_r^e(t) + \alpha_2 \cdot v(t-1)
 	\end{align}
-
-
 
 
 49. Real Inventories
@@ -770,8 +674,6 @@ Calculate real end-of-period inventories.
 	\end{align}
 
 
-
-
 50. Real Output
 
 Calculate real output as expected sales plus inventory adjustment.
@@ -783,8 +685,6 @@ Calculate real output as expected sales plus inventory adjustment.
 	\begin{align}
 	y(t) = s^e(t) + inv^e(t) - inv(t-1)
 	\end{align}
-
-
 
 
 51. Real Regular Disposable Income
@@ -800,8 +700,6 @@ Calculate real regular disposable income with inflation erosion.
 	\end{align}
 
 
-
-
 52. Real Sales
 
 Calculate real sales as consumption plus real government spending.
@@ -813,8 +711,6 @@ Calculate real sales as consumption plus real government spending.
 	\begin{align}
 	s(t) = c(t) + g(t)
 	\end{align}
-
-
 
 
 53. Real Wage
@@ -830,8 +726,6 @@ Calculate the current real wage.
 	\end{align}
 
 
-
-
 54. Real Wealth
 
 Calculate real household wealth.
@@ -843,8 +737,6 @@ Calculate real household wealth.
 	\begin{align}
 	v(t) = V(t) / p(t)
 	\end{align}
-
-
 
 
 55. Regular Disposable Income
@@ -865,8 +757,6 @@ tax subtraction at the household level.
 	\end{align}
 
 
-
-
 56. Required Reserves
 
 Calculate required reserves.
@@ -878,8 +768,6 @@ Calculate required reserves.
 	\begin{align}
 	RR(t) = ro_1 \cdot M1_s(t) + ro_2 \cdot M2_s(t)
 	\end{align}
-
-
 
 
 57. Target Inventories
@@ -895,8 +783,6 @@ Calculate target inventories.
 	\end{align}
 
 
-
-
 58. Target Inventory Sales Ratio
 
 Calculate the target inventory-sales ratio.
@@ -908,8 +794,6 @@ Calculate the target inventory-sales ratio.
 	\begin{align}
 	\sigma^T(t) = \sigma_0 - \sigma_1 \cdot r_l(t)
 	\end{align}
-
-
 
 
 59. Target Real Wage
@@ -926,8 +810,6 @@ Calculate the target real wage from productivity and employment.
 	\end{align}
 
 
-
-
 60. Taxes
 
 Calculate indirect production tax on sales.
@@ -939,8 +821,6 @@ Calculate indirect production tax on sales.
 	\begin{align}
 	TX(t) = \frac{\tau}{1 + \tau} \cdot S(t)
 	\end{align}
-
-
 
 
 61. Total Dividends
@@ -957,8 +837,6 @@ All firm and bank profits are distributed as dividends.
 	\end{align}
 
 
-
-
 62. Unit Cost
 
 Calculate the unit cost of production.
@@ -970,8 +848,6 @@ Calculate the unit cost of production.
 	\begin{align}
 	UC(t) = \frac{WB(t)}{y(t)}
 	\end{align}
-
-
 
 
 63. Wage Bill

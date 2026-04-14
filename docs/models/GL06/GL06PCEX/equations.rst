@@ -44,8 +44,6 @@ Calculate the central bank bill holdings.
 	\end{align}
 
 
-
-
 2. Central Bank Money Stock
 
 Calculate the central bank money stock.
@@ -57,8 +55,6 @@ Calculate the central bank money stock.
 	\begin{align}
 	H_{s}(t) = H_{s}(t-1) + (B_{CB}(t) - B_{CB}(t-1))
 	\end{align}
-
-
 
 
 3. Central Bank Profits
@@ -74,8 +70,6 @@ Calculate the central bank profits (income on bills held).
 	\end{align}
 
 
-
-
 4. Consumption
 
 Calculate the consumption.
@@ -89,8 +83,6 @@ Calculate the consumption.
 	\end{align}
 
 
-
-
 5. Disposable Income
 
 Calculate the disposable income.
@@ -102,8 +94,6 @@ Calculate the disposable income.
 	\begin{align}
 	YD(t) = Y(t) - T(t) + r(t-1)B_h(t-1)
 	\end{align}
-
-
 
 
 6. Expected Disposable Income
@@ -120,8 +110,6 @@ disposable income. Equation (3.20) in the book.
 	\end{align}
 
 
-
-
 7. Expected Wealth
 
 Calculate the expected wealth.
@@ -133,8 +121,6 @@ Calculate the expected wealth.
 	\begin{align}
 	V^e(t) = V(t-1) + YD^e(t) - C(t)
 	\end{align}
-
-
 
 
 8. Government Bill Issuance
@@ -150,8 +136,6 @@ Calculate the government bill issuance.
 	\end{align}
 
 
-
-
 9. Household Bill Demand
 
 Calculate the household bill demand.
@@ -163,8 +147,6 @@ Calculate the household bill demand.
 	\begin{align}
 	\frac{B_h(t)}{V^e(t)} = \lambda_0 + \lambda_1 r(t) - \lambda_2 \frac{YD^e(t)}{V^e(t)}
 	\end{align}
-
-
 
 
 10. Household Bill Holdings
@@ -180,8 +162,6 @@ Calculate the household bill holdings.
 	\end{align}
 
 
-
-
 11. Household Money Stock
 
 Calculate the household deposits as a residual.
@@ -195,8 +175,6 @@ Calculate the household deposits as a residual.
 	\end{align}
 
 
-
-
 12. Interest Earned On Bills Household
 
 Calculate the interest earned on bills by the household.
@@ -208,8 +186,6 @@ Calculate the interest earned on bills by the household.
 	\begin{align}
 	r(t-1)B_h(t-1)
 	\end{align}
-
-
 
 
 13. National Income
@@ -227,8 +203,6 @@ preserving the differentiability of the model trajectory.
 	\end{align}
 
 
-
-
 14. Taxes
 
 Calculate the taxes.
@@ -240,8 +214,6 @@ Calculate the taxes.
 	\begin{align}
 	T(t) = \theta (Y(t) + r(t-1)B_h(t-1))
 	\end{align}
-
-
 
 
 15. Wealth

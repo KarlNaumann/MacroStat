@@ -18,8 +18,6 @@ of emissions (due to non-renewable energy) with a fixed constant
 	\end{align}
 
 
-
-
 2. Central Bank Bill Holdings
 
 Calculate the central bank bill holdings.
@@ -31,8 +29,6 @@ Calculate the central bank bill holdings.
 	\begin{align}
 	B_{CB}(t) = B_{s}(t) - B_{h}(t)
 	\end{align}
-
-
 
 
 3. Central Bank Money Stock
@@ -48,8 +44,6 @@ Calculate the central bank money stock.
 	\end{align}
 
 
-
-
 4. Central Bank Profits
 
 Calculate the central bank profits (income on bills held).
@@ -61,8 +55,6 @@ Calculate the central bank profits (income on bills held).
 	\begin{align}
 	r(t-1)B_{CB}(t-1)
 	\end{align}
-
-
 
 
 5. Co2 Intensity Change
@@ -79,8 +71,6 @@ each period
 	\end{align}
 
 
-
-
 6. Consumption
 
 Calculate the consumption.
@@ -92,8 +82,6 @@ Calculate the consumption.
 	\begin{align}
 	c(t) = \alpha_1 \left(\frac{YD^e(t)}{p_c(t)} - \pi(t)\right) + \alpha_2 \frac{V(t-1)}{p_c(t)}
 	\end{align}
-
-
 
 
 7. Cumulative Co2 Emissions
@@ -110,8 +98,6 @@ emissions
 	\end{align}
 
 
-
-
 8. Discarding Of Socioeconomic Stock
 
 The discarding of socioeconomic stock occurs as a percentage of
@@ -126,8 +112,6 @@ existing stock, converted into units of matter
 	\end{align}
 
 
-
-
 9. Disposable Income
 
 Calculate the disposable income.
@@ -139,8 +123,6 @@ Calculate the disposable income.
 	\begin{align}
 	YD(t) = Y(t) - T(t) + r(t-1)B_h(t-1)
 	\end{align}
-
-
 
 
 10. Emissions From Nonrenewable Energy
@@ -157,8 +139,6 @@ emission intensity
 	\end{align}
 
 
-
-
 11. Energy Reserves
 
 Energyreserves are depleted by human use and incremented by the
@@ -171,8 +151,6 @@ conversion from resources
 	\begin{align}
 	k_e(t) &= k_e(t-1) + conv_e(t) - mat(t)
 	\end{align}
-
-
 
 
 12. Energy To Resource Conversion
@@ -189,8 +167,6 @@ Energy resources are converted into reserves at a fixed rate
 	\end{align}
 
 
-
-
 13. Energy Used In Production
 
 Energy use in production is given by a fixed energy intensity of
@@ -203,8 +179,6 @@ production
 	\begin{align}
 	en(t) = \epsilon_e^\top x(t)
 	\end{align}
-
-
 
 
 14. Expected Disposable Income
@@ -221,8 +195,6 @@ disposable income. Equation (3.20) in the book.
 	\end{align}
 
 
-
-
 15. Expected Wealth
 
 Calculate the expected wealth.
@@ -234,8 +206,6 @@ Calculate the expected wealth.
 	\begin{align}
 	V^e(t) = V(t-1) + YD^e(t) - C(t)
 	\end{align}
-
-
 
 
 16. Extraction Of Matter
@@ -252,8 +222,6 @@ the matter that was recycled
 	\end{align}
 
 
-
-
 17. Final Demand
 
 Calculate the final demand as the sum of household and government
@@ -266,8 +234,6 @@ demands spread over the sectors
 	\begin{align}
 	d_i(t) = \beta_{HH,i}C_{HH}(t) + \beta_{GOV,i}G(t)
 	\end{align}
-
-
 
 
 18. Government Bill Issuance
@@ -283,8 +249,6 @@ Calculate the government bill issuance.
 	\end{align}
 
 
-
-
 19. Household Bill Demand
 
 Calculate the household bill demand.
@@ -296,8 +260,6 @@ Calculate the household bill demand.
 	\begin{align}
 	\frac{B_h(t)}{V^e(t)} = \lambda_0 + \lambda_1 r(t) - \lambda_2 \frac{YD^e(t)}{V^e(t)}
 	\end{align}
-
-
 
 
 20. Household Bill Holdings
@@ -313,8 +275,6 @@ Calculate the household bill holdings.
 	\end{align}
 
 
-
-
 21. Household Money Stock
 
 Calculate the household deposits as a residual.
@@ -326,8 +286,6 @@ Calculate the household deposits as a residual.
 	\begin{align}
 	H_h(t) = V(t) - B_h(t)
 	\end{align}
-
-
 
 
 22. Inflation
@@ -343,8 +301,6 @@ Compute the inflation (i.e. term for absence of money illusion)
 	\end{align}
 
 
-
-
 23. Interest Earned On Bills Household
 
 Calculate the interest earned on bills by the household.
@@ -358,8 +314,6 @@ Calculate the interest earned on bills by the household.
 	\end{align}
 
 
-
-
 24. Material Goods Production
 
 The material goods production in the economy
@@ -371,8 +325,6 @@ The material goods production in the economy
 	\begin{align}
 	x_{mat}(t) &= m_{mat}^\top x(t)
 	\end{align}
-
-
 
 
 25. Matter Reserves
@@ -389,8 +341,6 @@ conversion from resources
 	\end{align}
 
 
-
-
 26. Matter To Resource Conversion
 
 Matter resources is converted into reserves at a fixed rate
@@ -405,8 +355,6 @@ Matter resources is converted into reserves at a fixed rate
 	\end{align}
 
 
-
-
 27. National Income
 
 National income is the sum of nominal final demand
@@ -418,8 +366,6 @@ National income is the sum of nominal final demand
 	\begin{align}
 	Y(t) = P^\top(t)d(t)
 	\end{align}
-
-
 
 
 28. Non Renewable Energy Used In Production
@@ -436,8 +382,6 @@ energy used and renewable energy used.
 	\end{align}
 
 
-
-
 29. Oxygen
 
 The oxygen level is given by the difference in emissions and the
@@ -450,8 +394,6 @@ carbon mass of energy
 	\begin{align}
 	o2(t) &= emis(t) - cen(t)
 	\end{align}
-
-
 
 
 30. Price Indices
@@ -469,8 +411,6 @@ consumption shares
 	\end{align}
 
 
-
-
 31. Prices
 
 Compute the sectoral prices as the sum of unit labour cost and a
@@ -483,8 +423,6 @@ markup on intermediate prices
 	\begin{align}
 	P_i(t) = \frac{w}{pr_i} + (1 + \mu)\sum_j a_{ij}P_j(t)
 	\end{align}
-
-
 
 
 32. Propensity To Consume Income
@@ -501,8 +439,6 @@ rate of interest
 	\end{align}
 
 
-
-
 33. Real Gross Output
 
 Compute real gross output as the solution to the linear set of
@@ -517,8 +453,6 @@ equations
 	\end{align}
 
 
-
-
 34. Recycling Of Discarded Stock
 
 A fixed share of the discarded socioeconomic stock is recycled
@@ -530,8 +464,6 @@ A fixed share of the discarded socioeconomic stock is recycled
 	\begin{align}
 	rec(t) &= \rho_{dis} dis(t)
 	\end{align}
-
-
 
 
 35. Renewable Energy Used In Production
@@ -548,8 +480,6 @@ production combined with a fixed share of energy sourced from renewables
 	\end{align}
 
 
-
-
 36. Set Interest Rate
 
 Set the interest rate. This is given exogenously by the scenario.
@@ -562,8 +492,6 @@ Set the interest rate. This is given exogenously by the scenario.
 	r(t) = \bar{r}
 	\end{align)
 	\end{align}
-
-
 
 
 37. Socioeconomic Stock
@@ -580,8 +508,6 @@ shrinks due to discards
 	\end{align}
 
 
-
-
 38. Stock Of Durable Goods
 
 The stock of durable goods evolves based on inflows from consumption
@@ -594,8 +520,6 @@ and outflows from discard
 	\begin{align}
 	dc(t) &= dc(t-1) + B_c c(t) - \zeta dc(t-1)
 	\end{align}
-
-
 
 
 39. Taxes
@@ -611,8 +535,6 @@ Calculate the taxes.
 	\end{align}
 
 
-
-
 40. Temperature
 
 Temperature is determined by a transformation of cumulative CO2
@@ -624,8 +546,6 @@ Temperature is determined by a transformation of cumulative CO2
 	\begin{align}
 	temp(t) = \frac{1}{1-fnc}\cdot tcre \cdot co2_{cum}(t)
 	\end{align}
-
-
 
 
 41. Waste
@@ -640,8 +560,6 @@ growth in the SocioeconomicStock
 	\begin{align}
 	wa(t) &= mat(t) - (k_h(t) - k_h(t-1))
 	\end{align}
-
-
 
 
 42. Wealth
