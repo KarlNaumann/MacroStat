@@ -17,8 +17,6 @@ Compute the monetary policy reaction slope a3 from structural parameters.
 	\end{align}
 
 
-
-
 2. Is Curve Output
 
 IS curve: output as a function of demand shifter and lagged real rate.
@@ -30,8 +28,6 @@ IS curve: output as a function of demand shifter and lagged real rate.
 	\begin{align}
 	y_t = A - a_1 r_{t-1}
 	\end{align}
-
-
 
 
 3. Monetary Policy Rate
@@ -47,8 +43,6 @@ Monetary policy rule: real rate reacts to inflation deviations.
 	\end{align}
 
 
-
-
 4. Phillips Curve Inflation
 
 Phillips curve: inflation responds to the output gap.
@@ -60,8 +54,6 @@ Phillips curve: inflation responds to the output gap.
 	\begin{align}
 	\pi_t = \pi_{t-1} + a_2 (y_t - y_e)
 	\end{align}
-
-
 
 
 5. Stabilizing Real Rate

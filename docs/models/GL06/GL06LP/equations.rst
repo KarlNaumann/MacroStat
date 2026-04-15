@@ -38,8 +38,6 @@ coupon income is simply the number of bonds held last period.
 	\end{align}
 
 
-
-
 2. Bond Yield
 
 Calculate the bond yield (coupon / price).
@@ -53,8 +51,6 @@ of the bond price.
 	\begin{align}
 	r_{bl}(t) = \frac{1}{p_{bl}(t)}
 	\end{align}
-
-
 
 
 3. Capital Gains
@@ -72,8 +68,6 @@ stock of bonds held at the beginning of the period.
 	\end{align}
 
 
-
-
 4. Central Bank Bill Holdings
 
 Calculate the central bank bill holdings.
@@ -85,8 +79,6 @@ Calculate the central bank bill holdings.
 	\begin{align}
 	B_{CB}(t) = B_s(t) - B_h(t)
 	\end{align}
-
-
 
 
 5. Central Bank Money Stock
@@ -102,8 +94,6 @@ Calculate the central bank money stock.
 	\end{align}
 
 
-
-
 6. Central Bank Profits
 
 Calculate the central bank profits (income on bills held).
@@ -115,8 +105,6 @@ Calculate the central bank profits (income on bills held).
 	\begin{align}
 	r_b(t-1) \cdot B_{CB}(t-1)
 	\end{align}
-
-
 
 
 7. Consumption
@@ -132,8 +120,6 @@ Calculate consumption.
 	\end{align}
 
 
-
-
 8. Disposable Income
 
 Calculate the disposable income.
@@ -147,8 +133,6 @@ interest on bills and bond coupon income.
 	\begin{align}
 	YD_r(t) = Y(t) - T(t) + r_b(t-1) \cdot B_h(t-1) + BL_h(t-1)
 	\end{align}
-
-
 
 
 9. Expected Bond Price
@@ -167,8 +151,6 @@ is designed to be overridden in LP2/LP3 for adaptive expectations.
 	\end{align}
 
 
-
-
 10. Expected Capital Gains
 
 Calculate the expected capital gains on bonds.
@@ -185,8 +167,6 @@ expected capital gains are zero.
 	\end{align}
 
 
-
-
 11. Expected Disposable Income
 
 Calculate the expected disposable income.
@@ -200,8 +180,6 @@ prior period's actual disposable income.
 	\begin{align}
 	YD_r^e(t) = YD_r(t-1)
 	\end{align}
-
-
 
 
 12. Expected Return On Bonds
@@ -220,8 +198,6 @@ capital gain from bond price changes.
 	\end{align}
 
 
-
-
 13. Expected Wealth
 
 Calculate the expected wealth.
@@ -237,8 +213,6 @@ exogenous).
 	\begin{align}
 	V^e(t) = V(t-1) + (YD_r^e(t) - C(t)) + CG(t)
 	\end{align}
-
-
 
 
 14. Government Bill Issuance
@@ -259,8 +233,6 @@ new bills finance the deficit net of bond issuance revenue.
 	\end{align}
 
 
-
-
 15. Government Bond Supply
 
 Calculate the government bond supply.
@@ -273,8 +245,6 @@ Bond supply equals bond demand from households.
 	\begin{align}
 	BL_s(t) = BL_h(t)
 	\end{align}
-
-
 
 
 16. Household Bill Demand
@@ -293,8 +263,6 @@ Calculate the household bill demand using Tobin portfolio choice.
 	\end{align}
 
 
-
-
 17. Household Bill Holdings
 
 Calculate the household bill holdings.
@@ -306,8 +274,6 @@ Calculate the household bill holdings.
 	\begin{align}
 	B_h(t) = B_d(t)
 	\end{align}
-
-
 
 
 18. Household Bond Demand
@@ -328,8 +294,6 @@ The demand is in number of bonds (value / price).
 	\end{align}
 
 
-
-
 19. Household Bond Holdings
 
 Calculate the household bond holdings.
@@ -343,8 +307,6 @@ Calculate the household bond holdings.
 	\end{align}
 
 
-
-
 20. Household Cash Demand
 
 Calculate the household cash demand as a residual.
@@ -356,8 +318,6 @@ Calculate the household cash demand as a residual.
 	\begin{align}
 	H_d(t) = V^e(t) - B_d(t) - p_{bl}(t) \cdot BL_d(t)
 	\end{align}
-
-
 
 
 21. Household Cash Stock
@@ -374,8 +334,6 @@ Cash is what remains of wealth after bills and bonds.
 	\end{align}
 
 
-
-
 22. Interest On Bills Household
 
 Calculate the interest earned on bills by the household.
@@ -389,8 +347,6 @@ Calculate the interest earned on bills by the household.
 	\end{align}
 
 
-
-
 23. National Income
 
 Calculate the national income.
@@ -402,8 +358,6 @@ Calculate the national income.
 	\begin{align}
 	Y(t) = C(t) + G(t)
 	\end{align}
-
-
 
 
 24. Taxes
@@ -420,8 +374,6 @@ bond coupon income.
 	T(t) = \theta \cdot \left(Y(t) + r_b(t-1) \cdot B_h(t-1)
 	+ BL_h(t-1)\right)
 	\end{align}
-
-
 
 
 25. Wealth

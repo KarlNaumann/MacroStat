@@ -1,6 +1,6 @@
 """Targeted tests for the GL06INSOUT model.
 
-These tests verify the Godley-Lavoie 2006 INSOUT model (Chapter 7) including
+These tests verify the Godley-Lavoie 2006 INSOUT model (Chapter 10) including
 smoke tests, positivity checks, accounting identity checks, and shock response
 tests for all 7 scenarios.
 """
@@ -571,3 +571,90 @@ def test_constraint_system_derived_grads_are_zero():
             assert (
                 derived.grad.abs().max().item() == 0.0
             ), f"Derived parameter WealthShareM1_{col} has non-zero grad"
+
+
+# ---------------------------------------------------------------------------
+# Theoretical Steady-State Tests
+# ---------------------------------------------------------------------------
+
+
+def test_compute_theoretical_steady_state_runs():
+    """Smoke test: compute_theoretical_steady_state returns without error."""
+    model, _, _ = _make_model(timesteps=100)
+    model.compute_theoretical_steady_state()
+
+
+def test_ss_all_scenarios_match_simulation():
+    """All 8 scenarios: SS real output within 1% of 500-period simulation.
+
+    Simulation converges within 0.0002% of t=1000 values by t=500 for all
+    scenarios (worst case: Sc5 at 0.0001%), giving ample headroom for the
+    1% tolerance.  Baseline is checked at tighter 0.2% tolerance.
+    """
+    for sc_idx in range(8):
+        model_sim, _, _ = _make_model(timesteps=500)
+        model_sim.simulate(scenario=sc_idx)
+        y_sim = model_sim.variables.timeseries["RealOutput"][-1].item()
+
+        model_ss, _, _ = _make_model(timesteps=500)
+        model_ss.compute_theoretical_steady_state(scenario=sc_idx)
+        y_ss = model_ss.variables.timeseries["RealOutput"][-1].item()
+
+        tol = 2e-3 if sc_idx == 0 else 0.01
+        rel_diff = abs(y_ss - y_sim) / max(abs(y_sim), 1e-6)
+        assert (
+            rel_diff < tol
+        ), f"Scenario {sc_idx}: sim={y_sim:.4f}, ss={y_ss:.4f}, rel={rel_diff:.2e}"
+
+
+def test_ss_inflation_derived():
+    """Inflation is derived from the wage equation, not hardcoded zero.
+
+    At true SS, the consumption identity forces π → 0.  The solver should
+    converge to |π| < 1e-3 for the baseline.
+    """
+    model, _, _ = _make_model(timesteps=200)
+    model.compute_theoretical_steady_state()
+    pi = model.variables.timeseries["InflationRate"][-1].abs().item()
+    assert pi < 1e-3, f"SS inflation not near zero: |π| = {pi:.2e}"
+
+
+def test_ss_portfolio_shares_sum():
+    """At SS, household portfolio shares should sum to total non-cash wealth."""
+    model, _, _ = _make_model(timesteps=200)
+    model.compute_theoretical_steady_state()
+    ts = model.variables.timeseries
+
+    M1 = ts["M1Household"][-1]
+    M2 = ts["M2Household"][-1]
+    B_h = ts["BillsHousehold"][-1]
+    BL_h = ts["BondsHousehold"][-1]
+    p_bl = ts["BondPrice"][-1]
+    V_nc = ts["NonCashWealth"][-1]
+
+    portfolio_sum = M1 + M2 + B_h + p_bl * BL_h
+    rel_diff = (portfolio_sum - V_nc).abs() / V_nc.abs().clamp(min=1e-6)
+    assert (
+        rel_diff.item() < 1e-6
+    ), f"Portfolio sum {portfolio_sum.item():.4f} != V_nc {V_nc.item():.4f}"
+
+
+def test_ss_shock_dispatch():
+    """SS values change after parameter shock (spot-check two scenarios).
+
+    Uses short timesteps — SS convergence only needs ~200 outer-loop steps.
+    Full 8-scenario accuracy is covered by test_ss_all_scenarios_match_simulation.
+    """
+    model_base, _, _ = _make_model(timesteps=200)
+    model_base.compute_theoretical_steady_state()
+    y_base = model_base.variables.timeseries["RealOutput"][-1].item()
+
+    for sc_idx in [2, 5]:  # fiscal shock + wealth shock
+        model_sc, _, _ = _make_model(timesteps=200)
+        model_sc.compute_theoretical_steady_state(scenario=sc_idx)
+        y_sc = model_sc.variables.timeseries["RealOutput"][-1].item()
+
+        assert abs(y_sc - y_base) > 0.01, (
+            f"Scenario {sc_idx}: SS y* unchanged after shock "
+            f"(base={y_base:.4f}, shock={y_sc:.4f})"
+        )

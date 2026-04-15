@@ -54,8 +54,6 @@ MANIFEST
 .python-version
 
 # Documentation files
-docs/_autosummary/core/*
-docs/_autosummary/models/*
-docs/_autosummary/util/*
+docs/_autosummary/
 
 docs/**/*.csv

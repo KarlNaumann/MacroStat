@@ -1,5 +1,5 @@
 """
-Parameters class for the Godley-Lavoie 2006 INSOUT model (Chapter 7).
+Parameters class for the Godley-Lavoie 2006 INSOUT model (Chapter 10).
 """
 
 # Copyright (c) 2025 Karl Naumann-Woleske

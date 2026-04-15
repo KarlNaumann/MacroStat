@@ -67,6 +67,8 @@ def generate_docs(
         case _:
             raise ValueError("Incorrect docstyle supplied. Accepted: [latex, rst]")
 
+    content = content.rstrip() + "\n"
+
     if output_file:
         with open(output_file, "w") as f:
             f.write(content)
@@ -146,7 +148,6 @@ def create_rst_content(
             docstring = docstrings["step"][method_name]
             rst.append(f"{count+1}. {method_name.replace('_', ' ').title()}\n")
             rst.append(convert_docstring_to_rst(docstring, method_name))
-            rst.append("\n")
 
     return "\n".join(rst)
 

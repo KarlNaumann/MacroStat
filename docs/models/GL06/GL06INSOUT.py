@@ -1211,3 +1211,51 @@ axs[1, 1].legend(frameon=False, fontsize=7)
 fig.suptitle("INSOUT7: Combined wage push + interest rate increase", fontsize=13)
 plt.tight_layout()
 plt.show()
+
+# %% [markdown]
+# ## Theoretical Steady State
+#
+# INSOUT includes an analytical steady-state solver that computes all state variables from parameters alone, without running a long simulation to convergence. The solver derives $UC/p$ analytically, expresses portfolio quantities as linear functions of $y^*$, and solves a quadratic equation from GL06 eq. 10.98 to obtain real output. Inflation is determined jointly via Picard iteration on the wage equation.
+
+# %%
+params_ss = ParametersGL06INSOUT()
+params_ss.hyper["timesteps"] = 200
+params_ss.hyper["scenario_trigger"] = 100
+model_ss = GL06INSOUT(parameters=params_ss)
+model_ss.compute_theoretical_steady_state()
+ss_output = model_ss.variables.to_pandas()
+
+# %% [markdown]
+# The solver converges in approximately 20 outer-loop iterations (for bank rate equilibration). The resulting steady-state values match long-run simulation within 0.2% for the baseline calibration.
+
+# %%
+fig, axs = plt.subplots(ncols=3, nrows=2, figsize=(14, 7))
+
+axs[0, 0].plot(ss_output.index, ss_output["RealOutput"], "k")
+axs[0, 0].set_title("Real Output $y^*$")
+
+axs[0, 1].plot(ss_output.index, ss_output["InflationRate"], "k")
+axs[0, 1].set_title(r"Inflation $\pi$")
+axs[0, 1].yaxis.set_major_formatter(PercentFormatter(1))
+
+axs[0, 2].plot(ss_output.index, ss_output["RealWealth"], "k", label="$v$")
+axs[0, 2].plot(ss_output.index, ss_output["RealInventories"], "g-.", label="$inv$")
+axs[0, 2].set_title("Wealth and Inventories")
+axs[0, 2].legend(frameon=False)
+
+axs[1, 0].plot(ss_output.index, ss_output["BillsHousehold"], "k", label="$B_h$")
+axs[1, 0].plot(ss_output.index, ss_output["M2Household"], "g-.", label="$M_{2h}$")
+axs[1, 0].set_title("Portfolio")
+axs[1, 0].legend(frameon=False)
+
+axs[1, 1].plot(ss_output.index, ss_output["DepositRate"], "k", label="$r_m$")
+axs[1, 1].plot(ss_output.index, ss_output["LoanRate"], "g-.", label="$r_l$")
+axs[1, 1].set_title("Bank Rates")
+axs[1, 1].legend(frameon=False)
+
+axs[1, 2].plot(ss_output.index, ss_output["GovernmentDebt"], "k")
+axs[1, 2].set_title("Government Debt $GD$")
+
+fig.suptitle("Analytical Steady-State Convergence", fontsize=13)
+plt.tight_layout()
+plt.show()

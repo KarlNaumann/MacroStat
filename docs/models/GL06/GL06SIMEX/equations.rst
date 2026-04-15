@@ -42,8 +42,6 @@ Equation (3.7) in the book.
 	\end{align}
 
 
-
-
 2. Consumption Supply
 
 In the model it is assumed that the supply will adjust to the demand,
@@ -57,8 +55,6 @@ in the book.
 	\begin{align}
 	C_s(t) = C_d(t)
 	\end{align}
-
-
 
 
 3. Disposable Income
@@ -75,8 +71,6 @@ Equation (3.5) in the book.
 	\end{align}
 
 
-
-
 4. Expected Disposable Income
 
 The expected disposable income is simply the prior period's
@@ -91,8 +85,6 @@ disposable income. Equation (3.20) in the book.
 	\end{align}
 
 
-
-
 5. Government Money Stock
 
 The government money stock is a function of the government demand,
@@ -105,8 +97,6 @@ and the tax supply. Equation (3.8) in the book.
 	\begin{align}
 	H_s(t) = H_s(t-1) + G_d(t) - T_d(t)
 	\end{align}
-
-
 
 
 6. Government Supply
@@ -124,8 +114,6 @@ in the book.
 	\end{align}
 
 
-
-
 7. Household Money Demand
 
 The household demand for money is equivalent to their expected
@@ -138,8 +126,6 @@ income in excess of consumption demand
 	\begin{align}
 	H_d(t) = H_h(t-1) + YD^e(t) - C_d(t)
 	\end{align}
-
-
 
 
 8. Household Money Stock
@@ -157,8 +143,6 @@ Equation (3.9) in the book.
 	\end{align}
 
 
-
-
 9. Labour Demand
 
 We can resolve the labour demand from the national income equation,
@@ -172,8 +156,6 @@ knowing that labour demand is equal to labour supply.
 	\begin{align}
 	N_d(t) =\frac{Y(t)}{W(t)}
 	\end{align}
-
-
 
 
 10. Labour Income
@@ -191,8 +173,6 @@ computed explicitly here to compute the transaction flows.
 	\end{align}
 
 
-
-
 11. Labour Supply
 
 In the model it is assumed that the supply will be equal to
@@ -205,8 +185,6 @@ the amount of labour demanded. Equation (3.4) in the book
 	\begin{align}
 	N_s(t) = N_d(t)
 	\end{align}
-
-
 
 
 12. National Income
@@ -223,8 +201,6 @@ the government demand, and the tax supply. Equation (3.10) in the book.
 	\end{align}
 
 
-
-
 13. Tax Demand
 
 The tax demand is a function of the tax rate, the labour supply,
@@ -237,8 +213,6 @@ and the wage rate. Equation (3.6) in the book.
 	\begin{align}
 	T_d(t) = \theta N_s(t) W(t)
 	\end{align}
-
-
 
 
 14. Tax Supply

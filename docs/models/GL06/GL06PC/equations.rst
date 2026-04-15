@@ -44,8 +44,6 @@ Calculate the central bank bill holdings.
 	\end{align}
 
 
-
-
 2. Central Bank Money Stock
 
 Calculate the central bank money stock.
@@ -57,8 +55,6 @@ Calculate the central bank money stock.
 	\begin{align}
 	H_{s}(t) = H_{s}(t-1) + (B_{CB}(t) - B_{CB}(t-1))
 	\end{align}
-
-
 
 
 3. Central Bank Profits
@@ -74,8 +70,6 @@ Calculate the central bank profits (income on bills held).
 	\end{align}
 
 
-
-
 4. Consumption
 
 Calculate the consumption.
@@ -87,8 +81,6 @@ Calculate the consumption.
 	\begin{align}
 	C(t) = \alpha_1 YD(t) + \alpha_2 V(t-1)
 	\end{align}
-
-
 
 
 5. Disposable Income
@@ -104,8 +96,6 @@ Calculate the disposable income.
 	\end{align}
 
 
-
-
 6. Government Bill Issuance
 
 Calculate the government bill issuance.
@@ -117,8 +107,6 @@ Calculate the government bill issuance.
 	\begin{align}
 	B_s(t) = B_s(t-1) + (G(t) - r(t-1)B_s(t-1)) - (T(t) + r(t-1)B_{CB}(t-1))
 	\end{align}
-
-
 
 
 7. Household Bill Holdings
@@ -134,8 +122,6 @@ Calculate the household bill holdings.
 	\end{align}
 
 
-
-
 8. Household Money Stock
 
 Calculate the household deposits as a residual.
@@ -149,8 +135,6 @@ Calculate the household deposits as a residual.
 	\end{align}
 
 
-
-
 9. Interest Earned On Bills Household
 
 Calculate the interest earned on bills by the household.
@@ -162,8 +146,6 @@ Calculate the interest earned on bills by the household.
 	\begin{align}
 	r(t-1)B_h(t-1)
 	\end{align}
-
-
 
 
 10. National Income
@@ -181,8 +163,6 @@ preserving the differentiability of the model trajectory.
 	\end{align}
 
 
-
-
 11. Taxes
 
 Calculate the taxes.
@@ -194,8 +174,6 @@ Calculate the taxes.
 	\begin{align}
 	T(t) = \theta (Y(t) + r(t-1)B_h(t-1))
 	\end{align}
-
-
 
 
 12. Wealth

@@ -17,8 +17,6 @@ Calculate the central bank bill holdings.
 	\end{align}
 
 
-
-
 2. Central Bank Money Stock
 
 Calculate the central bank money stock.
@@ -30,8 +28,6 @@ Calculate the central bank money stock.
 	\begin{align}
 	H_{s}(t) = H_{s}(t-1) + (B_{CB}(t) - B_{CB}(t-1))
 	\end{align}
-
-
 
 
 3. Central Bank Profits
@@ -47,8 +43,6 @@ Calculate the central bank profits (income on bills held).
 	\end{align}
 
 
-
-
 4. Consumption
 
 Calculate the consumption.
@@ -62,8 +56,6 @@ Calculate the consumption.
 	\end{align}
 
 
-
-
 5. Disposable Income
 
 Calculate the disposable income.
@@ -75,8 +67,6 @@ Calculate the disposable income.
 	\begin{align}
 	YD(t) = Y(t) - T(t) + r(t-1)B_h(t-1)
 	\end{align}
-
-
 
 
 6. Expected Disposable Income
@@ -93,8 +83,6 @@ disposable income. Equation (3.20) in the book.
 	\end{align}
 
 
-
-
 7. Expected Wealth
 
 Calculate the expected wealth.
@@ -106,8 +94,6 @@ Calculate the expected wealth.
 	\begin{align}
 	V^e(t) = V(t-1) + YD^e(t) - C(t)
 	\end{align}
-
-
 
 
 8. Final Demand
@@ -124,8 +110,6 @@ demands spread over the sectors
 	\end{align}
 
 
-
-
 9. Government Bill Issuance
 
 Calculate the government bill issuance.
@@ -137,8 +121,6 @@ Calculate the government bill issuance.
 	\begin{align}
 	B_s(t) = B_s(t-1) + (G(t) - r(t-1)B_s(t-1)) - (T(t) + r(t-1)B_{CB}(t-1))
 	\end{align}
-
-
 
 
 10. Household Bill Demand
@@ -154,8 +136,6 @@ Calculate the household bill demand.
 	\end{align}
 
 
-
-
 11. Household Bill Holdings
 
 Calculate the household bill holdings.
@@ -167,8 +147,6 @@ Calculate the household bill holdings.
 	\begin{align}
 	B_h(t) = B_h(t-1) + (B_h^d(t) - B_h(t-1))
 	\end{align}
-
-
 
 
 12. Household Money Stock
@@ -184,8 +162,6 @@ Calculate the household deposits as a residual.
 	\end{align}
 
 
-
-
 13. Inflation
 
 Compute the inflation (i.e. term for absence of money illusion)
@@ -197,8 +173,6 @@ Compute the inflation (i.e. term for absence of money illusion)
 	\begin{align}
 	\pi(t) &= \left(\frac{p_c(t) - p_c(t-1)}{p_c(t-1)}\right)\left(\frac{V(t-1)}{p_c(t-1)}\right)
 	\end{align}
-
-
 
 
 14. Interest Earned On Bills Household
@@ -214,8 +188,6 @@ Calculate the interest earned on bills by the household.
 	\end{align}
 
 
-
-
 15. National Income
 
 National income is the sum of nominal final demand
@@ -227,8 +199,6 @@ National income is the sum of nominal final demand
 	\begin{align}
 	Y(t) = P^\top(t)d(t)
 	\end{align}
-
-
 
 
 16. Price Indices
@@ -246,8 +216,6 @@ consumption shares
 	\end{align}
 
 
-
-
 17. Prices
 
 Compute the sectoral prices as the sum of unit labour cost and a
@@ -260,8 +228,6 @@ markup on intermediate prices
 	\begin{align}
 	P_i(t) = \frac{w}{pr_i} + (1 + \mu)\sum_j a_{ij}P_j(t)
 	\end{align}
-
-
 
 
 18. Propensity To Consume Income
@@ -278,8 +244,6 @@ rate of interest
 	\end{align}
 
 
-
-
 19. Real Gross Output
 
 Compute real gross output as the solution to the linear set of
@@ -292,8 +256,6 @@ equations
 	\begin{align}
 	x(t) = (I - A)^{-1}d(t)
 	\end{align}
-
-
 
 
 20. Set Interest Rate
@@ -310,8 +272,6 @@ Set the interest rate. This is given exogenously by the scenario.
 	\end{align}
 
 
-
-
 21. Taxes
 
 Calculate the taxes.
@@ -323,8 +283,6 @@ Calculate the taxes.
 	\begin{align}
 	T(t) = \theta (Y(t) + r(t-1)B_h(t-1))
 	\end{align}
-
-
 
 
 22. Wealth

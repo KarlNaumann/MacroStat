@@ -42,8 +42,6 @@ Equation (3.7) in the book.
 	\end{align}
 
 
-
-
 2. Consumption Supply
 
 In the model it is assumed that the supply will adjust to the demand,
@@ -57,8 +55,6 @@ in the book.
 	\begin{align}
 	C_s(t) = C_d(t)
 	\end{align}
-
-
 
 
 3. Disposable Income
@@ -75,8 +71,6 @@ Equation (3.5) in the book.
 	\end{align}
 
 
-
-
 4. Government Money Stock
 
 The government money stock is a function of the government demand,
@@ -89,8 +83,6 @@ and the tax supply. Equation (3.8) in the book.
 	\begin{align}
 	H_s(t) = H_s(t-1) + G_d(t) - T_d(t)
 	\end{align}
-
-
 
 
 5. Government Supply
@@ -108,8 +100,6 @@ in the book.
 	\end{align}
 
 
-
-
 6. Household Money Stock
 
 The household money stock is a function of the disposable income,
@@ -123,8 +113,6 @@ Equation (3.9) in the book.
 	\begin{align}
 	H_h(t) = H_h(t-1) + YD(t) - C_d(t)
 	\end{align}
-
-
 
 
 7. Labour Demand
@@ -142,8 +130,6 @@ knowing that labour demand is equal to labour supply.
 	\end{align}
 
 
-
-
 8. Labour Income
 
 The labour income is the wage rate times the labour supply. This is
@@ -157,8 +143,6 @@ computed explicitly here to compute the transaction flows.
 	\begin{align}
 	W(t) N_s(t)
 	\end{align}
-
-
 
 
 9. Labour Supply
@@ -175,8 +159,6 @@ the amount of labour demanded. Equation (3.4) in the book
 	\end{align}
 
 
-
-
 10. National Income
 
 The national income is the sum of the consumption demand,
@@ -191,8 +173,6 @@ the government demand, and the tax supply. Equation (3.10) in the book.
 	\end{align}
 
 
-
-
 11. Tax Demand
 
 The tax demand is a function of the tax rate, the labour supply,
@@ -205,8 +185,6 @@ and the wage rate. Equation (3.6) in the book.
 	\begin{align}
 	T_d(t) = \theta N_s(t) W(t)
 	\end{align}
-
-
 
 
 12. Tax Supply
