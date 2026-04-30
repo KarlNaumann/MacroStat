@@ -75,14 +75,17 @@ class ScenariosPichlerEtAl2022DIO(Scenarios):
             Mapping from scenario variable name to a scalar or 1-D tensor
             representing the per-timestep default value.
         """
-        N = self.parameters.hyper["n_sectors"]
-        c0 = self.parameters["InitialHouseholdConsumption"]
-        c_sum = c0.sum()
-        prefs = c0 / c_sum if c_sum > 0 else torch.ones(N) / N
+        n_sectors = self.parameters.hyper["n_sectors"]
+        initial_consumption = self.parameters["InitialHouseholdConsumption"]
+        consumption_sum = initial_consumption.sum()
+        if consumption_sum > 0:
+            preference_share = initial_consumption / consumption_sum
+        else:
+            preference_share = torch.ones(n_sectors) / n_sectors
 
         return {
-            "SupplyShock": torch.zeros(N),
-            "DemandPreferences": prefs,
+            "SupplyShock": torch.zeros(n_sectors),
+            "DemandPreferences": preference_share,
             "FearOfInfection": 0.0,
             "PermanentIncomeExpectation": 1.0,
             "OtherFinalDemand": self.parameters["InitialOtherFinalDemand"].clone(),
@@ -108,18 +111,18 @@ class ScenariosPichlerEtAl2022DIO(Scenarios):
         colour : str
             Hex colour code for plotting.
         """
-        scID = len(self.info)
-        self.timeseries[scID] = self.get_default_scenario()
+        scenario_id = len(self.info)
+        self.timeseries[scenario_id] = self.get_default_scenario()
 
-        for k, v in timeseries.items():
-            if k not in self.timeseries[scID]:
+        for key, value in timeseries.items():
+            if key not in self.timeseries[scenario_id]:
                 raise KeyError(
-                    f"Key {k} not in default scenario. "
-                    f"Valid keys: {list(self.timeseries[scID].keys())}"
+                    f"Key {key} not in default scenario. "
+                    f"Valid keys: {list(self.timeseries[scenario_id].keys())}"
                 )
-            self.timeseries[scID][k] = v
+            self.timeseries[scenario_id][key] = value
 
-        self.info[scID] = {
+        self.info[scenario_id] = {
             "Name": name,
             "Colour": colour,
             "Index": np.arange(self.scenario_duration),
@@ -167,14 +170,14 @@ class ScenariosPichlerEtAl2022DIO(Scenarios):
             Instance with the default (no-shock) scenario at index 0 and
             the constructed shock scenario at index 1.
         """
-        T = parameters["timesteps"]
-        N = parameters["n_sectors"]
+        n_timesteps = parameters["timesteps"]
+        n_sectors = parameters["n_sectors"]
         sector_names = parameters.hyper["sector_names"]
 
         shocks = pd.read_csv(shock_csv, index_col=0, header=0)
-        f = pd.read_csv(final_demand_csv, index_col=0, header=0)
-        c0 = f["C1"].values[:N]
-        l0 = parameters["InitialLabourCompensation"].numpy()
+        final_demand_df = pd.read_csv(final_demand_csv, index_col=0, header=0)
+        initial_consumption = final_demand_df["C1"].values[:n_sectors]
+        initial_labour = parameters["InitialLabourCompensation"].numpy()
 
         # R uses 1-indexed arrays; convert to 0-indexed for Python:
         # R `+2` dates -> Python `+1`; R plain dates -> Python `-1`
@@ -184,71 +187,73 @@ class ScenariosPichlerEtAl2022DIO(Scenarios):
             pd.Timestamp("2020-06-15") - pd.Timestamp("2020-01-01")
         ).days + 1
 
-        # --- Supply shocks (N x T) ---
-        delta_ = _build_supply_shocks(
-            shocks,
-            sector_names,
-            supply_scenario,
-            T,
-            N,
-            t_shock,
-            t_open,
-            t_open_retail,
+        # --- Supply shocks (n_sectors x n_timesteps) ---
+        supply_shock_matrix = _build_supply_shocks(
+            shocks=shocks,
+            sector_names=sector_names,
+            scenario=supply_scenario,
+            n_timesteps=n_timesteps,
+            n_sectors=n_sectors,
+            t_shock=t_shock,
+            t_open=t_open,
+            t_open_retail=t_open_retail,
         )
 
-        # --- Demand shocks (theta_: N x T, epsilon_: T) ---
+        # --- Demand shocks: preference matrix and fear-of-infection vector ---
         # R demand code uses `as.Date(...) - as.Date(...)` without +2
         time_reopen_retail = (
             pd.Timestamp("2020-06-15") - pd.Timestamp("2020-01-01")
         ).days - 1
-        theta_, epsilon_ = _build_demand_shocks(
-            shocks,
-            sector_names,
-            c0,
-            demand_scenario,
-            delta_srate,
-            T,
-            N,
-            t_shock,
-            t_open,
-            time_reopen_retail,
+        preference_matrix, fear_of_infection = _build_demand_shocks(
+            shocks=shocks,
+            sector_names=sector_names,
+            initial_consumption=initial_consumption,
+            scenario=demand_scenario,
+            delta_srate=delta_srate,
+            n_timesteps=n_timesteps,
+            n_sectors=n_sectors,
+            t_shock=t_shock,
+            t_open=t_open,
+            t_open_retail=time_reopen_retail,
         )
 
-        # --- Permanent income expectations (T,) ---
-        supply_shock_vector = shocks[supply_scenario].values[:N]
+        # --- Permanent income expectations (n_timesteps,) ---
+        supply_shock_vector = shocks[supply_scenario].values[:n_sectors]
         rho1 = 1.0 - (1.0 - rho_bar) / 90.0
         rho0 = 1.0 - rho1
-        delta_L = (l0[:N] * supply_shock_vector).sum() / l0[:N].sum()
+        delta_labour = (
+            initial_labour[:n_sectors] * supply_shock_vector
+        ).sum() / initial_labour[:n_sectors].sum()
 
         if l_shape_believe == "50%":
-            etat = -delta_L / 4.0 * (1.0 - rho1)
+            etat = -delta_labour / 4.0 * (1.0 - rho1)
         elif l_shape_believe == "0%":
             etat = 0.0
         else:
-            etat = -delta_L / 2.0 * (1.0 - rho1)
+            etat = -delta_labour / 2.0 * (1.0 - rho1)
 
-        xi_ = torch.ones(T)
-        xi_[t_shock:t_open] = 1.0 - delta_L / 2.0
-        for t in range(t_open, T):
-            xi_[t] = rho0 + rho1 * xi_[t - 1] + etat
+        permanent_income = torch.ones(n_timesteps)
+        permanent_income[t_shock:t_open] = 1.0 - delta_labour / 2.0
+        for t in range(t_open, n_timesteps):
+            permanent_income[t] = rho0 + rho1 * permanent_income[t - 1] + etat
 
-        # --- Other final demand (N x T) ---
-        fd_other_ = _build_other_final_demand(
-            shocks,
-            f,
-            other_fd_scenario,
-            T,
-            N,
-            t_shock,
+        # --- Other final demand (n_sectors x n_timesteps) ---
+        other_final_demand = _build_other_final_demand(
+            shocks=shocks,
+            final_demand_df=final_demand_df,
+            scenario=other_fd_scenario,
+            n_timesteps=n_timesteps,
+            n_sectors=n_sectors,
+            t_shock=t_shock,
         )
 
         # Reshape to (T, K) for the framework
         shock_timeseries = {
-            "SupplyShock": delta_.T,  # (T, N)
-            "DemandPreferences": theta_.T,  # (T, N)
-            "FearOfInfection": epsilon_.unsqueeze(1),  # (T, 1)
-            "PermanentIncomeExpectation": xi_.unsqueeze(1),  # (T, 1)
-            "OtherFinalDemand": fd_other_.T,  # (T, N)
+            "SupplyShock": supply_shock_matrix.T,
+            "DemandPreferences": preference_matrix.T,
+            "FearOfInfection": fear_of_infection.unsqueeze(1),
+            "PermanentIncomeExpectation": permanent_income.unsqueeze(1),
+            "OtherFinalDemand": other_final_demand.T,
         }
 
         obj = cls(parameters=parameters)
@@ -265,13 +270,13 @@ def _build_supply_shocks(
     shocks,
     sector_names,
     scenario,
-    T,
-    N,
+    n_timesteps,
+    n_sectors,
     t_shock,
     t_open,
     t_open_retail,
 ):
-    """Build the ``(N, T)`` supply-shock matrix ``delta_``.
+    """Build the ``(n_sectors, n_timesteps)`` supply-shock matrix.
 
     Parameters
     ----------
@@ -281,9 +286,9 @@ def _build_supply_shocks(
         Ordered list of sector codes.
     scenario : str
         Supply shock scenario code (``S1``--``S6``).
-    T : int
+    n_timesteps : int
         Number of timesteps.
-    N : int
+    n_sectors : int
         Number of sectors.
     t_shock : int
         0-indexed timestep when shocks begin.
@@ -295,56 +300,56 @@ def _build_supply_shocks(
     Returns
     -------
     torch.Tensor
-        ``(N, T)`` supply-shock matrix with values in ``[0, 1]``.
+        ``(n_sectors, n_timesteps)`` supply-shock matrix with values in ``[0, 1]``.
     """
-    supply_vec = torch.tensor(shocks[scenario].values[:N], dtype=torch.float)
-    rli = torch.tensor(shocks["RLI"].values[:N], dtype=torch.float)
-    uk_ess = torch.tensor(shocks["UK essential"].values[:N], dtype=torch.float)
+    supply_vec = torch.tensor(shocks[scenario].values[:n_sectors], dtype=torch.float)
+    rli = torch.tensor(shocks["RLI"].values[:n_sectors], dtype=torch.float)
+    uk_ess = torch.tensor(shocks["UK essential"].values[:n_sectors], dtype=torch.float)
 
     retail_idx = [i for i, s in enumerate(sector_names) if s in ("G45", "G47")]
 
     if scenario in ("S1",):
-        delta_ = supply_vec.unsqueeze(1).expand(N, T).clone()
-        delta_[:, :t_shock] = 0.0
+        supply_shock = supply_vec.unsqueeze(1).expand(n_sectors, n_timesteps).clone()
+        supply_shock[:, :t_shock] = 0.0
         for i in retail_idx:
-            delta_[i, t_open_retail:] = 0.0
+            supply_shock[i, t_open_retail:] = 0.0
     elif scenario in ("S5", "S6"):
-        delta_ = supply_vec.unsqueeze(1).expand(N, T).clone()
-        delta_[:, :t_shock] = 0.0
-        delta_[:, t_open:] = 0.0
+        supply_shock = supply_vec.unsqueeze(1).expand(n_sectors, n_timesteps).clone()
+        supply_shock[:, :t_shock] = 0.0
+        supply_shock[:, t_open:] = 0.0
     elif scenario in ("S2", "S3", "S4"):
-        ess_mat = uk_ess.unsqueeze(1).expand(N, T).clone()
+        ess_mat = uk_ess.unsqueeze(1).expand(n_sectors, n_timesteps).clone()
         ess_mat[:, :t_shock] = 1.0
         for i in retail_idx:
             ess_mat[i, t_open_retail:] = 1.0
 
-        rli_mat = (1.0 - rli).unsqueeze(1).expand(N, T).clone()
+        rli_mat = (1.0 - rli).unsqueeze(1).expand(n_sectors, n_timesteps).clone()
 
-        ppi_mat = torch.zeros(N, T)
+        ppi_mat = torch.zeros(n_sectors, n_timesteps)
         length = t_open - t_shock + 1
         ramp = torch.linspace(1.0, 0.0, length)
         ppi_mat[:, t_shock : t_open + 1] = supply_vec.unsqueeze(1) * ramp.unsqueeze(0)
 
-        delta_ = rli_mat * (1.0 - ess_mat * (1.0 - ppi_mat))
+        supply_shock = rli_mat * (1.0 - ess_mat * (1.0 - ppi_mat))
     else:
-        delta_ = torch.zeros(N, T)
+        supply_shock = torch.zeros(n_sectors, n_timesteps)
 
-    return delta_
+    return supply_shock
 
 
 def _build_demand_shocks(
     shocks,
     sector_names,
-    c0,
+    initial_consumption,
     scenario,
     delta_srate,
-    T,
-    N,
+    n_timesteps,
+    n_sectors,
     t_shock,
     t_open,
     t_open_retail,
 ):
-    """Build demand-shock tensors ``theta_`` and ``epsilon_``.
+    """Build demand-shock tensors: preference matrix and fear-of-infection vector.
 
     Parameters
     ----------
@@ -352,15 +357,15 @@ def _build_demand_shocks(
         Shock scenarios table.
     sector_names : list[str]
         Ordered list of sector codes.
-    c0 : numpy.ndarray
-        Initial household consumption vector (length ``N``).
+    initial_consumption : numpy.ndarray
+        Initial household consumption vector (length ``n_sectors``).
     scenario : str
         Demand shock scenario code (``D``).
     delta_srate : float
         Fraction of fear-of-infection averted consumption that is saved.
-    T : int
+    n_timesteps : int
         Number of timesteps.
-    N : int
+    n_sectors : int
         Number of sectors.
     t_shock : int
         0-indexed timestep when demand shocks begin.
@@ -371,58 +376,69 @@ def _build_demand_shocks(
 
     Returns
     -------
-    theta_ : torch.Tensor
-        ``(N, T)`` demand preference matrix.
-    epsilon_ : torch.Tensor
-        ``(T,)`` fear-of-infection saving rate.
+    preference_matrix : torch.Tensor
+        ``(n_sectors, n_timesteps)`` demand preference matrix.
+    fear_of_infection : torch.Tensor
+        ``(n_timesteps,)`` fear-of-infection saving rate.
     """
-    demand_vec = torch.tensor(shocks["D"].values[:N], dtype=torch.float)
+    demand_vec = torch.tensor(shocks["D"].values[:n_sectors], dtype=torch.float)
 
     non_durable_sectors = {"C13-C15", "C18", "C20", "C26", "C29", "C31_C32"}
     idx = [i for i, s in enumerate(sector_names) if s not in non_durable_sectors]
     nonidx = [i for i, s in enumerate(sector_names) if s in non_durable_sectors]
 
-    demand_mat = demand_vec.unsqueeze(1).expand(N, T).clone()
+    demand_mat = demand_vec.unsqueeze(1).expand(n_sectors, n_timesteps).clone()
     demand_mat[:, :t_shock] = 0.0
 
-    if t_open < T:
-        length = T - t_open
+    if t_open < n_timesteps:
+        length = n_timesteps - t_open
         ramp = torch.linspace(1.0, 0.5, length)
         for i in idx:
             demand_mat[i, t_open:] = demand_vec[i] * ramp
 
-    if t_open_retail < T:
+    if t_open_retail < n_timesteps:
         for i in nonidx:
             demand_mat[i, t_open_retail:] = demand_mat[idx[0], t_open_retail:]
 
-    c0_t = torch.tensor(c0[:N], dtype=torch.float)
-    c0_share = c0_t / c0_t.sum()
-
-    theta_ = (1.0 - demand_mat) * c0_share.unsqueeze(1)
-    epsilon_ = 1.0 - theta_.sum(dim=0)
-    safe_denom = torch.where(
-        (1.0 - epsilon_) != 0, 1.0 - epsilon_, torch.ones_like(epsilon_)
+    initial_consumption_tensor = torch.tensor(
+        initial_consumption[:n_sectors], dtype=torch.float
     )
-    theta_ = theta_ / safe_denom.unsqueeze(0)
-    epsilon_ = epsilon_ * delta_srate
+    consumption_share = initial_consumption_tensor / initial_consumption_tensor.sum()
 
-    return theta_, epsilon_
+    preference_matrix = (1.0 - demand_mat) * consumption_share.unsqueeze(1)
+    fear_of_infection = 1.0 - preference_matrix.sum(dim=0)
+    safe_denom = torch.where(
+        (1.0 - fear_of_infection) != 0,
+        1.0 - fear_of_infection,
+        torch.ones_like(fear_of_infection),
+    )
+    preference_matrix = preference_matrix / safe_denom.unsqueeze(0)
+    fear_of_infection = fear_of_infection * delta_srate
+
+    return preference_matrix, fear_of_infection
 
 
-def _build_other_final_demand(shocks, f, scenario, T, N, t_shock):
-    """Build the ``(N, T)`` other-final-demand matrix.
+def _build_other_final_demand(
+    shocks,
+    final_demand_df,
+    scenario,
+    n_timesteps,
+    n_sectors,
+    t_shock,
+):
+    """Build the ``(n_sectors, n_timesteps)`` other-final-demand matrix.
 
     Parameters
     ----------
     shocks : pandas.DataFrame
         Shock scenarios table.
-    f : pandas.DataFrame
+    final_demand_df : pandas.DataFrame
         Full final-demand matrix (columns include ``C1``, ``G``, ``I``, etc.).
     scenario : str
         Other final demand scenario (``weak`` / ``strong``).
-    T : int
+    n_timesteps : int
         Number of timesteps.
-    N : int
+    n_sectors : int
         Number of sectors.
     t_shock : int
         0-indexed timestep when shocks begin.
@@ -430,17 +446,19 @@ def _build_other_final_demand(shocks, f, scenario, T, N, t_shock):
     Returns
     -------
     torch.Tensor
-        ``(N, T)`` other-final-demand matrix.
+        ``(n_sectors, n_timesteps)`` other-final-demand matrix.
     """
-    demand_vec = torch.tensor(shocks["D"].values[:N], dtype=torch.float)
+    demand_vec = torch.tensor(shocks["D"].values[:n_sectors], dtype=torch.float)
 
     if scenario == "weak":
         inv_shock, exp_shock = -0.1, -0.1
     else:
         inv_shock, exp_shock = -0.15, -0.15
 
-    other_cols = [c for c in f.columns if c != "C1"]
-    initial_fd = torch.tensor(f[other_cols].sum(axis=1).values[:N], dtype=torch.float)
+    other_cols = [c for c in final_demand_df.columns if c != "C1"]
+    initial_fd = torch.tensor(
+        final_demand_df[other_cols].sum(axis=1).values[:n_sectors], dtype=torch.float
+    )
 
     shocked_cols = {
         "C2": lambda v: torch.tensor(v, dtype=torch.float) * (1.0 - demand_vec),
@@ -455,13 +473,15 @@ def _build_other_final_demand(shocks, f, scenario, T, N, t_shock):
         * (1.0 + exp_shock),
     }
 
-    shocked_total = torch.zeros(N)
+    shocked_total = torch.zeros(n_sectors)
     for col, fn in shocked_cols.items():
-        if col in f.columns:
-            shocked_total = shocked_total + fn(f[col].values[:N])
+        if col in final_demand_df.columns:
+            shocked_total = shocked_total + fn(final_demand_df[col].values[:n_sectors])
 
-    fd_other_ = torch.zeros(N, T)
-    fd_other_[:, :t_shock] = initial_fd.unsqueeze(1).expand(N, t_shock)
-    fd_other_[:, t_shock:] = shocked_total.unsqueeze(1).expand(N, T - t_shock)
+    other_final_demand = torch.zeros(n_sectors, n_timesteps)
+    other_final_demand[:, :t_shock] = initial_fd.unsqueeze(1).expand(n_sectors, t_shock)
+    other_final_demand[:, t_shock:] = shocked_total.unsqueeze(1).expand(
+        n_sectors, n_timesteps - t_shock
+    )
 
-    return fd_other_
+    return other_final_demand

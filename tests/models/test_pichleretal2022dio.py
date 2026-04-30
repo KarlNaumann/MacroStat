@@ -104,12 +104,12 @@ class TestParametersPichlerEtAl2022DIO:
         p = ParametersPichlerEtAl2022DIO.from_wiod_uk(
             data_dir=DATA_DIR, ihs_dir=IHS_DIR, inv_file=INV_FILE
         )
-        x = p["InitialGrossOutput"]
-        c = p["InitialHouseholdConsumption"]
-        Z = p["IntermediateConsumptionMatrix"]
-        fd = p["InitialOtherFinalDemand"]
-        recon = c + Z.sum(dim=1) + fd
-        assert torch.allclose(x, recon, atol=0.1)
+        reconstructed = (
+            p["InitialHouseholdConsumption"]
+            + p["IntermediateConsumptionMatrix"].sum(dim=1)
+            + p["InitialOtherFinalDemand"]
+        )
+        assert torch.allclose(p["InitialGrossOutput"], reconstructed, atol=0.1)
 
 
 class TestScenariosPichlerEtAl2022DIO:
