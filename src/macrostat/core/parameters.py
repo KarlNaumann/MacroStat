@@ -558,12 +558,17 @@ class Parameters:
             self.values[c.derived_param]["value"] = new_value
 
     def get_free_param_names(self) -> list[str]:
-        """Return parameter names excluding derived (constrained) parameters.
+        """Return scalar parameter names excluding derived (constrained) ones.
+
+        Data parameters (tensor-valued) are not included; this method is
+        scoped to the scalar parameter space used by estimators and
+        Jacobian routines.
 
         Returns
         -------
         list[str]
-            All parameter names that are free (not derived by any constraint).
+            Scalar parameter names that are free (not derived by any
+            constraint).
         """
         derived = {c.derived_param for c in self.get_constraints()}
         return [name for name in self.values if name not in derived]
@@ -583,10 +588,43 @@ class Parameters:
         return bounds
 
     def get_values(self):
-        """Return the values for the parameters (scalar and data)."""
+        """Return scalar parameter values only.
+
+        Returns
+        -------
+        dict[str, float]
+            Scalar parameter values after constraint enforcement. Use
+            :meth:`get_data_values` for tensor-valued data parameters or
+            :meth:`get_all_values` for the merged dict.
+        """
         self.enforce_constraints()
-        values = {key: info["value"] for key, info in self.values.items()}
-        values.update({key: info["value"] for key, info in self.data.items()})
+        return {key: info["value"] for key, info in self.values.items()}
+
+    def get_data_values(self):
+        """Return tensor-valued data parameter values only.
+
+        Returns
+        -------
+        dict[str, torch.Tensor]
+            Data-parameter tensors. Empty dict if the model declares no
+            data parameters.
+        """
+        return {key: info["value"] for key, info in self.data.items()}
+
+    def get_all_values(self):
+        """Return scalar and data parameter values merged into one dict.
+
+        Returns
+        -------
+        dict[str, float | torch.Tensor]
+            Union of :meth:`get_values` and :meth:`get_data_values`.
+            Callers that need a uniform mapping over both parameter
+            spaces (e.g. JSON export) use this; callers that pass values
+            into tabular sinks (e.g. CSV samplers) should use
+            :meth:`get_values` to avoid silently stringifying tensors.
+        """
+        values = self.get_values()
+        values.update(self.get_data_values())
         return values
 
     def is_equal(self, other: "Parameters"):
@@ -843,8 +881,17 @@ class Parameters:
                 v = torch.tensor(info["value"], **kwargs)
                 pvectors[key.replace(".", "_")] = v
 
-        # Include data parameters directly (already tensors)
+        # Include data parameters directly (already tensors). Guard against
+        # silent overwrite of a scalar-vector tensor key by a same-named
+        # data parameter; either side losing values to a key collision is
+        # almost certainly a configuration bug.
         for key, info in self.data.items():
+            if key in pvectors:
+                raise KeyError(
+                    f"Data parameter '{key}' collides with an existing "
+                    f"scalar-vector tensor key. Rename the data parameter "
+                    f"or the conflicting scalar parameter."
+                )
             tensor = info["value"]
             if not isinstance(tensor, torch.Tensor):
                 tensor = torch.tensor(tensor, **kwargs)
