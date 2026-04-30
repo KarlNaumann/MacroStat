@@ -32,6 +32,7 @@ dependencies = [
 io = [
     "fastparquet",
     "openpyxl",
+    "pyarrow>=15",
 ]
 testing = [
     "pytest",
@@ -59,6 +60,7 @@ dev = [
     "ipykernel",
     "jupyterlab",
     "jupytext>=1.19.1",
+    "macrostat[io]",
     "pre-commit>=4.5.1",
     "pytest>=9.0",
     "pytest-cov>=7.0.0",
