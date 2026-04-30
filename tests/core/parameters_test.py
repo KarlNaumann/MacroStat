@@ -988,3 +988,176 @@ class TestConstraints:
         # float32 tensors vs float64 python floats; 1e-6 is the float32
         # precision floor.
         assert abs(init_c - step_c) < 1e-6
+
+
+class ConstrainedDataParameters(Parameters):
+    """Mock parameters combining a scalar adding-up constraint with a
+    tensor-valued data parameter. Exercises the merge-time invariants
+    introduced when the data-parameter feature line was rebased onto
+    the constraint-resolver feature line.
+    """
+
+    def get_default_parameters(self):
+        return {
+            "a": {
+                "value": 0.3,
+                "lower bound": -1.0,
+                "upper bound": 1.0,
+                "unit": ".",
+                "notation": "a",
+            },
+            "b": {
+                "value": 0.5,
+                "lower bound": -1.0,
+                "upper bound": 1.0,
+                "unit": ".",
+                "notation": "b",
+            },
+            "c": {
+                "value": 0.2,
+                "lower bound": -1.0,
+                "upper bound": 1.0,
+                "unit": ".",
+                "notation": "c",
+            },
+        }
+
+    def get_default_data_parameters(self):
+        return {
+            "Matrix": {
+                "value": torch.tensor([[1.0, 2.0], [3.0, 4.0]]),
+                "lower_bound": -1e9,
+                "upper_bound": 1e9,
+                "notation": "M",
+                "unit": ".",
+            },
+            "Vector": {
+                "value": torch.tensor([0.1, 0.2, 0.3]),
+                "lower_bound": -1e9,
+                "upper_bound": 1e9,
+                "notation": "v",
+                "unit": ".",
+            },
+        }
+
+    def get_constraints(self):
+        return (LinearConstraint(param_names=("a", "b", "c"), target=1.0),)
+
+
+class TestConstrainedDataParameters:
+    """Joint coverage of constraint × data-parameter co-existence."""
+
+    def test_init_sets_both_spaces(self):
+        p = ConstrainedDataParameters()
+        assert set(p.values.keys()) == {"a", "b", "c"}
+        assert set(p.data.keys()) == {"Matrix", "Vector"}
+
+    def test_init_enforces_constraint(self):
+        p = ConstrainedDataParameters()
+        total = sum(p.values[k]["value"] for k in ("a", "b", "c"))
+        assert abs(total - 1.0) < 1e-9
+
+    def test_get_values_scalars_only(self):
+        p = ConstrainedDataParameters()
+        scalar_values = p.get_values()
+        assert set(scalar_values.keys()) == {"a", "b", "c"}
+        assert all(isinstance(v, float) for v in scalar_values.values())
+
+    def test_get_data_values_tensors_only(self):
+        p = ConstrainedDataParameters()
+        data_values = p.get_data_values()
+        assert set(data_values.keys()) == {"Matrix", "Vector"}
+        assert all(isinstance(v, torch.Tensor) for v in data_values.values())
+
+    def test_get_all_values_merges(self):
+        p = ConstrainedDataParameters()
+        merged = p.get_all_values()
+        assert set(merged.keys()) == {"a", "b", "c", "Matrix", "Vector"}
+
+    def test_get_free_param_names_excludes_derived_only(self):
+        p = ConstrainedDataParameters()
+        free = p.get_free_param_names()
+        assert set(free) == {"a", "b"}
+        assert "Matrix" not in free
+        assert "Vector" not in free
+
+    def test_get_bounds_covers_both_spaces(self):
+        p = ConstrainedDataParameters()
+        bounds = p.get_bounds()
+        assert set(bounds.keys()) == {"a", "b", "c", "Matrix", "Vector"}
+
+    def test_to_json_round_trip(self, tmp_path):
+        p = ConstrainedDataParameters()
+        path = tmp_path / "params.json"
+        p.to_json(path)
+
+        import json
+
+        payload = json.loads(path.read_text())
+        assert "Parameters" in payload
+        assert "DataParameters" in payload
+        assert set(payload["Parameters"].keys()) == {"a", "b", "c"}
+        assert set(payload["DataParameters"].keys()) == {"Matrix", "Vector"}
+        assert payload["DataParameters"]["Matrix"]["value"] == [[1.0, 2.0], [3.0, 4.0]]
+
+    def test_vectorize_parameters_runs(self):
+        p = ConstrainedDataParameters()
+        tensors = p.vectorize_parameters()
+        assert {"a", "b", "c", "Matrix", "Vector"}.issubset(tensors.keys())
+        assert torch.equal(tensors["Matrix"], torch.tensor([[1.0, 2.0], [3.0, 4.0]]))
+
+    def test_vectorize_collision_raises(self):
+        """If a data parameter collides with a vector tensor key, raise."""
+
+        class CollidingParameters(Parameters):
+            def get_default_parameters(self):
+                return {
+                    "household.share": {
+                        "value": 0.5,
+                        "lower bound": 0.0,
+                        "upper bound": 1.0,
+                        "unit": ".",
+                        "notation": "s_h",
+                    },
+                    "firm.share": {
+                        "value": 0.5,
+                        "lower bound": 0.0,
+                        "upper bound": 1.0,
+                        "unit": ".",
+                        "notation": "s_f",
+                    },
+                }
+
+            def get_default_hyperparameters(self):
+                base = super().get_default_hyperparameters()
+                base["vector_sectors"] = ["household", "firm"]
+                return base
+
+            def get_default_data_parameters(self):
+                return {
+                    "share": {
+                        "value": torch.tensor([0.0, 0.0]),
+                        "lower_bound": 0.0,
+                        "upper_bound": 1.0,
+                        "notation": "share",
+                        "unit": ".",
+                    },
+                }
+
+        p = CollidingParameters()
+        with pytest.raises(KeyError, match="collides"):
+            p.vectorize_parameters()
+
+    def test_to_nn_parameters_includes_both(self):
+        p = ConstrainedDataParameters()
+        nn_params = p.to_nn_parameters()
+        keys = set(nn_params.keys())
+        assert {"a", "b", "c", "Matrix", "Vector"}.issubset(keys)
+
+    def test_verify_parameters_passes(self):
+        # If __init__ completed, all verifiers ran without raising.
+        # Re-invoke explicitly to confirm idempotence post-construction.
+        p = ConstrainedDataParameters()
+        p.verify_bounds()
+        p.verify_constraints()
+        p.verify_parameters()
