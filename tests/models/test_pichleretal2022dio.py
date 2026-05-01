@@ -77,6 +77,7 @@ class TestParametersPichlerEtAl2022DIO:
         )
         assert p.hyper["production_function"] == "leontief"
         assert p.hyper["hiring_firing"] is False
+        assert p.hyper["timesteps"] == 182
 
     @skip_no_data
     def test_from_wiod_uk(self):
@@ -90,13 +91,15 @@ class TestParametersPichlerEtAl2022DIO:
 
     @skip_no_data
     def test_from_wiod_uk_with_hyperparameter_override(self):
-        p = ParametersPichlerEtAl2022DIO.from_wiod_uk(
-            data_dir=DATA_DIR,
-            ihs_dir=IHS_DIR,
-            inv_file=INV_FILE,
-            hyperparameters={"production_function": "linear"},
+        assert (
+            ParametersPichlerEtAl2022DIO.from_wiod_uk(
+                data_dir=DATA_DIR,
+                ihs_dir=IHS_DIR,
+                inv_file=INV_FILE,
+                hyperparameters={"production_function": "linear"},
+            ).hyper["production_function"]
+            == "linear"
         )
-        assert p.hyper["production_function"] == "linear"
 
     @skip_no_data
     def test_io_balance(self):
@@ -104,31 +107,33 @@ class TestParametersPichlerEtAl2022DIO:
         p = ParametersPichlerEtAl2022DIO.from_wiod_uk(
             data_dir=DATA_DIR, ihs_dir=IHS_DIR, inv_file=INV_FILE
         )
-        reconstructed = (
+        assert torch.allclose(
+            p["InitialGrossOutput"],
             p["InitialHouseholdConsumption"]
             + p["IntermediateConsumptionMatrix"].sum(dim=1)
-            + p["InitialOtherFinalDemand"]
+            + p["InitialOtherFinalDemand"],
+            atol=0.1,
         )
-        assert torch.allclose(p["InitialGrossOutput"], reconstructed, atol=0.1)
 
 
 class TestScenariosPichlerEtAl2022DIO:
     def test_default_scenario(self):
-        p = ParametersPichlerEtAl2022DIO()
-        s = ScenariosPichlerEtAl2022DIO(parameters=p)
-        assert 0 in s.timeseries
-        assert "SupplyShock" in s.timeseries[0]
+        assert (
+            "SupplyShock"
+            in ScenariosPichlerEtAl2022DIO(
+                parameters=ParametersPichlerEtAl2022DIO()
+            ).timeseries[0]
+        )
 
     @skip_no_data
     def test_from_shocks_csv(self):
-        p = ParametersPichlerEtAl2022DIO.from_wiod_uk(
-            data_dir=DATA_DIR, ihs_dir=IHS_DIR, inv_file=INV_FILE
-        )
-        s = ScenariosPichlerEtAl2022DIO.from_shocks_csv(
-            parameters=p, shock_csv=SHOCK_CSV, final_demand_csv=FD_CSV
-        )
-        assert 1 in s.timeseries
-        supply = s.timeseries[1]["SupplyShock"]
+        supply = ScenariosPichlerEtAl2022DIO.from_shocks_csv(
+            parameters=ParametersPichlerEtAl2022DIO.from_wiod_uk(
+                data_dir=DATA_DIR, ihs_dir=IHS_DIR, inv_file=INV_FILE
+            ),
+            shock_csv=SHOCK_CSV,
+            final_demand_csv=FD_CSV,
+        ).timeseries[1]["SupplyShock"]
         assert supply.shape == (182, 55)
         assert (supply[:83] == 0).all()
         assert supply[83:].abs().sum() > 0
@@ -136,8 +141,7 @@ class TestScenariosPichlerEtAl2022DIO:
 
 class TestVariablesPichlerEtAl2022DIO:
     def test_default_variables(self):
-        v = VariablesPichlerEtAl2022DIO()
-        defaults = v.get_default_variables()
+        defaults = VariablesPichlerEtAl2022DIO().get_default_variables()
         assert "GrossOutput" in defaults
         assert "Inventories" in defaults
         assert "Savings" in defaults
@@ -155,16 +159,14 @@ class TestSimulation:
         p = ParametersPichlerEtAl2022DIO.from_wiod_uk(
             data_dir=DATA_DIR, ihs_dir=IHS_DIR, inv_file=INV_FILE
         )
-        s = ScenariosPichlerEtAl2022DIO(parameters=p)
-        v = VariablesPichlerEtAl2022DIO(parameters=p)
-        model = PichlerEtAl2022DIO(parameters=p, scenarios=s, variables=v)
-        result = model.simulate(scenario=0)
-
-        x = result["GrossOutput"]
-        x0_sum = x[0].sum().item()
+        x = PichlerEtAl2022DIO(
+            parameters=p,
+            scenarios=ScenariosPichlerEtAl2022DIO(parameters=p),
+            variables=VariablesPichlerEtAl2022DIO(parameters=p),
+        ).simulate(scenario=0)["GrossOutput"]
         for t in [5, 50, 100, 181]:
             assert (
-                abs(x[t].sum().item() - x0_sum) < 1.0
+                abs(x[t].sum().item() - x[0].sum().item()) < 1.0
             ), f"Steady state violated at t={t}"
 
     @skip_no_data
@@ -173,19 +175,16 @@ class TestSimulation:
         p = ParametersPichlerEtAl2022DIO.from_wiod_uk(
             data_dir=DATA_DIR, ihs_dir=IHS_DIR, inv_file=INV_FILE
         )
-        s = ScenariosPichlerEtAl2022DIO.from_shocks_csv(
-            parameters=p, shock_csv=SHOCK_CSV, final_demand_csv=FD_CSV
-        )
-        v = VariablesPichlerEtAl2022DIO(parameters=p)
-        model = PichlerEtAl2022DIO(parameters=p, scenarios=s, variables=v)
-        result = model.simulate(scenario=1)
-
-        x = result["GrossOutput"]
-        x_init = x[1].sum().item()
-        x_lockdown = x[90].sum().item()
-        assert x_lockdown < 0.85 * x_init, (
+        x = PichlerEtAl2022DIO(
+            parameters=p,
+            scenarios=ScenariosPichlerEtAl2022DIO.from_shocks_csv(
+                parameters=p, shock_csv=SHOCK_CSV, final_demand_csv=FD_CSV
+            ),
+            variables=VariablesPichlerEtAl2022DIO(parameters=p),
+        ).simulate(scenario=1)["GrossOutput"]
+        assert x[90].sum().item() < 0.85 * x[1].sum().item(), (
             f"Expected >15% output drop during lockdown, got "
-            f"{(1 - x_lockdown / x_init) * 100:.1f}%"
+            f"{(1 - x[90].sum().item() / x[1].sum().item()) * 100:.1f}%"
         )
 
 
