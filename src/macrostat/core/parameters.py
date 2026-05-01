@@ -820,8 +820,7 @@ class Parameters:
     def to_nn_parameters(self):
         """Convert the parameters to a nn.ParameterDict."""
         self.enforce_constraints()
-        vectorized = self.vectorize_parameters()
-        return torch.nn.ParameterDict(vectorized)
+        return torch.nn.ParameterDict(self.vectorize_parameters())
 
     def vectorize_parameters(self):
         """Vectorize the parameters.
