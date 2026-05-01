@@ -191,19 +191,20 @@ class TestParameters:
 
     def test_setitem_nonexistent(self, caplog):
         """Test setting a non-existent parameter"""
-        p = MockParameters(parameters=self.params, hyperparameters=self.hyper)
         with caplog.at_level(logging.WARNING):
-            p["nonexistent"] = 1.0
+            MockParameters(parameters=self.params, hyperparameters=self.hyper)[
+                "nonexistent"
+            ] = 1.0
         assert (
             "Key nonexistent not found in parameters or hyperparameters." in caplog.text
         )
 
     def test_json_to_file(self, tmp_path):
         """Test saving parameters to JSON file"""
-        p = MockParameters(parameters=self.params, hyperparameters=self.hyper)
-
         json_file = tmp_path / "params.json"
-        p.to_json(json_file)
+        MockParameters(parameters=self.params, hyperparameters=self.hyper).to_json(
+            json_file
+        )
         assert json_file.exists()
 
     def test_json_from_file(self, tmp_path):
@@ -228,9 +229,10 @@ class TestParameters:
 
     def test_csv_to_file(self, tmp_path):
         """Test saving parameters to CSV file"""
-        p = MockParameters(parameters=self.params, hyperparameters=self.hyper)
         csv_file = tmp_path / "params.csv"
-        p.to_csv(csv_file)
+        MockParameters(parameters=self.params, hyperparameters=self.hyper).to_csv(
+            csv_file
+        )
         assert csv_file.exists()
 
     def test_csv_from_file(self, tmp_path):
@@ -257,20 +259,21 @@ class TestParameters:
 
     def test_excel_to_file_not_implemented(self, tmp_path):
         """Test that the excel_to_file method is not implemented"""
-        p = MockParameters(parameters=self.params, hyperparameters=self.hyper)
         with pytest.raises(NotImplementedError):
-            p.to_excel(tmp_path / "params.xlsx")
+            MockParameters(parameters=self.params, hyperparameters=self.hyper).to_excel(
+                tmp_path / "params.xlsx"
+            )
 
     def test_excel_from_file_not_implemented(self, tmp_path):
         """Test that the excel_from_file method is not implemented"""
-        p = MockParameters(parameters=self.params, hyperparameters=self.hyper)
         with pytest.raises(NotImplementedError):
-            p.from_excel(tmp_path / "params.xlsx")
+            MockParameters(
+                parameters=self.params, hyperparameters=self.hyper
+            ).from_excel(tmp_path / "params.xlsx")
 
     def test_get_default_hyperparameters(self):
         """Test that the get_default_hyperparameters method returns the correct default hyperparameters"""
-        p = Parameters()
-        assert p.hyper == Parameters().get_default_hyperparameters()
+        assert Parameters().hyper == Parameters().get_default_hyperparameters()
 
     def test_get_default_hyperparameters_keys(self):
         """Test that the get_default_hyperparameters method returns the correct default hyperparameters"""
@@ -282,13 +285,11 @@ class TestParameters:
             "device",
             "requires_grad",
         ]
-        p = Parameters()
-        assert set(p.hyper.keys()) == set(keylist)
+        assert set(Parameters().hyper.keys()) == set(keylist)
 
     def test_get_default_parameters(self):
         """Test that the get_default_parameters method correctly returns an empty dictionary"""
-        p = Parameters()
-        assert p.values == {}
+        assert Parameters().values == {}
 
     def test_boundary_validation_missing_bounds(self):
         """Test validation fails when bounds are missing"""
@@ -344,8 +345,7 @@ class TestParameters:
 
     def test_vectorize_parameters(self):
         """Test vectorizing parameters"""
-        p = MockParameters()
-        pvectors = p.vectorize_parameters()
+        pvectors = MockParameters().vectorize_parameters()
         assert isinstance(pvectors, dict)
         assert len(pvectors) == len(self.params)
         assert isinstance(pvectors["param1"], torch.Tensor)
@@ -368,8 +368,7 @@ class TestParameters:
 
     def test_get_bounds_empty_parameters(self):
         """Test getting bounds with no parameters"""
-        p = Parameters()
-        bounds = p.get_bounds()
+        bounds = Parameters().get_bounds()
 
         # Check structure
         assert isinstance(bounds, dict)
@@ -389,8 +388,7 @@ class TestParameters:
 
     def test_get_values_empty_parameters(self):
         """Test getting values with no parameters"""
-        p = Parameters()
-        values = p.get_values()
+        values = Parameters().get_values()
 
         # Check structure
         assert isinstance(values, dict)
@@ -408,8 +406,7 @@ class TestParameters:
 
     def test_compare_same_parameters(self, mock_parameters):
         """Test comparison with identical parameters"""
-        p2 = MockParameters()
-        assert mock_parameters.is_equal(p2)
+        assert mock_parameters.is_equal(MockParameters())
 
     def test_compare_different_values(
         self, mock_parameters, mock_parameters_dictionary, mock_hyperparameters
@@ -446,17 +443,16 @@ class TestParameters:
             "notation": "p_3",
         }
 
-        p_alt = Parameters(
-            parameters=newp,
-            hyperparameters=copy.deepcopy(mock_hyperparameters),
+        assert not mock_parameters.is_equal(
+            Parameters(
+                parameters=newp,
+                hyperparameters=copy.deepcopy(mock_hyperparameters),
+            )
         )
-        assert not mock_parameters.is_equal(p_alt)
 
     def test_compare_empty_parameters(self):
         """Test comparison with empty parameters"""
-        p1 = Parameters()
-        p2 = Parameters()
-        assert p1.is_equal(p2)
+        assert Parameters().is_equal(Parameters())
 
     def test_compare_with_non_parameters(self, mock_parameters):
         """Test comparison with non-Parameters object"""
@@ -501,13 +497,11 @@ class TestConstraints:
 
     def test_get_constraints_default_empty(self):
         """Base Parameters returns no constraints."""
-        p = Parameters()
-        assert p.get_constraints() == ()
+        assert Parameters().get_constraints() == ()
 
     def test_get_constraints_returns_tuple(self):
         """Constrained parameters return a tuple of LinearConstraint."""
-        p = ConstrainedParameters()
-        constraints = p.get_constraints()
+        constraints = ConstrainedParameters().get_constraints()
         assert len(constraints) == 1
         assert isinstance(constraints[0], LinearConstraint)
 
@@ -685,8 +679,7 @@ class TestConstraints:
 
     def test_get_free_param_names(self):
         """Derived params excluded from free param names."""
-        p = ConstrainedParameters()
-        free = p.get_free_param_names()
+        free = ConstrainedParameters().get_free_param_names()
         assert "a" in free
         assert "b" in free
         assert "c" not in free
@@ -703,8 +696,15 @@ class TestConstraints:
         p = ConstrainedParameters()
         p.values["a"]["value"] = 0.7
         nn_params = p.to_nn_parameters()
-        total = nn_params["a"].item() + nn_params["b"].item() + nn_params["c"].item()
-        assert abs(total - 1.0) < 1e-6
+        assert (
+            abs(
+                nn_params["a"].item()
+                + nn_params["b"].item()
+                + nn_params["c"].item()
+                - 1.0
+            )
+            < 1e-6
+        )
 
     def test_apply_differentiable(self):
         """LinearConstraint.apply() supports autograd via the scalar path."""
@@ -736,18 +736,17 @@ class TestConstraints:
     def test_get_constraint_resolver_caches(self):
         """Two calls to get_constraint_resolver return the same object."""
         p = ConstrainedParameters()
-        r1 = p.get_constraint_resolver()
-        r2 = p.get_constraint_resolver()
-        assert r1 is r2
+        assert p.get_constraint_resolver() is p.get_constraint_resolver()
 
     def test_get_constraint_resolver_default_is_scalar(self):
         """Without vector_sectors, every name resolves to a scalar slot."""
-        p = ConstrainedParameters()
-        r = p.get_constraint_resolver()
-        for name in ("a", "b", "c"):
-            loc = r.locate(name)
-            assert loc.index is None
-            assert loc.tensor_key == name
+        resolver = ConstrainedParameters().get_constraint_resolver()
+        assert resolver.locate("a").index is None
+        assert resolver.locate("a").tensor_key == "a"
+        assert resolver.locate("b").index is None
+        assert resolver.locate("b").tensor_key == "b"
+        assert resolver.locate("c").index is None
+        assert resolver.locate("c").tensor_key == "c"
 
     def test_get_constraint_resolver_builds_1d_for_sector_prefixed_names(self):
         """Sector-prefixed names resolve to 1-D tensor slots."""
@@ -979,15 +978,12 @@ class TestConstraints:
 
         # Simulate step time: vectorize and apply the constraint freshly.
         tensors = p.vectorize_parameters()
-        resolver = p.get_constraint_resolver()
-        constraints = p.get_constraints()
-        for constraint in constraints:
-            constraint.apply(tensors, resolver)
+        for constraint in p.get_constraints():
+            constraint.apply(tensors, p.get_constraint_resolver())
 
-        step_c = tensors["c"].item()
         # float32 tensors vs float64 python floats; 1e-6 is the float32
         # precision floor.
-        assert abs(init_c - step_c) < 1e-6
+        assert abs(init_c - tensors["c"].item()) < 1e-6
 
 
 class ConstrainedDataParameters(Parameters):
@@ -1054,42 +1050,53 @@ class TestConstrainedDataParameters:
 
     def test_init_enforces_constraint(self):
         p = ConstrainedDataParameters()
-        total = sum(p.values[k]["value"] for k in ("a", "b", "c"))
-        assert abs(total - 1.0) < 1e-9
+        assert (
+            abs(
+                p.values["a"]["value"]
+                + p.values["b"]["value"]
+                + p.values["c"]["value"]
+                - 1.0
+            )
+            < 1e-9
+        )
 
     def test_get_values_scalars_only(self):
-        p = ConstrainedDataParameters()
-        scalar_values = p.get_values()
+        scalar_values = ConstrainedDataParameters().get_values()
         assert set(scalar_values.keys()) == {"a", "b", "c"}
         assert all(isinstance(v, float) for v in scalar_values.values())
 
     def test_get_data_values_tensors_only(self):
-        p = ConstrainedDataParameters()
-        data_values = p.get_data_values()
+        data_values = ConstrainedDataParameters().get_data_values()
         assert set(data_values.keys()) == {"Matrix", "Vector"}
         assert all(isinstance(v, torch.Tensor) for v in data_values.values())
 
     def test_get_all_values_merges(self):
-        p = ConstrainedDataParameters()
-        merged = p.get_all_values()
-        assert set(merged.keys()) == {"a", "b", "c", "Matrix", "Vector"}
+        assert set(ConstrainedDataParameters().get_all_values().keys()) == {
+            "a",
+            "b",
+            "c",
+            "Matrix",
+            "Vector",
+        }
 
     def test_get_free_param_names_excludes_derived_only(self):
-        p = ConstrainedDataParameters()
-        free = p.get_free_param_names()
+        free = ConstrainedDataParameters().get_free_param_names()
         assert set(free) == {"a", "b"}
         assert "Matrix" not in free
         assert "Vector" not in free
 
     def test_get_bounds_covers_both_spaces(self):
-        p = ConstrainedDataParameters()
-        bounds = p.get_bounds()
-        assert set(bounds.keys()) == {"a", "b", "c", "Matrix", "Vector"}
+        assert set(ConstrainedDataParameters().get_bounds().keys()) == {
+            "a",
+            "b",
+            "c",
+            "Matrix",
+            "Vector",
+        }
 
     def test_to_json_round_trip(self, tmp_path):
-        p = ConstrainedDataParameters()
         path = tmp_path / "params.json"
-        p.to_json(path)
+        ConstrainedDataParameters().to_json(path)
 
         import json
 
@@ -1101,8 +1108,7 @@ class TestConstrainedDataParameters:
         assert payload["DataParameters"]["Matrix"]["value"] == [[1.0, 2.0], [3.0, 4.0]]
 
     def test_vectorize_parameters_runs(self):
-        p = ConstrainedDataParameters()
-        tensors = p.vectorize_parameters()
+        tensors = ConstrainedDataParameters().vectorize_parameters()
         assert {"a", "b", "c", "Matrix", "Vector"}.issubset(tensors.keys())
         assert torch.equal(tensors["Matrix"], torch.tensor([[1.0, 2.0], [3.0, 4.0]]))
 
@@ -1144,15 +1150,13 @@ class TestConstrainedDataParameters:
                     },
                 }
 
-        p = CollidingParameters()
         with pytest.raises(KeyError, match="collides"):
-            p.vectorize_parameters()
+            CollidingParameters().vectorize_parameters()
 
     def test_to_nn_parameters_includes_both(self):
-        p = ConstrainedDataParameters()
-        nn_params = p.to_nn_parameters()
-        keys = set(nn_params.keys())
-        assert {"a", "b", "c", "Matrix", "Vector"}.issubset(keys)
+        assert {"a", "b", "c", "Matrix", "Vector"}.issubset(
+            set(ConstrainedDataParameters().to_nn_parameters().keys())
+        )
 
     def test_verify_parameters_passes(self):
         # If __init__ completed, all verifiers ran without raising.
