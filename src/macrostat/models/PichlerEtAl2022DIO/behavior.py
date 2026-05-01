@@ -104,37 +104,40 @@ class BehaviorPichlerEtAl2022DIO(Behavior):
         used during the simulation (``_x0``, ``_l0``, ``_xcap0``,
         ``_S_tar``, ``_mpc``).
         """
-        p = self.params
-
-        self.state["GrossOutput"] = p["InitialGrossOutput"].clone()
-        self.state["AggregateDemand"] = p["InitialGrossOutput"].clone()
-        self.state["LabourCompensation"] = p["InitialLabourCompensation"].clone()
-        self.state["ConsumptionDemand"] = p["InitialHouseholdConsumption"].clone()
-        self.state["RealizedConsumption"] = p["InitialHouseholdConsumption"].clone()
-        self.state["Profits"] = p["InitialProfits"].clone()
-        self.state["ProductiveCapacity"] = p["InitialGrossOutput"].clone()
-
-        intermediate_consumption_initial = p["IntermediateConsumptionMatrix"]
-        inventory_target_days = p["InventoryTargetDays"]
-        self.state["Inventories"] = (
-            intermediate_consumption_initial * inventory_target_days.unsqueeze(0)
-        )
-        self.state["IntermediateConsumption"] = intermediate_consumption_initial.clone()
-        self.state["IntermediateOrders"] = intermediate_consumption_initial.clone()
-
+        self.state["GrossOutput"] = self.params["InitialGrossOutput"].clone()
+        self.state["AggregateDemand"] = self.params["InitialGrossOutput"].clone()
+        self.state["LabourCompensation"] = self.params[
+            "InitialLabourCompensation"
+        ].clone()
+        self.state["ConsumptionDemand"] = self.params[
+            "InitialHouseholdConsumption"
+        ].clone()
+        self.state["RealizedConsumption"] = self.params[
+            "InitialHouseholdConsumption"
+        ].clone()
+        self.state["Profits"] = self.params["InitialProfits"].clone()
+        self.state["ProductiveCapacity"] = self.params["InitialGrossOutput"].clone()
+        self.state["IntermediateConsumption"] = self.params[
+            "IntermediateConsumptionMatrix"
+        ].clone()
+        self.state["IntermediateOrders"] = self.params[
+            "IntermediateConsumptionMatrix"
+        ].clone()
         self.state["TotalConsumptionDemand"] = (
-            p["InitialHouseholdConsumption"].sum().unsqueeze(0)
+            self.params["InitialHouseholdConsumption"].sum().unsqueeze(0)
         )
+        self.state["InputCapacity"] = self.params["InitialGrossOutput"].clone()
+        self.state["Inventories"] = self.params[
+            "IntermediateConsumptionMatrix"
+        ] * self.params["InventoryTargetDays"].unsqueeze(0)
 
-        self.state["InputCapacity"] = p["InitialGrossOutput"].clone()
-
-        self._x0 = p["InitialGrossOutput"].clone()
-        self._l0 = p["InitialLabourCompensation"].clone()
+        self._x0 = self.params["InitialGrossOutput"].clone()
+        self._l0 = self.params["InitialLabourCompensation"].clone()
         self._xcap0 = self._x0.clone()
-        self._S_tar = (
-            intermediate_consumption_initial * inventory_target_days.unsqueeze(0)
-        )
-        self._mpc = p["InitialHouseholdConsumption"].sum() / self._l0.sum()
+        self._S_tar = self.params["IntermediateConsumptionMatrix"] * self.params[
+            "InventoryTargetDays"
+        ].unsqueeze(0)
+        self._mpc = self.params["InitialHouseholdConsumption"].sum() / self._l0.sum()
 
     def step(self, t, scenario, params, **kwargs):
         """Execute one daily time step of the model.
@@ -205,7 +208,6 @@ class BehaviorPichlerEtAl2022DIO(Behavior):
         - prior: ProductiveCapacity, InputCapacity, AggregateDemand, LabourCompensation
         - params: HiringRate, FiringRate
         - scenario: SupplyShock
-        - cache: ``_l0``, ``_x0``
 
         Sets
         -----
@@ -272,7 +274,6 @@ class BehaviorPichlerEtAl2022DIO(Behavior):
         Dependency
         ----------
         - state: LabourCompensation
-        - cache: ``_l0``, ``_xcap0``
 
         Sets
         -----
@@ -327,7 +328,6 @@ class BehaviorPichlerEtAl2022DIO(Behavior):
         - prior: TotalConsumptionDemand, ConsumptionDemand
         - params: ConsumptionPersistence, BenefitRate
         - scenario: PermanentIncomeExpectation, FearOfInfection, DemandPreferences
-        - cache: ``_l0``, ``_mpc``
 
         Sets
         -----
@@ -338,20 +338,11 @@ class BehaviorPichlerEtAl2022DIO(Behavior):
         -----
         See :doc:`/models/PichlerEtAl2022DIO/notation` for symbol definitions.
         """
-        rho1 = params["ConsumptionPersistence"]
-        rho0 = 1.0 - rho1
-        benefits = params["BenefitRate"]
-
         initial_labour_total = self._l0.sum()
         labour_total_effective = (
-            benefits * initial_labour_total
-            + (1.0 - benefits) * self.state["LabourCompensation"].sum()
+            params["BenefitRate"] * initial_labour_total
+            + (1.0 - params["BenefitRate"]) * self.state["LabourCompensation"].sum()
         )
-
-        permanent_income_factor = scenario.get(
-            "PermanentIncomeExpectation", torch.tensor(1.0)
-        )
-        fear_of_infection = scenario.get("FearOfInfection", torch.tensor(0.0))
 
         total_consumption_demand_prior = self.prior["TotalConsumptionDemand"].squeeze()
         log_total_consumption_demand = torch.log(
@@ -362,24 +353,28 @@ class BehaviorPichlerEtAl2022DIO(Behavior):
         )
         log_labour_permanent = torch.log(
             torch.clamp(
-                self._mpc * initial_labour_total * permanent_income_factor, min=1e-10
+                self._mpc
+                * initial_labour_total
+                * scenario.get("PermanentIncomeExpectation", torch.tensor(1.0)),
+                min=1e-10,
             )
         )
 
         total_consumption_demand = torch.exp(
-            rho1 * log_total_consumption_demand
-            + rho0 / 2.0 * log_labour
-            + rho0 / 2.0 * log_labour_permanent
+            params["ConsumptionPersistence"] * log_total_consumption_demand
+            + (1.0 - params["ConsumptionPersistence"]) / 2.0 * log_labour
+            + (1.0 - params["ConsumptionPersistence"]) / 2.0 * log_labour_permanent
         )
         self.state["TotalConsumptionDemand"] = total_consumption_demand.unsqueeze(0)
 
-        preference_share = scenario.get(
-            "DemandPreferences",
-            self.prior["ConsumptionDemand"]
-            / torch.clamp(total_consumption_demand_prior, min=1e-10),
-        )
         self.state["ConsumptionDemand"] = (
-            preference_share * total_consumption_demand * (1.0 - fear_of_infection)
+            scenario.get(
+                "DemandPreferences",
+                self.prior["ConsumptionDemand"]
+                / torch.clamp(total_consumption_demand_prior, min=1e-10),
+            )
+            * total_consumption_demand
+            * (1.0 - scenario.get("FearOfInfection", torch.tensor(0.0)))
         )
 
     def intermediate_orders(self, t, scenario, params):
@@ -415,7 +410,6 @@ class BehaviorPichlerEtAl2022DIO(Behavior):
         ----------
         - prior: AggregateDemand, Inventories
         - params: TechnicalCoefficients, InventoryAdjustmentSpeed
-        - cache: ``_S_tar``
 
         Sets
         -----
@@ -540,8 +534,6 @@ class BehaviorPichlerEtAl2022DIO(Behavior):
         - state: ProductiveCapacity, AggregateDemand
         - prior: Inventories
         - params: TechnicalCoefficients, CriticalInputMatrix
-        - hyper: production_function
-        - cache: ``_xcap0``
 
         Sets
         -----
@@ -562,20 +554,14 @@ class BehaviorPichlerEtAl2022DIO(Behavior):
 
         See :doc:`/models/PichlerEtAl2022DIO/notation` for symbol definitions.
         """
-        inventory_matrix = self.prior["Inventories"]
-        technical_coefficients = params["TechnicalCoefficients"]
-        critical_input_matrix = params["CriticalInputMatrix"]
-
-        input_capacity = self.production(
-            inventory_matrix,
-            technical_coefficients,
-            critical_input_matrix,
+        self.state["InputCapacity"] = self.production(
+            self.prior["Inventories"],
+            params["TechnicalCoefficients"],
+            params["CriticalInputMatrix"],
             self._xcap0,
         )
-        self.state["InputCapacity"] = input_capacity
-
         self.state["GrossOutput"] = torch.min(
-            torch.min(self.state["ProductiveCapacity"], input_capacity),
+            torch.min(self.state["ProductiveCapacity"], self.state["InputCapacity"]),
             self.state["AggregateDemand"],
         )
 
@@ -611,7 +597,6 @@ class BehaviorPichlerEtAl2022DIO(Behavior):
         Dependency
         ----------
         - state: GrossOutput, AggregateDemand, IntermediateOrders, ConsumptionDemand
-        - hyper: firm_priority
 
         Sets
         -----
@@ -622,46 +607,51 @@ class BehaviorPichlerEtAl2022DIO(Behavior):
         -----
         See :doc:`/models/PichlerEtAl2022DIO/notation` for symbol definitions.
         """
-        gross_output_t = self.state["GrossOutput"]
-        aggregate_demand_t = self.state["AggregateDemand"]
-        orders = self.state["IntermediateOrders"]
-        consumption_demand_t = self.state["ConsumptionDemand"]
-
         safe_demand = torch.where(
-            aggregate_demand_t != 0,
-            aggregate_demand_t,
-            torch.ones_like(aggregate_demand_t),
+            self.state["AggregateDemand"] != 0,
+            self.state["AggregateDemand"],
+            torch.ones_like(self.state["AggregateDemand"]),
         )
-        share = gross_output_t / safe_demand
+        share = self.state["GrossOutput"] / safe_demand
 
         if not self.hyper["firm_priority"]:
-            self.state["IntermediateConsumption"] = orders * share.unsqueeze(1)
-            self.state["RealizedConsumption"] = consumption_demand_t * share
+            self.state["IntermediateConsumption"] = self.state[
+                "IntermediateOrders"
+            ] * share.unsqueeze(1)
+            self.state["RealizedConsumption"] = self.state["ConsumptionDemand"] * share
         else:
-            row_sum_orders = orders.sum(dim=1)
+            row_sum_orders = self.state["IntermediateOrders"].sum(dim=1)
             safe_row_sum = torch.where(
-                row_sum_orders != 0, row_sum_orders, torch.ones_like(gross_output_t)
+                row_sum_orders != 0,
+                row_sum_orders,
+                torch.ones_like(self.state["GrossOutput"]),
             )
             share_firm = torch.min(
-                torch.ones_like(gross_output_t), gross_output_t / safe_row_sum
+                torch.ones_like(self.state["GrossOutput"]),
+                self.state["GrossOutput"] / safe_row_sum,
             )
-            self.state["IntermediateConsumption"] = orders * share_firm.unsqueeze(1)
+            self.state["IntermediateConsumption"] = self.state[
+                "IntermediateOrders"
+            ] * share_firm.unsqueeze(1)
 
-            intermediate_consumption_total = self.state["IntermediateConsumption"].sum(
-                dim=1
-            )
-            demand_remaining = aggregate_demand_t - row_sum_orders
+            demand_remaining = self.state["AggregateDemand"] - row_sum_orders
             safe_remaining = torch.where(
                 demand_remaining != 0,
                 demand_remaining,
                 torch.ones_like(demand_remaining),
             )
             share_final = torch.clamp(
-                (gross_output_t - intermediate_consumption_total) / safe_remaining,
+                (
+                    self.state["GrossOutput"]
+                    - self.state["IntermediateConsumption"].sum(dim=1)
+                )
+                / safe_remaining,
                 min=0.0,
                 max=1.0,
             )
-            self.state["RealizedConsumption"] = consumption_demand_t * share_final
+            self.state["RealizedConsumption"] = (
+                self.state["ConsumptionDemand"] * share_final
+            )
 
     def inventory_update(self, t, scenario, params):
         r"""Inventory accumulation from deliveries minus usage.
@@ -706,14 +696,14 @@ class BehaviorPichlerEtAl2022DIO(Behavior):
         -----
         See :doc:`/models/PichlerEtAl2022DIO/notation` for symbol definitions.
         """
-        technical_coefficients = params["TechnicalCoefficients"]
-        gross_output_t = self.state["GrossOutput"]
-        inventory_matrix_prior = self.prior["Inventories"]
-        intermediate_consumption_t = self.state["IntermediateConsumption"]
-        used_inputs = technical_coefficients * gross_output_t.unsqueeze(0)
-
+        used_inputs = params["TechnicalCoefficients"] * self.state[
+            "GrossOutput"
+        ].unsqueeze(0)
         self.state["Inventories"] = torch.clamp(
-            inventory_matrix_prior + intermediate_consumption_t - used_inputs, min=0.0
+            self.prior["Inventories"]
+            + self.state["IntermediateConsumption"]
+            - used_inputs,
+            min=0.0,
         )
 
     def accounting(self, t, scenario, params):
@@ -758,28 +748,24 @@ class BehaviorPichlerEtAl2022DIO(Behavior):
         -----
         See :doc:`/models/PichlerEtAl2022DIO/notation` for symbol definitions.
         """
-        gross_output_t = self.state["GrossOutput"]
-        labour_compensation_t = self.state["LabourCompensation"]
-        realized_consumption_t = self.state["RealizedConsumption"]
-
         self.state["Profits"] = (
-            gross_output_t
+            self.state["GrossOutput"]
             - self.state["IntermediateConsumption"].sum(dim=0)
-            - labour_compensation_t
-            - params["OtherCostCoefficients"] * gross_output_t
+            - self.state["LabourCompensation"]
+            - params["OtherCostCoefficients"] * self.state["GrossOutput"]
         )
 
         household_other_cost_coef = params["HouseholdOtherCostCoefficient"].squeeze()
         extra_expenditure = (
             household_other_cost_coef
             / (1.0 - household_other_cost_coef)
-            * realized_consumption_t.sum()
+            * self.state["RealizedConsumption"].sum()
         )
 
         self.state["Savings"] = (
             self.state["Profits"].sum()
-            + labour_compensation_t.sum()
-            - realized_consumption_t.sum()
+            + self.state["LabourCompensation"].sum()
+            - self.state["RealizedConsumption"].sum()
             - extra_expenditure
         ).unsqueeze(0)
 

@@ -212,9 +212,9 @@ class ParametersPichlerEtAl2022DIO(Parameters):
         file_path : os.PathLike
             Path to a CSV with a single value column and optional row index.
         """
-        tensor = self._read_vector_csv(file_path)
-        n = self.hyper["n_sectors"]
-        self.data[name]["value"] = tensor[:n]
+        self.data[name]["value"] = self._read_vector_csv(file_path)[
+            : self.hyper["n_sectors"]
+        ]
 
     @staticmethod
     def _read_vector_csv(file_path: os.PathLike) -> torch.Tensor:
@@ -230,8 +230,10 @@ class ParametersPichlerEtAl2022DIO(Parameters):
         torch.Tensor
             1-D float tensor of the values.
         """
-        df = pd.read_csv(file_path, index_col=0, header=0)
-        return torch.tensor(df.iloc[:, 0].values, dtype=torch.float)
+        return torch.tensor(
+            pd.read_csv(file_path, index_col=0, header=0).iloc[:, 0].values,
+            dtype=torch.float,
+        )
 
     def get_default_parameters(self):
         """Return the default scalar parameters.
