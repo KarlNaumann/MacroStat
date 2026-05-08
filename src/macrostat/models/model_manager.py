@@ -102,7 +102,7 @@ def get_model_classes(modelname: str, model_directory=None):
 
         # Import all components
         for component in ["behavior", "parameters", "variables", "scenarios"]:
-            name = f"{component.capitalize()}{modelname.upper()}"
+            name = f"{component.capitalize()}{modelname}"
             module = __import__(f"{base_path}.{component}", fromlist=[name])
             component_class = getattr(module, name)
             components[component.capitalize()] = component_class
