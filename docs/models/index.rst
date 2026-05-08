@@ -12,5 +12,6 @@ This section contains the documentation of the models available in MacroStat.
    ECO3IOPC/ECO3IOPC.ipynb
    GL06/index.rst
    IOPC/IOPC.ipynb
+   KirmansAnts/KirmansAnts.ipynb
    NK3E/NK3E.ipynb
    Testing/index.rst

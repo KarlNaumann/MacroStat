@@ -16,6 +16,7 @@ The macrostat.models module consists of the following classes
     GL06SIM
     GL06SIMEX
     IOPC
+    KirmansAnts
     NK3E
     model_manager
 
