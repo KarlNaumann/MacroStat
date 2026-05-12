@@ -179,6 +179,9 @@ class Model:
             **kwargs,
         )
         behavior = behavior.to(self.parameters["device"])
+        # Retain the behavior instance so callers can introspect simulation
+        # state (e.g. KirmansAnts._micro_trajectory) after simulate() returns.
+        self.behavior_instance = behavior
         with torch.no_grad():
             return behavior.forward(*args, **kwargs)
 

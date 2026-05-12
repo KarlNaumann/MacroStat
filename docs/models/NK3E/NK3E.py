@@ -14,7 +14,7 @@
 # ---
 
 # %% [markdown]
-# # Model NK3E
+# # NK3E
 
 # %% [markdown]
 # The New Keynesian 3-Equation (NK3E) model is a compact framework for

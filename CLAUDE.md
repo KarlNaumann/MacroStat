@@ -43,3 +43,14 @@ Standard test suite for every model:
 ## Migration Notes
 
 Kirman's Ants (SDE, 2 parameters) and Mark0 COVID (heterogeneous-agent ABM, 5000 firms, 23 parameters) are planned for migration from `packages/abmstat`. Key friction points: Variables class assumes SFC structure (needs to be optional for non-SFC models), fixed-shape tensor assumption blocks variable-size agent populations, 6-file convention is heavyweight for simple models.
+
+## Continuous-Time / SDE Models
+
+`KirmansAnts` is the first continuous-time SDE model in MacroStat. Provisional pattern:
+
+- **Sub-loop in `step()`**: outer `forward()` loops `timesteps` time units; inner numpy loop runs `int(1/dt)` Euler-Maruyama micro-steps per outer step. `forward()` is NOT overridden, preserving Scenario, parameter-shock, and `record_state` machinery.
+- **`supports_differentiable = False`**: numpy SDE step + rejection sampling are not differentiable. `Behavior.__init__` raises `RuntimeError` if `differentiable=True` is passed for such a model.
+- **Numpy in `behavior.py`**: the "torch-only computation" rule is relaxed for non-differentiable models. Use `self.numpy_rng` (the per-instance `np.random.Generator` seeded from `self.hyper["seed"]`) — never the global `np.random` state.
+- **Inner-step recording**: model-local side-buffer (`self._micro_trajectory`) for the full micro-step trajectory; `record_state` continues to record outer values. Treat the side-buffer as model-private.
+
+When a second SDE model lands (Heston, Mark0-stochastic, OU): refactor both into a `ContinuousTimeBehavior` subclass and a frequency-aware `Variables.record_state` that retires the side-buffer.

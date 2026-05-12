@@ -461,6 +461,11 @@ class TestBaseSampler:
 
     def test_save_outputs_parquet(self, tmp_path):
         """Test saving outputs in Parquet format"""
+        pytest.importorskip(
+            "fastparquet",
+            reason="fastparquet is in the optional 'io' extra; "
+            "install with `uv sync --extra io`.",
+        )
         sampler = BaseSampler(
             model=MockModel(), output_folder=str(tmp_path), output_filetype="parquet"
         )

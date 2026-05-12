@@ -9,6 +9,7 @@ __maintainer__ = ["Karl Naumann-Woleske"]
 
 import logging
 
+import numpy as np
 import torch
 
 from macrostat.core.parameters import Parameters
@@ -20,6 +21,8 @@ logger = logging.getLogger(__name__)
 
 class Behavior(torch.nn.Module):
     """Base class for the behavior of the MacroStat model."""
+
+    supports_differentiable: bool = True
 
     def __init__(
         self,
@@ -44,9 +47,22 @@ class Behavior(torch.nn.Module):
             The scenario to use for the model run.
         debug: bool
             Whether to print debug information.
+
+        Raises
+        ------
+        RuntimeError
+            If ``differentiable=True`` is requested for a subclass that sets
+            ``supports_differentiable = False`` (e.g. SDE models with
+            non-differentiable rejection sampling).
         """
         # Initialize the parent class
         super().__init__()
+
+        if differentiable and not self.supports_differentiable:
+            raise RuntimeError(
+                f"{type(self).__name__} sets supports_differentiable=False "
+                "and cannot be constructed with differentiable=True."
+            )
 
         # Initialize the parameters. Keep the Parameters instance itself
         # so step-time calls can always ask for a fresh resolver and
@@ -68,6 +84,12 @@ class Behavior(torch.nn.Module):
         self.differentiable = differentiable
         self.debug = debug
 
+        # Per-instance numpy RNG seeded from hyperparameter "seed". Used by
+        # subclasses that need a numpy.random.Generator without touching the
+        # global numpy state — required for parallel runs (e.g. Hessian
+        # computation across parameter perturbations).
+        self.numpy_rng: np.random.Generator = np.random.default_rng(self.hyper["seed"])
+
     ############################################################################
     # Simulation of the model
     ############################################################################
@@ -83,6 +105,7 @@ class Behavior(torch.nn.Module):
         """
         # Set the seed
         torch.manual_seed(self.hyper["seed"])
+        self.numpy_rng = np.random.default_rng(self.hyper["seed"])
 
         # Initialize the output tensors
         self.state, self.history = self.variables.initialize_tensors()
@@ -265,6 +288,7 @@ class Behavior(torch.nn.Module):
         """
         # Set the seed
         torch.manual_seed(self.hyper["seed"])
+        self.numpy_rng = np.random.default_rng(self.hyper["seed"])
 
         # Initialize the output tensors
         self.state, self.history = self.variables.initialize_tensors()
