@@ -28,10 +28,11 @@ class KirmansAnts(Model):
     :math:`\\rho/\\mu > 1`, bimodal with mass at the boundaries for
     :math:`\\rho/\\mu < 1`.
 
-    Phase 1 mirrors the abmstat reference implementation
-    (``packages/abmstat/abmstat/models/kirmanants.py``): Euler-Maruyama
-    with boundary rejection. The model is non-differentiable; constructing
-    the behavior with ``differentiable=True`` raises ``RuntimeError``.
+    The integrator is Euler-Maruyama in the Lamperti-transformed
+    :math:`\\phi = \\arcsin(2 x - 1)` coordinate (Moran et al. 2020), with
+    reflective boundary conditions in :math:`\\phi`-space. The model is
+    non-differentiable; constructing the behavior with
+    ``differentiable=True`` raises ``RuntimeError``.
     """
 
     version = "KirmansAnts"

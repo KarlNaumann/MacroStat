@@ -51,18 +51,29 @@ class BehaviorKirmansAnts(Behavior):
     r"""Simulation logic for the Kirman ants SDE model.
 
     Each ``step()`` call runs ``substeps`` Lamperti micro-steps via
-    :meth:`advance_lamperti`. ``self.numpy_rng`` (set by the base class from
-    ``hyper["seed"]``) is the per-instance primary
-    :class:`numpy.random.Generator`. Each macro-step consumes exactly
-    ``substeps`` Gaussians from this stream, so the noise stream is aligned
-    across the 5-point parameter stencil used by the downstream Fisher
-    information pipeline (paired-seed CRN).
+    :meth:`advance_lamperti`. ``self._torch_rng`` is a per-instance
+    :class:`torch.Generator` re-seeded from ``hyper["seed"]`` at every
+    :meth:`initialize` call. Each macro-step consumes exactly ``substeps``
+    Gaussians from this stream, so the noise stream is aligned across the
+    5-point parameter stencil used by the downstream Fisher information
+    pipeline (paired-seed CRN). The micro-step arithmetic itself uses
+    Python ``math.*`` on float64 scalars; per-step torch dispatch
+    overhead would dominate the cost at ``substeps = 1/dt = 10_000`` and
+    is reserved for the deferred batched-Lamperti refactor.
 
     With ``record_inner=True`` every micro-step :math:`x` value is written
     to ``self._micro_trajectory`` (float32, length
     ``timesteps * substeps``). The Lamperti integrator integrates in
     :math:`\phi`-space but inverse-maps to :math:`x` before recording, so
     downstream KDE / FIM consumers stay method-agnostic.
+
+    The model is non-differentiable: the reflective boundary condition
+    uses Python ``if`` on the scalar :math:`\phi`, and the macro-step
+    extracts ``params["rho"].item()`` / ``params["mu"].item()`` to feed
+    the scalar loop. Flipping ``supports_differentiable = True`` is
+    feasible via ``torch.clamp`` on :math:`\phi` and removal of the
+    ``.item()`` extraction, but pays the dispatch cost noted above and
+    is deferred to the batched-Lamperti dispatch.
     """
 
     version = "KirmansAnts"
@@ -94,12 +105,17 @@ class BehaviorKirmansAnts(Behavior):
         )
 
         self._micro_trajectory: np.ndarray | None = None
+        self._torch_rng: torch.Generator | None = None
 
     def initialize(self):
-        """Set initial density and allocate the micro-trajectory side-buffer.
+        """Set initial density, allocate the side-buffer, seed the RNG.
 
         Resets the per-run state on every ``forward()`` call so multiple
-        runs of the same model instance are independent.
+        runs of the same model instance are independent. The per-instance
+        :class:`torch.Generator` is created fresh and re-seeded from
+        ``hyper["seed"]`` here so two consecutive ``simulate()`` calls on
+        the same instance produce identical streams, mirroring the
+        base-class ``numpy_rng`` semantics.
         """
         if self.hyper["record_inner"]:
             self._micro_trajectory = np.empty(
@@ -108,6 +124,9 @@ class BehaviorKirmansAnts(Behavior):
             )
         else:
             self._micro_trajectory = None
+
+        self._torch_rng = torch.Generator()
+        self._torch_rng.manual_seed(int(self.hyper["seed"]))
 
         self.state["density"] = torch.full_like(
             self.state["density"], float(self.hyper["x0"])
@@ -261,10 +280,14 @@ class BehaviorKirmansAnts(Behavior):
         x = float(self.prior["density"].item())
         x = min(max(x, eps_x), 1.0 - eps_x)
         phi = self._lamperti_forward(x)
-        noise = self.numpy_rng.standard_normal(substeps)
+        noise = torch.randn(
+            substeps, generator=self._torch_rng, dtype=torch.float64
+        ).numpy()
 
         for k in range(substeps):
-            drift_phi = self._lamperti_drift(x, rho, mu)
+            drift_phi = (
+                -(2.0 * rho - mu) * (2.0 * x - 1.0) / (2.0 * math.sqrt(x * (1.0 - x)))
+            )
             phi = phi + drift_phi * dt + sigma_phi * noise[k] * sqrt_dt
             for _ in range(2):
                 if phi < phi_min:
