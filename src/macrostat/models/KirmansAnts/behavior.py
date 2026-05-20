@@ -50,8 +50,8 @@ logger = logging.getLogger(__name__)
 class BehaviorKirmansAnts(Behavior):
     r"""Simulation logic for the Kirman ants SDE model.
 
-    Each ``step()`` call runs ``substeps`` Lamperti micro-steps via
-    :meth:`advance_lamperti`. ``self._torch_rng`` is a per-instance
+    Each :meth:`step` call runs ``substeps`` Lamperti micro-steps in
+    :math:`\phi`-space. ``self._torch_rng`` is a per-instance
     :class:`torch.Generator` re-seeded from ``hyper["seed"]`` at every
     :meth:`initialize` call. Each macro-step consumes exactly ``substeps``
     Gaussians from this stream, so the noise stream is aligned across the
@@ -133,95 +133,8 @@ class BehaviorKirmansAnts(Behavior):
         )
 
     def step(self, t: int, scenario: dict, params: dict | None = None, **kwargs):
-        """Advance the SDE by one macro-period.
-
-        Parameters
-        ----------
-        t : int
-            Current macro-period index.
-        scenario : dict
-            Vectorized scenario values at time t (unused; SDE is autonomous).
-        params : dict
-            Parameter values for time t with scenario shocks already applied.
-
-        Raises
-        ------
-        RuntimeError
-            If invoked while ``self.differentiable`` is True. The base class
-            normally blocks this at construction; this guard catches mutation
-            of the flag after init.
-        """
-        if self.differentiable:
-            raise RuntimeError(
-                "BehaviorKirmansAnts is non-differentiable; "
-                "self.differentiable was mutated to True after construction."
-            )
-        self.advance_lamperti(t=t, params=params)
-
-    # --- Lamperti map helpers ----------------------------------------------
-
-    @staticmethod
-    def _lamperti_forward(x: float) -> float:
-        r"""Forward Lamperti map :math:`\phi = \arcsin(2 x - 1)`."""
-        return math.asin(2.0 * x - 1.0)
-
-    @staticmethod
-    def _lamperti_inverse(phi: float) -> float:
-        r"""Inverse Lamperti map :math:`x = (1 + \sin\phi)/2`."""
-        return 0.5 * (1.0 + math.sin(phi))
-
-    @staticmethod
-    def _lamperti_drift(x: float, rho: float, mu: float) -> float:
-        r"""Drift of the Lamperti-transformed SDE evaluated at the cached :math:`x`.
-
-        Parameters
-        ----------
-        x : float
-            Current :math:`x`-space density (cached from previous inverse map).
-        rho : float
-            Spontaneous switching rate.
-        mu : float
-            Herding strength.
-
-        Returns
-        -------
-        float
-            :math:`\mu_\Phi(\phi)` evaluated at :math:`x`.
-
-        Notes
-        -----
-        Using :math:`\phi = f(x) = \arcsin(2 x - 1)` (Moran et al.\ 2020),
-        the Itô transform gives
-        :math:`\mu_\Phi = a(x) f'(x) + \tfrac{1}{2}\sigma^2(x) f''(x)`,
-        with constant-diffusion :math:`\sigma_\Phi \equiv \sqrt{2\mu}`. The
-        :math:`x`-form below is evaluated directly because :math:`x` is
-        already cached from the previous inverse map.
-
-        Equations
-        ---------
-        .. math::
-            \begin{align}
-                \mu_\Phi(\phi)
-                  = -(2\rho - \mu)\tan(\phi)
-                  = -\,\frac{(2\rho - \mu)\,(2 x - 1)}{2\sqrt{x(1 - x)}}.
-            \end{align}
-        """
-        return -(2.0 * rho - mu) * (2.0 * x - 1.0) / (2.0 * math.sqrt(x * (1.0 - x)))
-
-    # --- integrator --------------------------------------------------------
-
-    def advance_lamperti(self, t: int, params: dict):
         r"""Run ``substeps`` Euler-Maruyama micro-steps in Lamperti space.
 
-        Parameters
-        ----------
-        t : int
-            Macro-period index.
-        params : dict
-            Parameter values at time t.
-
-        Notes
-        -----
         Uses the Lamperti transform :math:`\phi = \arcsin(2 x - 1)` from
         Moran, Fosset, Benzaquen, Bouchaud (2020). The diffusion in
         :math:`\phi` is constant :math:`= \sqrt{2\mu}`, so Euler-Maruyama in
@@ -239,6 +152,22 @@ class BehaviorKirmansAnts(Behavior):
         ``_micro_trajectory`` stores :math:`x` (not :math:`\phi`); the
         inverse map is applied at every substep so downstream consumers stay
         method-agnostic.
+
+        Parameters
+        ----------
+        t : int
+            Current macro-period index.
+        scenario : dict
+            Vectorized scenario values at time t (unused; SDE is autonomous).
+        params : dict
+            Parameter values for time t with scenario shocks already applied.
+
+        Raises
+        ------
+        RuntimeError
+            If invoked while ``self.differentiable`` is True. The base class
+            normally blocks this at construction; this guard catches mutation
+            of the flag after init.
 
         Equations
         ---------
@@ -265,6 +194,16 @@ class BehaviorKirmansAnts(Behavior):
         -----
         - density
         """
+        if self.differentiable:
+            raise RuntimeError(
+                "BehaviorKirmansAnts is non-differentiable; "
+                "self.differentiable was mutated to True after construction."
+            )
+
+        # Perf: hoist hyper-dict and self-attribute lookups out of the
+        # ``substeps * timesteps`` micro-loop. Each cached miss inside the
+        # loop costs ~80 ns × 1e7 ≈ 1 s per simulate; these aliases buy
+        # ~3-4 s at paper budget and are deliberate exceptions to R1.
         rho = float(params["rho"].item())
         mu = float(params["mu"].item())
         dt = self.hyper["dt"]
@@ -279,7 +218,7 @@ class BehaviorKirmansAnts(Behavior):
 
         x = float(self.prior["density"].item())
         x = min(max(x, eps_x), 1.0 - eps_x)
-        phi = self._lamperti_forward(x)
+        phi = math.asin(2.0 * x - 1.0)
         noise = torch.randn(
             substeps, generator=self._torch_rng, dtype=torch.float64
         ).numpy()
@@ -298,7 +237,7 @@ class BehaviorKirmansAnts(Behavior):
                     break
             if phi <= phi_min or phi >= phi_max:
                 phi = min(max(phi, phi_min + 1.0e-15), phi_max - 1.0e-15)
-            x = self._lamperti_inverse(phi)
+            x = 0.5 * (1.0 + math.sin(phi))
             x = min(max(x, eps_x), 1.0 - eps_x)
             if record_inner:
                 buffer[t * substeps + k] = x

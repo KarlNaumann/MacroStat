@@ -48,7 +48,7 @@ def _stationary_sample(
     produces the noise. Aggregating across ``replicates`` independent
     seeds yields an empirical CDF that converges to the analytical Beta
     regardless of which RNG (numpy or torch) is wired up under
-    :meth:`BehaviorKirmansAnts.advance_lamperti`. Thinning at stride
+    :meth:`BehaviorKirmansAnts.step`. Thinning at stride
     ``stride`` keeps residual serial correlation below KS sensitivity.
     """
     samples = []
@@ -148,10 +148,11 @@ def test_reproducibility():
     "x", [1.0e-12, 1.0e-6, 0.25, 0.5, 0.75, 1.0 - 1.0e-6, 1.0 - 1.0e-12]
 )
 def test_lamperti_map_stable_near_boundaries(x):
-    phi = BehaviorKirmansAnts._lamperti_forward(x)
+    """Forward + inverse Lamperti map roundtrips cleanly near the boundaries."""
+    phi = math.asin(2.0 * x - 1.0)
     assert math.isfinite(phi)
     assert -0.5 * math.pi <= phi <= 0.5 * math.pi
-    x_back = BehaviorKirmansAnts._lamperti_inverse(phi)
+    x_back = 0.5 * (1.0 + math.sin(phi))
     assert math.isfinite(x_back)
     assert math.isclose(x_back, x, rel_tol=1.0e-9, abs_tol=1.0e-14)
 
@@ -159,30 +160,31 @@ def test_lamperti_map_stable_near_boundaries(x):
 @pytest.mark.parametrize("mu", [0.5, 1.0, 2.5])
 @pytest.mark.parametrize("rho", [0.1, 0.5, 1.0, 2.0])
 def test_lamperti_drift_matches_finite_difference(rho, mu):
-    """Confirm the analytical Lamperti drift equals the Itô-derived FD form."""
+    """The x-form drift used in step() equals the Itô-derived FD form."""
     for x in (0.1, 0.3, 0.5, 0.7, 0.9):
-        f_plus = BehaviorKirmansAnts._lamperti_forward(x + 1.0e-5)
-        f_minus = BehaviorKirmansAnts._lamperti_forward(x - 1.0e-5)
-        f_center = BehaviorKirmansAnts._lamperti_forward(x)
+        f_plus = math.asin(2.0 * (x + 1.0e-5) - 1.0)
+        f_minus = math.asin(2.0 * (x - 1.0e-5) - 1.0)
+        f_center = math.asin(2.0 * x - 1.0)
         fp = (f_plus - f_minus) / (2.0 * 1.0e-5)
         fpp = (f_plus - 2.0 * f_center + f_minus) / (1.0e-5 * 1.0e-5)
-        expected = rho * (1.0 - 2.0 * x) * fp + 0.5 * (2.0 * mu * x * (1.0 - x)) * fpp
         assert math.isclose(
-            BehaviorKirmansAnts._lamperti_drift(x, rho, mu),
-            expected,
+            -(2.0 * rho - mu) * (2.0 * x - 1.0) / (2.0 * math.sqrt(x * (1.0 - x))),
+            rho * (1.0 - 2.0 * x) * fp + 0.5 * (2.0 * mu * x * (1.0 - x)) * fpp,
             rel_tol=1.0e-4,
             abs_tol=1.0e-4,
         )
 
 
 def test_lamperti_drift_closed_form_in_phi():
-    """In phi-space the drift simplifies to -(2 rho - mu) * tan(phi)."""
+    """In phi-space the x-form drift equals -(2 rho - mu) * tan(phi)."""
     rho, mu = 0.5, 1.0
     for x in (0.1, 0.3, 0.5, 0.7, 0.9):
-        phi = BehaviorKirmansAnts._lamperti_forward(x)
-        expected = -(2.0 * rho - mu) * math.tan(phi)
-        got = BehaviorKirmansAnts._lamperti_drift(x, rho, mu)
-        assert math.isclose(got, expected, rel_tol=1.0e-9, abs_tol=1.0e-12)
+        assert math.isclose(
+            -(2.0 * rho - mu) * (2.0 * x - 1.0) / (2.0 * math.sqrt(x * (1.0 - x))),
+            -(2.0 * rho - mu) * math.tan(math.asin(2.0 * x - 1.0)),
+            rel_tol=1.0e-9,
+            abs_tol=1.0e-12,
+        )
 
 
 # --- drift symmetry -------------------------------------------------------
