@@ -8,21 +8,33 @@ The Quarterly Journal of Economics, 108(1), 137-156.
 Continuous-time large-N limit (see Moran et al. 2020) of the binary-choice
 recruitment dynamics: the fraction :math:`x_t \in [0, 1]` of ants at source A
 evolves under spontaneous switching at rate :math:`\rho` and herding at rate
-:math:`\mu`.
+:math:`\mu`. The :math:`x`-space Itô SDE is
 
-The macro-period ``step`` runs ``substeps = int(1/dt)`` Euler-Maruyama
-micro-steps with boundary rejection, mirroring the abmstat reference
-implementation in ``packages/abmstat/abmstat/models/kirmanants.py``. Phase 1
-of the migration replicates that implementation faithfully — including the
-boundary-rejection bias that suppresses the empirical density near
-:math:`x \in \{0, 1\}` in the bimodal regime.
+.. math::
+    dx_t = \rho\,(1 - 2 x_t)\, dt + \sqrt{2\,\mu\, x_t\,(1 - x_t)}\, dW_t.
 
-The model is non-differentiable: the rejection while-loop has no autograd
-path. ``BehaviorKirmansAnts.supports_differentiable = False`` so the base
-class refuses ``differentiable=True`` at construction.
+Naive Euler-Maruyama integration of this SDE has a worst-case
+:math:`O(\sqrt{dt})` weak bias near the boundary because the diffusion
+coefficient is only Hölder-1/2 at :math:`x \in \{0, 1\}`. The bias is most
+visible in the bimodal regime (:math:`\rho/\mu < 1`) where the stationary
+:math:`\text{Beta}(\rho/\mu, \rho/\mu)` density diverges at the endpoints.
+
+This module integrates the Lamperti-transformed SDE (Moran, Fosset,
+Benzaquen, Bouchaud 2020). Under :math:`\phi = \arcsin(2 x - 1)` the
+diffusion becomes constant :math:`= \sqrt{2\mu}`, so Euler-Maruyama in
+:math:`\phi` is Lipschitz and recovers the standard :math:`O(dt)` weak rate.
+Reflective boundary conditions are applied in :math:`\phi`-space at
+:math:`[-\pi/2,\,+\pi/2]`; the inverse map :math:`x = (1 + \sin\phi)/2`
+returns the density to its native interval before recording.
+
+The macro-period ``step`` runs ``substeps = int(1/dt)`` Lamperti micro-steps
+internally. The model is non-differentiable;
+``BehaviorKirmansAnts.supports_differentiable = False`` so the base class
+refuses ``differentiable=True`` at construction.
 """
 
 import logging
+import math
 
 import numpy as np
 import torch
@@ -36,19 +48,32 @@ logger = logging.getLogger(__name__)
 
 
 class BehaviorKirmansAnts(Behavior):
-    """Simulation logic for the Kirman ants SDE model.
+    r"""Simulation logic for the Kirman ants SDE model.
 
-    Each ``step()`` call runs ``substeps`` Euler-Maruyama micro-steps using
-    a boundary-rejection scheme to keep the density inside the open unit
-    interval. ``self.numpy_rng`` (set by the base class from the ``seed``
-    hyperparameter) is the per-instance ``numpy.random.Generator``; the
-    global ``np.random`` state is never touched.
+    Each :meth:`step` call runs ``substeps`` Lamperti micro-steps in
+    :math:`\phi`-space. ``self._torch_rng`` is a per-instance
+    :class:`torch.Generator` re-seeded from ``hyper["seed"]`` at every
+    :meth:`initialize` call. Each macro-step consumes exactly ``substeps``
+    Gaussians from this stream, so the noise stream is aligned across the
+    5-point parameter stencil used by the downstream Fisher information
+    pipeline (paired-seed CRN). The micro-step arithmetic itself uses
+    Python ``math.*`` on float64 scalars; per-step torch dispatch
+    overhead would dominate the cost at ``substeps = 1/dt = 10_000`` and
+    is reserved for the deferred batched-Lamperti refactor.
 
-    With ``record_inner=True`` every micro-step is written to
-    ``self._micro_trajectory`` (float32, length ``timesteps * substeps``).
-    The base ``record_state`` continues to record one end-of-macro-period
-    value per outer step, so ``model.output["density"]`` keeps its standard
-    shape ``(timesteps, 1)``.
+    With ``record_inner=True`` every micro-step :math:`x` value is written
+    to ``self._micro_trajectory`` (float32, length
+    ``timesteps * substeps``). The Lamperti integrator integrates in
+    :math:`\phi`-space but inverse-maps to :math:`x` before recording, so
+    downstream KDE / FIM consumers stay method-agnostic.
+
+    The model is non-differentiable: the reflective boundary condition
+    uses Python ``if`` on the scalar :math:`\phi`, and the macro-step
+    extracts ``params["rho"].item()`` / ``params["mu"].item()`` to feed
+    the scalar loop. Flipping ``supports_differentiable = True`` is
+    feasible via ``torch.clamp`` on :math:`\phi` and removal of the
+    ``.item()`` extraction, but pays the dispatch cost noted above and
+    is deferred to the batched-Lamperti dispatch.
     """
 
     version = "KirmansAnts"
@@ -79,22 +104,19 @@ class BehaviorKirmansAnts(Behavior):
             debug=debug,
         )
 
-        self._exhaustion_count: int = 0
         self._micro_trajectory: np.ndarray | None = None
-
-    @property
-    def exhaustion_count(self) -> int:
-        """Number of micro-steps where rejection sampling hit ``max_attempts``."""
-        return self._exhaustion_count
+        self._torch_rng: torch.Generator | None = None
 
     def initialize(self):
-        """Set the initial density and (re)allocate the micro-trajectory buffer.
+        """Set initial density, allocate the side-buffer, seed the RNG.
 
-        Resets the exhaustion counter on every ``forward()`` call so multiple
-        runs of the same model instance report independent statistics.
+        Resets the per-run state on every ``forward()`` call so multiple
+        runs of the same model instance are independent. The per-instance
+        :class:`torch.Generator` is created fresh and re-seeded from
+        ``hyper["seed"]`` here so two consecutive ``simulate()`` calls on
+        the same instance produce identical streams, mirroring the
+        base-class ``numpy_rng`` semantics.
         """
-        self._exhaustion_count = 0
-
         if self.hyper["record_inner"]:
             self._micro_trajectory = np.empty(
                 self.hyper["timesteps"] * self.hyper["substeps"],
@@ -103,12 +125,33 @@ class BehaviorKirmansAnts(Behavior):
         else:
             self._micro_trajectory = None
 
+        self._torch_rng = torch.Generator()
+        self._torch_rng.manual_seed(int(self.hyper["seed"]))
+
         self.state["density"] = torch.full_like(
             self.state["density"], float(self.hyper["x0"])
         )
 
     def step(self, t: int, scenario: dict, params: dict | None = None, **kwargs):
-        """Advance the SDE by one macro-period of ``substeps`` Euler-Maruyama micro-steps.
+        r"""Run ``substeps`` Euler-Maruyama micro-steps in Lamperti space.
+
+        Uses the Lamperti transform :math:`\phi = \arcsin(2 x - 1)` from
+        Moran, Fosset, Benzaquen, Bouchaud (2020). The diffusion in
+        :math:`\phi` is constant :math:`= \sqrt{2\mu}`, so Euler-Maruyama in
+        :math:`\phi` is Lipschitz and recovers the standard :math:`O(dt)`
+        weak rate. The :math:`\phi`-domain is :math:`[-\pi/2,\,+\pi/2]`;
+        reflective BC in :math:`\phi`-space is the geometrically correct
+        boundary condition.
+
+        :math:`x` is clipped to :math:`[\epsilon, 1 - \epsilon]` with
+        :math:`\epsilon = 10^{-7}` before the forward map and after the
+        inverse map. The clip sits above the float32 precision of the
+        side-buffer near the boundary and far below any KDE bandwidth used
+        downstream, so the clip is invisible to consumers.
+
+        ``_micro_trajectory`` stores :math:`x` (not :math:`\phi`); the
+        inverse map is applied at every substep so downstream consumers stay
+        method-agnostic.
 
         Parameters
         ----------
@@ -125,77 +168,78 @@ class BehaviorKirmansAnts(Behavior):
             If invoked while ``self.differentiable`` is True. The base class
             normally blocks this at construction; this guard catches mutation
             of the flag after init.
-        """
-        if self.differentiable:
-            raise RuntimeError(
-                "BehaviorKirmansAnts is non-differentiable; "
-                "self.differentiable was mutated to True after construction."
-            )
-        self.euler_maruyama_advance(t=t, scenario=scenario, params=params)
-
-    def euler_maruyama_advance(
-        self, t: int, scenario: dict, params: dict | None = None
-    ):
-        r"""Run ``substeps`` Euler-Maruyama micro-steps with boundary rejection.
-
-        Parameters
-        ----------
-        t : int
-            Current macro-period index (used as the offset into the optional
-            micro-trajectory side-buffer).
-        scenario : dict
-            Scenario dictionary (not used).
-        params : dict | None
-            Parameter values for time t with scenario shocks already applied.
-
-        Notes
-        -----
-        Boundary rejection resamples only the noise draw (drift and diffusion
-        held fixed) until the proposed increment keeps the density strictly
-        inside :math:`(0, 1)`. On exhaustion the increment is set to zero and
-        ``self._exhaustion_count`` is incremented; this matches the abmstat
-        reference where the unbounded ``while True`` loop simply never
-        terminates if the geometry is degenerate.
 
         Equations
         ---------
         .. math::
             \begin{align}
-                dx_t = \rho\,(1 - 2 x_t)\, dt
-                       + \sqrt{2 \mu\, x_t (1 - x_t)}\, dW_t
+                \phi &= \arcsin(2 x - 1), \\
+                d\phi_t &= \mu_\Phi(\phi_t)\, dt + \sigma_\Phi\, dW_t,
+                  \quad \sigma_\Phi = \sqrt{2\mu}, \\
+                \mu_\Phi(\phi) &= -(2\rho - \mu)\tan(\phi)
+                  = -\,\frac{(2\rho - \mu)\,(2 x - 1)}{2\sqrt{x(1-x)}}, \\
+                x &= \tfrac{1}{2}\bigl(1 + \sin\phi\bigr).
             \end{align}
 
         Dependency
         ----------
-        - parameters: rho
-        - parameters: mu
-        - hyperparameters: dt
-        - hyperparameters: substeps
-        - hyperparameters: max_attempts
-        - hyperparameters: record_inner
+        - params: rho
+        - params: mu
+        - hyper: dt
+        - hyper: substeps
+        - hyper: record_inner
         - prior: density
 
         Sets
         -----
         - density
         """
-        x = float(self.prior["density"].item())
+        if self.differentiable:
+            raise RuntimeError(
+                "BehaviorKirmansAnts is non-differentiable; "
+                "self.differentiable was mutated to True after construction."
+            )
 
-        for k in range(self.hyper["substeps"]):
-            drift = params["rho"].item() * (1.0 - 2.0 * x) * self.hyper["dt"]
-            diffusion = np.sqrt(2.0 * params["mu"].item() * x * (1.0 - x))
-            for _ in range(self.hyper["max_attempts"]):
-                dx = drift + diffusion * self.numpy_rng.standard_normal() * np.sqrt(
-                    self.hyper["dt"]
-                )
-                if 0.0 < x + dx < 1.0:
+        # Perf: hoist hyper-dict and self-attribute lookups out of the
+        # ``substeps * timesteps`` micro-loop. Each cached miss inside the
+        # loop costs ~80 ns × 1e7 ≈ 1 s per simulate; these aliases buy
+        # ~3-4 s at paper budget and are deliberate exceptions to R1.
+        rho = float(params["rho"].item())
+        mu = float(params["mu"].item())
+        dt = self.hyper["dt"]
+        sqrt_dt = math.sqrt(dt)
+        sigma_phi = math.sqrt(2.0 * mu)
+        substeps = self.hyper["substeps"]
+        record_inner = self.hyper["record_inner"]
+        buffer = self._micro_trajectory
+        eps_x = 1.0e-7
+        phi_min = -0.5 * math.pi
+        phi_max = +0.5 * math.pi
+
+        x = float(self.prior["density"].item())
+        x = min(max(x, eps_x), 1.0 - eps_x)
+        phi = math.asin(2.0 * x - 1.0)
+        noise = torch.randn(
+            substeps, generator=self._torch_rng, dtype=torch.float64
+        ).numpy()
+
+        for k in range(substeps):
+            drift_phi = (
+                -(2.0 * rho - mu) * (2.0 * x - 1.0) / (2.0 * math.sqrt(x * (1.0 - x)))
+            )
+            phi = phi + drift_phi * dt + sigma_phi * noise[k] * sqrt_dt
+            for _ in range(2):
+                if phi < phi_min:
+                    phi = 2.0 * phi_min - phi
+                elif phi > phi_max:
+                    phi = 2.0 * phi_max - phi
+                else:
                     break
-            else:
-                self._exhaustion_count += 1
-                logger.warning("max_attempts exhausted at t=%d, k=%d, x=%.6f", t, k, x)
-                dx = 0.0
-            x += dx
-            if self.hyper["record_inner"]:
-                self._micro_trajectory[t * self.hyper["substeps"] + k] = x
+            if phi <= phi_min or phi >= phi_max:
+                phi = min(max(phi, phi_min + 1.0e-15), phi_max - 1.0e-15)
+            x = 0.5 * (1.0 + math.sin(phi))
+            x = min(max(x, eps_x), 1.0 - eps_x)
+            if record_inner:
+                buffer[t * substeps + k] = x
 
         self.state["density"] = torch.full_like(self.state["density"], x)

@@ -2,16 +2,21 @@
 # SPDX-FileCopyrightText: 2026 Karl Naumann-Woleske
 """Targeted tests for the KirmansAnts SDE model.
 
-The model is a numpy Euler-Maruyama clone of the abmstat reference
-implementation (``packages/abmstat/abmstat/models/kirmanants.py``). Tests
-exercise: construction validation, the differentiability gate, the
-boundary-rejection guard, reproducibility under fixed seed, and the
-stationary distribution match for the unimodal regime.
+The model integrates the large-N continuous-limit Kirman SDE via the
+Lamperti transform :math:`\\phi = \\arcsin(2 x - 1)` (Moran et al. 2020),
+which yields constant diffusion :math:`\\sqrt{2\\mu}` and recovers
+:math:`O(dt)` weak convergence. Tests exercise construction validation, the
+differentiability gate, reproducibility under fixed seed, the Lamperti map
+roundtrip and analytical helpers, and the stationary distribution match
+against an analytical Beta sample via ``scipy.stats.ks_2samp`` /
+``scipy.stats.ks_1samp``.
 """
+
+import math
 
 import numpy as np
 import pytest
-from scipy.stats import kstest
+from scipy import stats
 
 from macrostat.models.KirmansAnts import (
     BehaviorKirmansAnts,
@@ -25,15 +30,44 @@ from macrostat.models.KirmansAnts import (
 def _make_model(timesteps: int = 10, record_inner: bool = False, **hyper):
     extra = {"timesteps": timesteps, "record_inner": record_inner}
     extra.update(hyper)
-    parameters = ParametersKirmansAnts(hyperparameters=extra)
-    return KirmansAnts(parameters=parameters)
+    return KirmansAnts(parameters=ParametersKirmansAnts(hyperparameters=extra))
+
+
+def _stationary_sample(
+    scenario_id: int,
+    timesteps: int = 100,
+    replicates: int = 6,
+    seed_start: int = 42,
+    stride: int = 2000,
+):
+    """Aggregate independent-seed replicates into a stream-agnostic sample.
+
+    A single-seed KS gate at this budget is calibration-fragile: the KS
+    statistic for any fixed seed lands somewhere in its null distribution,
+    so a threshold like ``pvalue > 0.01`` is sensitive to which RNG
+    produces the noise. Aggregating across ``replicates`` independent
+    seeds yields an empirical CDF that converges to the analytical Beta
+    regardless of which RNG (numpy or torch) is wired up under
+    :meth:`BehaviorKirmansAnts.step`. Thinning at stride
+    ``stride`` keeps residual serial correlation below KS sensitivity.
+    """
+    samples = []
+    for seed in range(seed_start, seed_start + replicates):
+        model = _make_model(timesteps=timesteps, record_inner=True, seed=seed)
+        model.simulate(scenario=scenario_id)
+        micro = model.behavior_instance._micro_trajectory.astype(np.float64)
+        samples.append(micro[micro.size // 10 :: stride])
+    return np.concatenate(samples)
+
+
+# --- smoke / shape ---------------------------------------------------------
 
 
 def test_smoke_all_scenarios():
-    model = _make_model(timesteps=5)
     for scenario_id in (0, 1, 2):
-        out = model.simulate(scenario=scenario_id)
-        assert out["density"].shape == (6, 1)
+        assert _make_model(timesteps=5).simulate(scenario=scenario_id)[
+            "density"
+        ].shape == (6, 1)
 
 
 def test_density_in_unit_interval():
@@ -44,54 +78,136 @@ def test_density_in_unit_interval():
     assert (micro < 1.0).all()
 
 
+# --- stationary distribution -----------------------------------------------
+
+
 def test_stationary_unimodal_ks():
-    model = _make_model(timesteps=100, record_inner=True)
-    model.simulate(scenario=2)  # unimodal: rho=2.0, mu=1.0 -> Beta(2, 2)
-    micro = model.behavior_instance._micro_trajectory.astype(np.float64)
-    burn_in = micro.size // 10
-    sample = micro[burn_in::100]
-    statistic, _ = kstest(sample, "beta", args=(2.0, 2.0))
-    assert statistic < 0.05, f"KS statistic {statistic:.4f} too large"
+    """Beta(2, 2): Lamperti recovers the analytical distribution."""
+    pvalue = stats.ks_1samp(
+        _stationary_sample(scenario_id=2), stats.beta(2.0, 2.0).cdf
+    ).pvalue
+    assert pvalue > 0.01, f"KS pvalue {pvalue:.4f} too small"
 
 
-@pytest.mark.xfail(
-    reason=(
-        "Boundary-rejection bias suppresses density near x in {0, 1}; the "
-        "bimodal Beta(0.5, 0.5) diverges at the boundaries. Phase-2 dispatch "
-        "addresses the bias."
-    ),
-    strict=False,
-)
 def test_stationary_bimodal_ks():
-    model = _make_model(timesteps=100, record_inner=True)
-    model.simulate(scenario=0)  # bimodal: rho=0.5, mu=1.0 -> Beta(0.5, 0.5)
-    micro = model.behavior_instance._micro_trajectory.astype(np.float64)
-    burn_in = micro.size // 10
-    sample = micro[burn_in::100]
-    statistic, _ = kstest(sample, "beta", args=(0.5, 0.5))
-    assert statistic < 0.05
+    """Beta(0.5, 0.5): Lamperti removes the boundary bias seen under rejection."""
+    pvalue = stats.ks_1samp(
+        _stationary_sample(scenario_id=0), stats.beta(0.5, 0.5).cdf
+    ).pvalue
+    assert pvalue > 0.01, f"KS pvalue {pvalue:.4f} too small"
+
+
+def test_stationary_uniform_ks():
+    """Beta(1, 1): the uniform regime."""
+    pvalue = stats.ks_1samp(
+        _stationary_sample(scenario_id=1), stats.beta(1.0, 1.0).cdf
+    ).pvalue
+    assert pvalue > 0.01, f"KS pvalue {pvalue:.4f} too small"
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize(
+    "scenario_id,shape",
+    [(0, 0.5), (1, 1.0), (2, 2.0)],
+    ids=["bimodal", "uniform", "unimodal"],
+)
+def test_stationary_paper_budget(scenario_id, shape):
+    """KS-1samp against analytical Beta CDF at paper-figure budget.
+
+    Long-horizon (``timesteps=1000``, ``substeps=10_000``) confirmation of
+    the convergence already verified at fast-test budget. Aggregates two
+    seeds for stream-agnostic calibration; runtime is ~minutes per
+    scenario, so this is intended for explicit invocation via ``pytest
+    -m slow`` and is not part of the routine gate.
+    """
+    pvalue = stats.ks_1samp(
+        _stationary_sample(scenario_id=scenario_id, timesteps=1000, replicates=2),
+        stats.beta(shape, shape).cdf,
+    ).pvalue
+    assert pvalue > 0.01, f"scenario={scenario_id} KS pvalue {pvalue:.4f} too small"
+
+
+# --- reproducibility -------------------------------------------------------
 
 
 def test_reproducibility():
-    model_a = _make_model(timesteps=10, record_inner=True)
-    model_b = _make_model(timesteps=10, record_inner=True)
-    model_a.simulate()
-    model_b.simulate()
+    a = _make_model(timesteps=10, record_inner=True)
+    b = _make_model(timesteps=10, record_inner=True)
+    a.simulate()
+    b.simulate()
     np.testing.assert_array_equal(
-        model_a.behavior_instance._micro_trajectory,
-        model_b.behavior_instance._micro_trajectory,
+        a.behavior_instance._micro_trajectory,
+        b.behavior_instance._micro_trajectory,
     )
+
+
+# --- Lamperti map ---------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "x", [1.0e-12, 1.0e-6, 0.25, 0.5, 0.75, 1.0 - 1.0e-6, 1.0 - 1.0e-12]
+)
+def test_lamperti_map_stable_near_boundaries(x):
+    """Forward + inverse Lamperti map roundtrips cleanly near the boundaries."""
+    phi = math.asin(2.0 * x - 1.0)
+    assert math.isfinite(phi)
+    assert -0.5 * math.pi <= phi <= 0.5 * math.pi
+    x_back = 0.5 * (1.0 + math.sin(phi))
+    assert math.isfinite(x_back)
+    assert math.isclose(x_back, x, rel_tol=1.0e-9, abs_tol=1.0e-14)
+
+
+@pytest.mark.parametrize("mu", [0.5, 1.0, 2.5])
+@pytest.mark.parametrize("rho", [0.1, 0.5, 1.0, 2.0])
+def test_lamperti_drift_matches_finite_difference(rho, mu):
+    """The x-form drift used in step() equals the Itô-derived FD form."""
+    for x in (0.1, 0.3, 0.5, 0.7, 0.9):
+        f_plus = math.asin(2.0 * (x + 1.0e-5) - 1.0)
+        f_minus = math.asin(2.0 * (x - 1.0e-5) - 1.0)
+        f_center = math.asin(2.0 * x - 1.0)
+        fp = (f_plus - f_minus) / (2.0 * 1.0e-5)
+        fpp = (f_plus - 2.0 * f_center + f_minus) / (1.0e-5 * 1.0e-5)
+        assert math.isclose(
+            -(2.0 * rho - mu) * (2.0 * x - 1.0) / (2.0 * math.sqrt(x * (1.0 - x))),
+            rho * (1.0 - 2.0 * x) * fp + 0.5 * (2.0 * mu * x * (1.0 - x)) * fpp,
+            rel_tol=1.0e-4,
+            abs_tol=1.0e-4,
+        )
+
+
+def test_lamperti_drift_closed_form_in_phi():
+    """In phi-space the x-form drift equals -(2 rho - mu) * tan(phi)."""
+    rho, mu = 0.5, 1.0
+    for x in (0.1, 0.3, 0.5, 0.7, 0.9):
+        assert math.isclose(
+            -(2.0 * rho - mu) * (2.0 * x - 1.0) / (2.0 * math.sqrt(x * (1.0 - x))),
+            -(2.0 * rho - mu) * math.tan(math.asin(2.0 * x - 1.0)),
+            rel_tol=1.0e-9,
+            abs_tol=1.0e-12,
+        )
+
+
+# --- drift symmetry -------------------------------------------------------
+
+
+def test_drift_symmetry_stationary_mean():
+    """Symmetric Beta has mean 1/2; empirical mean stays in tolerance."""
+    empirical_mean = float(np.mean(_stationary_sample(scenario_id=2, timesteps=200)))
+    assert (
+        abs(empirical_mean - 0.5) < 0.05
+    ), f"mean {empirical_mean:.4f} too far from 0.5"
+
+
+# --- legacy validation -----------------------------------------------------
 
 
 def test_differentiable_blocked_at_construction():
     parameters = ParametersKirmansAnts()
-    scenarios = ScenariosKirmansAnts(parameters=parameters)
-    variables = VariablesKirmansAnts(parameters=parameters)
     with pytest.raises(RuntimeError, match="supports_differentiable=False"):
         BehaviorKirmansAnts(
             parameters=parameters,
-            scenarios=scenarios,
-            variables=variables,
+            scenarios=ScenariosKirmansAnts(parameters=parameters),
+            variables=VariablesKirmansAnts(parameters=parameters),
             differentiable=True,
         )
 
@@ -111,17 +227,12 @@ def test_x0_validation_rejects_boundary():
         ParametersKirmansAnts(hyperparameters={"x0": 0.0})
 
 
-def test_no_exhaustion_at_defaults():
-    model = _make_model(timesteps=20)
-    model.simulate()
-    assert model.behavior_instance.exhaustion_count == 0
-
-
 def test_record_inner_buffer_shape():
     model = _make_model(timesteps=7, record_inner=True)
     model.simulate()
-    expected = 7 * model.parameters.hyper["substeps"]
-    assert model.behavior_instance._micro_trajectory.shape == (expected,)
+    assert model.behavior_instance._micro_trajectory.shape == (
+        7 * model.parameters.hyper["substeps"],
+    )
     assert model.behavior_instance._micro_trajectory.dtype == np.float32
 
 

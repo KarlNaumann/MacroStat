@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: MIT
 # SPDX-FileCopyrightText: 2026 Karl Naumann-Woleske
-"""Parameters class for the Kirman ants SDE model.
+r"""Parameters class for the Kirman ants SDE model.
 
 Reference: Kirman, A. (1993). "Ants, Rationality, and Recruitment".
 The Quarterly Journal of Economics, 108(1), 137-156.
 
 Continuous-time large-N limit (Moran et al. 2020) with a stationary
-:math:`\\text{Beta}(\\rho/\\mu, \\rho/\\mu)` distribution on :math:`x \\in [0, 1]`.
+:math:`\text{Beta}(\rho/\mu, \rho/\mu)` distribution on :math:`x \in [0, 1]`.
 """
 
 import logging
@@ -17,23 +17,28 @@ logger = logging.getLogger(__name__)
 
 
 class ParametersKirmansAnts(Parameters):
-    """Parameters for the Kirman ants SDE model.
+    r"""Parameters for the Kirman ants SDE model.
 
     Economic meaning:
-    - rho (>0): rate of spontaneous opinion switching ("self-conversion").
-    - mu (>0): herding strength (recruitment intensity).
 
-    The ratio rho/mu determines the regime: rho/mu > 1 unimodal at x=1/2,
-    rho/mu < 1 bimodal with mass near x=0 and x=1.
+    - ``rho`` (>0): rate of spontaneous opinion switching ("self-conversion").
+    - ``mu`` (>0): herding strength (recruitment intensity).
+
+    The ratio ``rho/mu`` determines the regime: ``rho/mu > 1`` is unimodal at
+    ``x = 1/2``, ``rho/mu = 1`` is uniform, ``rho/mu < 1`` is bimodal with
+    mass near ``x = 0`` and ``x = 1``.
 
     Hyperparameters control the simulation environment:
-    - timesteps: number of macro periods (each = 1 time unit of SDE evolution).
-    - dt: SDE micro-step size (Euler-Maruyama discretisation).
-    - substeps: number of micro-steps per macro period; must equal int(1/dt).
-    - x0: initial density.
-    - max_attempts: rejection-sampling cap inside one micro-step.
-    - record_inner: if True, every micro-step is written to a side-buffer
-      (size timesteps * substeps).
+
+    - ``timesteps``: number of macro periods (each one time unit of SDE
+      evolution).
+    - ``dt``: SDE micro-step size (Euler-Maruyama in Lamperti
+      :math:`\phi = \arcsin(2 x - 1)`-space).
+    - ``substeps``: number of micro-steps per macro period; must equal
+      ``int(1/dt)``.
+    - ``x0``: initial density.
+    - ``record_inner``: if True, every micro-step is written to a side-buffer
+      of size ``timesteps * substeps``.
     """
 
     version = "KirmansAnts"
@@ -79,7 +84,6 @@ class ParametersKirmansAnts(Parameters):
         hyper["dt"] = 1e-4
         hyper["substeps"] = 10000
         hyper["x0"] = 0.5
-        hyper["max_attempts"] = 1000
         hyper["record_inner"] = False
         return hyper
 
@@ -89,8 +93,9 @@ class ParametersKirmansAnts(Parameters):
         Raises
         ------
         ValueError
-            If ``dt`` is not in (0, 1), if ``substeps != int(1/dt)``, or if
-            ``x0`` is not strictly in (0, 1).
+            If ``dt`` is not in (0, 1), if ``1/dt`` is not integer-valued,
+            if ``substeps != int(1/dt)``, or if ``x0`` is not strictly in
+            (0, 1).
         """
         super().verify_parameters()
 
