@@ -103,8 +103,7 @@
 #
 # This section runs the model out of the box with its illustrative
 # three-sector default (sectors A, B, C).  The model code is identical
-# to the 55-sector case; only the parameter source differs.  Run the
-# notebook from the project venv kernel (e.g. `uv run jupyter lab`).
+# to the 55-sector case; only the parameter source differs.
 
 # %%
 # %load_ext autoreload
@@ -135,7 +134,8 @@ logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
 # %%
 model = PichlerEtAl2022DIO()
-baseline = model.simulate()["GrossOutput"].detach().cpu().numpy()
+model.simulate()
+baseline = model.variables.to_pandas()
 
 # %% [markdown]
 # Baseline sectoral output -- the system is initialised at a closed
@@ -143,8 +143,8 @@ baseline = model.simulate()["GrossOutput"].detach().cpu().numpy()
 
 # %%
 fig, ax = plt.subplots(figsize=(8, 3))
-for j, name in enumerate(["A", "B", "C"]):
-    ax.plot(baseline[:, j], label=rf"Sector ${name}$")
+for name in ["A", "B", "C"]:
+    ax.plot(baseline.index, baseline["GrossOutput", name], label=rf"Sector ${name}$")
 ax.set_title(r"Baseline production $x_t$ (no shock)")
 ax.legend()
 plt.tight_layout()
@@ -159,7 +159,8 @@ plt.show()
 shock = {"SupplyShock": torch.zeros(model.parameters.hyper["timesteps"], 3)}
 shock["SupplyShock"][10:40, 0] = 0.5
 model.scenarios.add_vector_scenario(shock, name="UpstreamShock")
-shocked = model.simulate(scenario=1)["GrossOutput"].detach().cpu().numpy()
+model.simulate(scenario=1)
+shocked = model.variables.to_pandas()
 
 # %% [markdown]
 # Side-by-side comparison: baseline (grey) vs upstream shock (red).
@@ -168,9 +169,21 @@ shocked = model.simulate(scenario=1)["GrossOutput"].detach().cpu().numpy()
 
 # %%
 fig, axs = plt.subplots(ncols=3, figsize=(12, 3))
-for j, (ax, name) in enumerate(zip(axs, ["A", "B", "C"])):
-    ax.plot(baseline[:, j], color="grey", linewidth=1, label="Baseline")
-    ax.plot(shocked[:, j], color="tab:red", linewidth=2, label="Shocked")
+for ax, name in zip(axs, ["A", "B", "C"]):
+    ax.plot(
+        baseline.index,
+        baseline["GrossOutput", name],
+        color="grey",
+        linewidth=1,
+        label="Baseline",
+    )
+    ax.plot(
+        shocked.index,
+        shocked["GrossOutput", name],
+        color="tab:red",
+        linewidth=2,
+        label="Shocked",
+    )
     ax.axvspan(10, 40, color="tab:red", alpha=0.1)
     ax.set_title(rf"Sector ${name}$, $x_t$")
     ax.legend()
@@ -251,10 +264,10 @@ if HAS_DATA:
         parameters=params, shock_csv=shock_csv, final_demand_csv=fd_csv
     )
     full_model = PichlerEtAl2022DIO(parameters=params, scenarios=scenarios)
-    baseline_full = (
-        full_model.simulate(scenario=0)["GrossOutput"].detach().cpu().numpy()
-    )
-    shocked_full = full_model.simulate(scenario=1)["GrossOutput"].detach().cpu().numpy()
+    full_model.simulate(scenario=0)
+    baseline_full = full_model.variables.to_pandas()
+    full_model.simulate(scenario=1)
+    shocked_full = full_model.variables.to_pandas()
 
 # %% [markdown]
 # Aggregate gross output, baseline vs pandemic shock, normalised to
@@ -263,12 +276,24 @@ if HAS_DATA:
 
 # %%
 if HAS_DATA:
-    agg_baseline = baseline_full.sum(axis=1)
-    agg_shocked = shocked_full.sum(axis=1)
-    norm = agg_baseline[0]
+    agg_baseline = baseline_full["GrossOutput"].sum(axis=1)
+    agg_shocked = shocked_full["GrossOutput"].sum(axis=1)
+    norm = agg_baseline.iloc[0]
     fig, ax = plt.subplots(figsize=(8, 3))
-    ax.plot(agg_baseline / norm, color="grey", linewidth=1, label="Baseline")
-    ax.plot(agg_shocked / norm, color="tab:red", linewidth=2, label="Pandemic shock")
+    ax.plot(
+        agg_baseline.index,
+        agg_baseline / norm,
+        color="grey",
+        linewidth=1,
+        label="Baseline",
+    )
+    ax.plot(
+        agg_shocked.index,
+        agg_shocked / norm,
+        color="tab:red",
+        linewidth=2,
+        label="Pandemic shock",
+    )
     ax.set_title(r"Aggregate output, half-critical PBL, WIOD UK 2014")
     ax.legend()
     plt.tight_layout()
