@@ -13,6 +13,24 @@ realised demand. Inventories evolve from deliveries and technical input usage;
 households adjust consumption from labour income with a propensity-to-consume
 that depends on aggregate-shock state.
 
+Default calibration: illustrative, not empirical
+------------------------------------------------
+
+The zero-config default is a 3-sector pedagogical economy (sectors ``A``,
+``B``, ``C``) with hand-chosen technical coefficients designed to exhibit
+production-network amplification under essential-input shocks. It is not
+a calibration to any real economy and should not be cited as such. The
+spectral radius of the default ``TechnicalCoefficients`` matrix is
+approximately ``0.38``; initial output and accounting identities close
+exactly at the default state.
+
+To reproduce the paper's UK 2014 results, use the
+``ParametersPichlerEtAl2022DIO.from_wiod_uk`` classmethod with
+user-supplied WIOD 2016-release tables and the IHS Markit critical-input
+matrix from the original paper's replication archive. Neither dataset is
+redistributed with this package; users must obtain them under their own
+licence terms.
+
 Sub-pages
 ---------
 
@@ -33,14 +51,16 @@ API
        ScenariosPichlerEtAl2022DIO,
    )
 
-   params = ParametersPichlerEtAl2022DIO(
-       hyperparameters={"n_sectors": 3, "timesteps": 60, "production_function": "leontief"}
-   )
-   variables = VariablesPichlerEtAl2022DIO(parameters=params)
-   scenarios = ScenariosPichlerEtAl2022DIO(parameters=params)
-   model = PichlerEtAl2022DIO(parameters=params, variables=variables, scenarios=scenarios)
+   # Zero-config: 3-sector illustrative default.
+   model = PichlerEtAl2022DIO()
+   result = model.simulate()
 
-   model.simulate()
+   # Custom configuration: override hyperparameters as needed.
+   params = ParametersPichlerEtAl2022DIO(
+       hyperparameters={"production_function": "leontief"}
+   )
+   custom = PichlerEtAl2022DIO(parameters=params)
+   custom.simulate()
 
 Production-function variants are selected via the
 ``production_function`` hyperparameter:

@@ -127,16 +127,15 @@ class BehaviorPichlerEtAl2022DIO(Behavior):
             self.params["InitialHouseholdConsumption"].sum().unsqueeze(0)
         )
         self.state["InputCapacity"] = self.params["InitialGrossOutput"].clone()
-        self.state["Inventories"] = self.params[
-            "IntermediateConsumptionMatrix"
-        ] * self.params["InventoryTargetDays"].unsqueeze(0)
+        inventory_target = self.params["IntermediateConsumptionMatrix"] * self.params[
+            "InventoryTargetDays"
+        ].unsqueeze(0)
+        self.state["Inventories"] = inventory_target.clone()
 
         self._x0 = self.params["InitialGrossOutput"].clone()
         self._l0 = self.params["InitialLabourCompensation"].clone()
         self._xcap0 = self._x0.clone()
-        self._S_tar = self.params["IntermediateConsumptionMatrix"] * self.params[
-            "InventoryTargetDays"
-        ].unsqueeze(0)
+        self._S_tar = inventory_target
         self._mpc = self.params["InitialHouseholdConsumption"].sum() / self._l0.sum()
 
     def step(self, t, scenario, params, **kwargs):
@@ -210,7 +209,7 @@ class BehaviorPichlerEtAl2022DIO(Behavior):
         - scenario: SupplyShock
 
         Sets
-        -----
+        ----
         - LabourCompensation
 
         Notes
@@ -276,7 +275,7 @@ class BehaviorPichlerEtAl2022DIO(Behavior):
         - state: LabourCompensation
 
         Sets
-        -----
+        ----
         - ProductiveCapacity
 
         Notes
@@ -330,7 +329,7 @@ class BehaviorPichlerEtAl2022DIO(Behavior):
         - scenario: PermanentIncomeExpectation, FearOfInfection, DemandPreferences
 
         Sets
-        -----
+        ----
         - TotalConsumptionDemand
         - ConsumptionDemand
 
@@ -412,7 +411,7 @@ class BehaviorPichlerEtAl2022DIO(Behavior):
         - params: TechnicalCoefficients, InventoryAdjustmentSpeed
 
         Sets
-        -----
+        ----
         - IntermediateOrders
 
         Notes
@@ -459,7 +458,7 @@ class BehaviorPichlerEtAl2022DIO(Behavior):
         - scenario: OtherFinalDemand
 
         Sets
-        -----
+        ----
         - AggregateDemand
 
         Notes
@@ -536,7 +535,7 @@ class BehaviorPichlerEtAl2022DIO(Behavior):
         - params: TechnicalCoefficients, CriticalInputMatrix
 
         Sets
-        -----
+        ----
         - InputCapacity
         - GrossOutput
 
@@ -599,7 +598,7 @@ class BehaviorPichlerEtAl2022DIO(Behavior):
         - state: GrossOutput, AggregateDemand, IntermediateOrders, ConsumptionDemand
 
         Sets
-        -----
+        ----
         - IntermediateConsumption
         - RealizedConsumption
 
@@ -689,7 +688,7 @@ class BehaviorPichlerEtAl2022DIO(Behavior):
         - params: TechnicalCoefficients
 
         Sets
-        -----
+        ----
         - Inventories
 
         Notes
@@ -740,7 +739,7 @@ class BehaviorPichlerEtAl2022DIO(Behavior):
         - params: OtherCostCoefficients, HouseholdOtherCostCoefficient
 
         Sets
-        -----
+        ----
         - Profits
         - Savings
 

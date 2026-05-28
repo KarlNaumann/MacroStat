@@ -84,8 +84,14 @@ class ParametersPichlerEtAl2022DIO(Parameters):
 
     Scalar parameters (e.g. adjustment speeds, rates) live in the standard
     ``parameters`` dict.  Large tensor-valued parameters (IO matrices,
-    initial-condition vectors) live in ``data_parameters`` and are loaded
-    from external CSV files via the ``from_wiod_uk`` class method.
+    initial-condition vectors) live in ``data_parameters``.
+
+    The default state is a 3-sector pedagogical economy (sectors A/B/C)
+    with hand-chosen coefficients that exhibit production-network
+    amplification under essential-input shocks.  It is illustrative, not
+    a calibration to any real economy.  To reproduce the paper's UK 2014
+    results, populate parameters via the ``from_wiod_uk`` classmethod
+    with user-supplied WIOD and IHS Markit data.
 
     Parameters
     ----------
@@ -145,7 +151,14 @@ class ParametersPichlerEtAl2022DIO(Parameters):
         ParametersPichlerEtAl2022DIO
             Fully populated parameter instance.
         """
-        obj = cls(**kwargs)
+        wiod_hyper = {
+            "n_sectors": 55,
+            "sector_names": list(WIOD_SECTOR_CODES),
+            "sectors": list(WIOD_SECTOR_CODES) + ["Household"],
+            "iosectors": list(WIOD_SECTOR_CODES),
+        }
+        wiod_hyper.update(kwargs.pop("hyperparameters", None) or {})
+        obj = cls(hyperparameters=wiod_hyper, **kwargs)
         data_dir = Path(data_dir)
 
         wiod_mapping = {
@@ -308,17 +321,23 @@ class ParametersPichlerEtAl2022DIO(Parameters):
         hyper["timesteps"] = 182
         hyper["timesteps_initialization"] = 1
         hyper["scenario_trigger"] = 0
-        hyper["n_sectors"] = 55
-        hyper["sector_names"] = list(WIOD_SECTOR_CODES)
-        hyper["sectors"] = list(WIOD_SECTOR_CODES) + ["Household"]
-        hyper["iosectors"] = list(WIOD_SECTOR_CODES)
+        hyper["n_sectors"] = 3
+        hyper["sector_names"] = ["A", "B", "C"]
+        hyper["sectors"] = ["A", "B", "C", "Household"]
+        hyper["iosectors"] = ["A", "B", "C"]
         hyper["production_function"] = "half_critical"
         hyper["hiring_firing"] = True
         hyper["firm_priority"] = False
         return hyper
 
     def get_default_data_parameters(self):
-        """Return the default (zero-initialized) data parameters.
+        """Return the default data parameters.
+
+        The default is the illustrative 3-sector economy described in the
+        class docstring.  When the user requests a different ``n_sectors``
+        via hyperparameter override (e.g. through ``from_wiod_uk``), all
+        tensor slots are zero-initialised at the requested shape so they
+        can be populated from external data.
 
         Returns
         -------
@@ -328,80 +347,113 @@ class ParametersPichlerEtAl2022DIO(Parameters):
             ``notation``, and ``unit``.
         """
         n = self.hyper["n_sectors"]
-        z = torch.zeros
+        if n == 3:
+            tech = torch.tensor(
+                [
+                    [0.10, 0.15, 0.05],
+                    [0.05, 0.20, 0.25],
+                    [0.05, 0.10, 0.15],
+                ]
+            )
+            critical = torch.tensor(
+                [
+                    [0.0, 1.0, 0.0],
+                    [0.0, 0.0, 1.0],
+                    [0.0, 0.0, 0.0],
+                ]
+            )
+            x_init = torch.tensor([100.0, 300.0, 600.0])
+            intermediate = tech * x_init.unsqueeze(0)
+            labour_init = torch.tensor([60.0, 120.0, 250.0])
+            consumption_init = torch.tensor([10.0, 80.0, 250.0])
+            profits_init = torch.tensor([15.0, 30.0, 50.0])
+            other_final_init = torch.tensor([5.0, 5.0, 225.0])
+            inventory_days = torch.tensor([30.0, 14.0, 7.0])
+            other_cost = torch.full((n,), 0.05)
+        else:
+            tech = torch.zeros(n, n)
+            critical = torch.zeros(n, n)
+            x_init = torch.zeros(n)
+            intermediate = torch.zeros(n, n)
+            labour_init = torch.zeros(n)
+            consumption_init = torch.zeros(n)
+            profits_init = torch.zeros(n)
+            other_final_init = torch.zeros(n)
+            inventory_days = torch.zeros(n)
+            other_cost = torch.zeros(n)
         return {
             "TechnicalCoefficients": {
-                "value": z(n, n),
+                "value": tech,
                 "lower_bound": 0.0,
                 "upper_bound": 1.0,
                 "notation": r"A",
                 "unit": ".",
             },
             "CriticalInputMatrix": {
-                "value": z(n, n),
+                "value": critical,
                 "lower_bound": 0.0,
                 "upper_bound": 1.0,
                 "notation": r"A^{ess}",
                 "unit": ".",
             },
             "IntermediateConsumptionMatrix": {
-                "value": z(n, n),
+                "value": intermediate,
                 "lower_bound": -1e12,
                 "upper_bound": 1e12,
                 "notation": r"Z",
                 "unit": "USD mn",
             },
             "InitialGrossOutput": {
-                "value": z(n),
+                "value": x_init,
                 "lower_bound": -1e12,
                 "upper_bound": 1e12,
                 "notation": r"x_0",
                 "unit": "USD mn",
             },
             "InitialLabourCompensation": {
-                "value": z(n),
+                "value": labour_init,
                 "lower_bound": -1e12,
                 "upper_bound": 1e12,
                 "notation": r"l_0",
                 "unit": "USD mn",
             },
             "InitialHouseholdConsumption": {
-                "value": z(n),
+                "value": consumption_init,
                 "lower_bound": -1e12,
                 "upper_bound": 1e12,
                 "notation": r"c_0",
                 "unit": "USD mn",
             },
             "InitialProfits": {
-                "value": z(n),
+                "value": profits_init,
                 "lower_bound": -1e12,
                 "upper_bound": 1e12,
                 "notation": r"\pi_0",
                 "unit": "USD mn",
             },
             "InitialOtherFinalDemand": {
-                "value": z(n),
+                "value": other_final_init,
                 "lower_bound": -1e12,
                 "upper_bound": 1e12,
                 "notation": r"f_0",
                 "unit": "USD mn",
             },
             "InventoryTargetDays": {
-                "value": z(n),
+                "value": inventory_days,
                 "lower_bound": 0.0,
                 "upper_bound": 365.0,
                 "notation": r"n",
                 "unit": "days",
             },
             "OtherCostCoefficients": {
-                "value": z(n),
+                "value": other_cost,
                 "lower_bound": -10.0,
                 "upper_bound": 10.0,
                 "notation": r"e_i/x_i",
                 "unit": ".",
             },
             "HouseholdOtherCostCoefficient": {
-                "value": z(1),
+                "value": torch.tensor([0.05]),
                 "lower_bound": 0.0,
                 "upper_bound": 1.0,
                 "notation": r"c^{other}",

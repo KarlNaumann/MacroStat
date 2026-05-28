@@ -60,16 +60,49 @@ skip_no_data = pytest.mark.skipif(
 class TestParametersPichlerEtAl2022DIO:
     def test_default_parameters(self):
         p = ParametersPichlerEtAl2022DIO()
-        assert p.hyper["n_sectors"] == 55
+        assert p.hyper["n_sectors"] == 3
+        assert p.hyper["iosectors"] == ["A", "B", "C"]
         assert p.hyper["timesteps"] == 182
         assert "TechnicalCoefficients" in p
-        assert p["TechnicalCoefficients"].shape == (55, 55)
+        assert p["TechnicalCoefficients"].shape == (3, 3)
 
     def test_data_parameters_default_shapes(self):
         p = ParametersPichlerEtAl2022DIO()
-        assert p["InitialGrossOutput"].shape == (55,)
-        assert p["IntermediateConsumptionMatrix"].shape == (55, 55)
-        assert p["InventoryTargetDays"].shape == (55,)
+        assert p["InitialGrossOutput"].shape == (3,)
+        assert p["IntermediateConsumptionMatrix"].shape == (3, 3)
+        assert p["InventoryTargetDays"].shape == (3,)
+
+    def test_default_spectral_radius(self):
+        assert (
+            torch.linalg.eigvals(
+                ParametersPichlerEtAl2022DIO()["TechnicalCoefficients"]
+            )
+            .abs()
+            .max()
+            .item()
+            < 0.5
+        )
+
+    def test_default_io_closure(self):
+        p = ParametersPichlerEtAl2022DIO()
+        assert (
+            p["InitialGrossOutput"]
+            - p["IntermediateConsumptionMatrix"].sum(dim=1)
+            - p["InitialHouseholdConsumption"]
+            - p["InitialOtherFinalDemand"]
+        ).abs().max().item() < 1e-3
+
+    def test_default_accounting_closure(self):
+        p = ParametersPichlerEtAl2022DIO()
+        assert (
+            p["InitialProfits"]
+            - (
+                p["InitialGrossOutput"]
+                - p["IntermediateConsumptionMatrix"].sum(dim=0)
+                - p["InitialLabourCompensation"]
+                - p["OtherCostCoefficients"] * p["InitialGrossOutput"]
+            )
+        ).abs().max().item() < 1e-3
 
     def test_hyperparameter_override(self):
         p = ParametersPichlerEtAl2022DIO(
@@ -153,6 +186,28 @@ class TestVariablesPichlerEtAl2022DIO:
 
 
 class TestSimulation:
+    def test_default_instantiation_runs(self):
+        """Zero-config instantiation simulates without error or NaN."""
+        gross_output = PichlerEtAl2022DIO().simulate()["GrossOutput"]
+        assert gross_output.shape[1] == 3
+        assert not torch.isnan(gross_output).any()
+        assert (gross_output > 0).all()
+
+    def test_default_shock_propagates(self):
+        """A supply shock to sector A reduces output downstream."""
+        model = PichlerEtAl2022DIO()
+        shock_timeseries = {
+            "SupplyShock": torch.zeros(model.parameters.hyper["timesteps"], 3)
+        }
+        shock_start = 10
+        shock_timeseries["SupplyShock"][shock_start : shock_start + 30, 0] = 0.5
+        model.scenarios.add_vector_scenario(shock_timeseries, name="UpstreamShock")
+        baseline = model.simulate(scenario=0)["GrossOutput"]
+        shocked = model.simulate(scenario=1)["GrossOutput"]
+        assert (
+            baseline[shock_start + 5 :, 2].sum() - shocked[shock_start + 5 :, 2].sum()
+        ).item() > 0
+
     @skip_no_data
     def test_no_shock_steady_state(self):
         """Without shocks, the economy should remain at steady state."""
