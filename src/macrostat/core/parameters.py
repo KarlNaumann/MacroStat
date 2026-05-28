@@ -11,8 +11,10 @@ __maintainer__ = ["Karl Naumann-Woleske"]
 import json
 import logging
 import os
+from pathlib import Path
 
 # Third-party libraries
+import numpy as np
 import pandas as pd
 import torch
 
@@ -40,6 +42,7 @@ class Parameters:
         self,
         parameters: dict | None = None,
         hyperparameters: dict | None = None,
+        data_parameters: dict | None = None,
         *args,
         **kwargs,
     ):
@@ -55,9 +58,11 @@ class Parameters:
         hyperparameters: dict | None
             The hyperparameters to initialize the model with. If None, the
             default hyperparameters will be used.
-        bounds: dict | None
-            The bounds to initialize the model with. If None, the default bounds
-            will be used
+        data_parameters: dict | None
+            Tensor-valued parameters to initialize the model with. Each entry
+            should be a dict with keys "value" (tensor or nested list),
+            "lower_bound", "upper_bound", "notation", "unit". If None, the
+            defaults from get_default_data_parameters() are used.
         """
 
         self.values = self.get_default_parameters()
@@ -70,6 +75,14 @@ class Parameters:
             new = {k: v for k, v in hyperparameters.items() if k in self.hyper}
             self.hyper.update(new)
 
+        self.data = self.get_default_data_parameters()
+        if data_parameters is not None:
+            for k, v in data_parameters.items():
+                if k in self.data:
+                    if isinstance(v.get("value"), (list, np.ndarray)):
+                        v = {**v, "value": torch.tensor(v["value"], dtype=torch.float)}
+                    self.data[k].update(v)
+
         # Lazily built on first call to get_constraint_resolver; any future
         # mutation API that changes self.values must call _invalidate_resolver.
         self._constraint_resolver: ConstraintResolver | None = None
@@ -80,37 +93,45 @@ class Parameters:
         self.verify_parameters()
 
     def __contains__(self, key: str):
-        """Check if a key is in the parameters or hyperparameters.
+        """Check if a key is in the parameters, data parameters, or hyperparameters.
 
         Parameters
         ----------
         key: str
             The name of the parameter or hyperparameter to check for.
         """
-        return key in self.values or key in self.hyper
+        return key in self.values or key in self.data or key in self.hyper
 
     def __getitem__(self, key: str):
-        """Get an item from the parameters or hyperparameters.
+        """Get an item from the parameters, data parameters, or hyperparameters.
 
         Parameters
         ----------
         key: str
             The name of the parameter or hyperparameter to get the item for.
         """
-        return self.values[key]["value"] if key in self.values else self.hyper[key]
+        if key in self.values:
+            return self.values[key]["value"]
+        if key in self.data:
+            return self.data[key]["value"]
+        return self.hyper[key]
 
-    def __setitem__(self, key: str, value: float):
-        """Set an item in the parameters or hyperparameters.
+    def __setitem__(self, key: str, value):
+        """Set an item in the parameters, data parameters, or hyperparameters.
 
         Parameters
         ----------
         key: str
             The name of the parameter or hyperparameter to set.
-        value: float
+        value: float | torch.Tensor
             The value to set for the item.
         """
         if key in self.values:
             self.values[key]["value"] = value
+        elif key in self.data:
+            if isinstance(value, (list, np.ndarray)):
+                value = torch.tensor(value, dtype=torch.float)
+            self.data[key]["value"] = value
         elif key in self.hyper:
             self.hyper[key] = value
         else:
@@ -123,9 +144,10 @@ class Parameters:
         with the hyperparameters and parameters aligned.
         """
         # Find the longest key for alignment
-        hyper_max_len = max([len(key) for key in self.hyper.keys()] + [10])
-        param_max_len = max([len(key) for key in self.values.keys()] + [10])
-        max_key_length = max(hyper_max_len, param_max_len)
+        all_keys = (
+            list(self.hyper.keys()) + list(self.values.keys()) + list(self.data.keys())
+        )
+        max_key_length = max([len(key) for key in all_keys] + [10])
 
         # Create the output string, hyperparameters first
         output = "Hyperparameters:\n"
@@ -138,6 +160,13 @@ class Parameters:
             output += (
                 f"  {key:.<{max_key_length}} {info['value']:.5g} ({info['unit']})\n"
             )
+
+        # Add the data parameters
+        if self.data:
+            output += "\nData Parameters:\n"
+            for key, info in self.data.items():
+                shape = tuple(info["value"].shape)
+                output += f"  {key:.<{max_key_length}} {shape} ({info['unit']})\n"
 
         return output
 
@@ -153,9 +182,19 @@ class Parameters:
         with open(file_path, "r") as file:
             data = json.load(file)
 
+        data_params = None
+        if "DataParameters" in data:
+            data_params = {}
+            for k, v in data["DataParameters"].items():
+                data_params[k] = {
+                    **v,
+                    "value": torch.tensor(v["value"], dtype=torch.float),
+                }
+
         return cls(
             parameters=data["Parameters"],
             hyperparameters=data["HyperParameters"],
+            data_parameters=data_params,
         )
 
     @classmethod
@@ -235,11 +274,30 @@ class Parameters:
 
         Should return a dictionary with the keys being the parameter names,
         and a subdictionary with the keys including:
-        - "Value": The value of the parameter.
-        - "Lower": The lower bound of the parameter.
-        - "Upper": The upper bound of the parameter.
-        - "Unit": The unit of the parameter.
-        - "Notation": The notation of the parameter.
+        - "value": The value of the parameter.
+        - "lower bound": The lower bound of the parameter.
+        - "upper bound": The upper bound of the parameter.
+        - "unit": The unit of the parameter.
+        - "notation": The notation of the parameter.
+        """
+        return {}
+
+    def get_default_data_parameters(self):
+        """Return the default data parameters.
+
+        Data parameters are tensor-valued parameters (vectors, matrices) that
+        are typically loaded from external data files (e.g. IO tables). They
+        participate in the nn.ParameterDict pipeline and are fully
+        differentiable.
+
+        Should return a dictionary with the keys being the parameter names,
+        and a subdictionary with the keys:
+        - "value": torch.Tensor with the default value (e.g. zeros of the
+          expected shape).
+        - "lower_bound": float, element-wise lower bound.
+        - "upper_bound": float, element-wise upper bound.
+        - "notation": str, LaTeX notation.
+        - "unit": str, unit description.
         """
         return {}
 
@@ -500,31 +558,85 @@ class Parameters:
             self.values[c.derived_param]["value"] = new_value
 
     def get_free_param_names(self) -> list[str]:
-        """Return parameter names excluding derived (constrained) parameters.
+        """Return scalar parameter names excluding derived (constrained) ones.
+
+        Data parameters (tensor-valued) are not included; this method is
+        scoped to the scalar parameter space used by estimators and
+        Jacobian routines.
 
         Returns
         -------
         list[str]
-            All parameter names that are free (not derived by any constraint).
+            Scalar parameter names that are free (not derived by any
+            constraint).
         """
         derived = {c.derived_param for c in self.get_constraints()}
         return [name for name in self.values if name not in derived]
 
     def get_bounds(self):
-        """Return the bounds for the parameters."""
-        return {
+        """Return the bounds for the parameters (scalar and data)."""
+        bounds = {
             key: (info["lower bound"], info["upper bound"])
             for key, info in self.values.items()
         }
+        bounds.update(
+            {
+                key: (info["lower_bound"], info["upper_bound"])
+                for key, info in self.data.items()
+            }
+        )
+        return bounds
 
     def get_values(self):
-        """Return the values for the parameters."""
+        """Return scalar parameter values only.
+
+        Returns
+        -------
+        dict[str, float]
+            Scalar parameter values after constraint enforcement. Use
+            :meth:`get_data_values` for tensor-valued data parameters or
+            :meth:`get_all_values` for the merged dict.
+        """
         self.enforce_constraints()
         return {key: info["value"] for key, info in self.values.items()}
 
+    def get_data_values(self):
+        """Return tensor-valued data parameter values only.
+
+        Returns
+        -------
+        dict[str, torch.Tensor]
+            Data-parameter tensors. Empty dict if the model declares no
+            data parameters.
+        """
+        return {key: info["value"] for key, info in self.data.items()}
+
+    def get_all_values(self):
+        """Return scalar and data parameter values merged into one dict.
+
+        Returns
+        -------
+        dict[str, float | torch.Tensor]
+            Union of :meth:`get_values` and :meth:`get_data_values`.
+            Callers that need a uniform mapping over both parameter
+            spaces (e.g. JSON export) use this; callers that pass values
+            into tabular sinks (e.g. CSV samplers) should use
+            :meth:`get_values` to avoid silently stringifying tensors.
+        """
+        values = self.get_values()
+        values.update(self.get_data_values())
+        return values
+
     def is_equal(self, other: "Parameters"):
         """Compare the parameters to another Parameters object."""
-        return self.values == other.values and self.hyper == other.hyper
+        if self.values != other.values or self.hyper != other.hyper:
+            return False
+        if set(self.data.keys()) != set(other.data.keys()):
+            return False
+        for k in self.data:
+            if not torch.equal(self.data[k]["value"], other.data[k]["value"]):
+                return False
+        return True
 
     def set_bound(self, key: str, value: tuple):
         """Set the bounds for a single parameter
@@ -548,8 +660,89 @@ class Parameters:
         """Set the unit for a single parameter."""
         self.values[key]["unit"] = value
 
+    def load_data_parameter_from_file(
+        self,
+        name: str,
+        file_path: os.PathLike,
+        index_col: int | None = 0,
+        header: int | None = 0,
+    ):
+        """Load a single data parameter from a CSV file.
+
+        The CSV is read into a pandas DataFrame and converted to a tensor.
+        Shape validation is strict: the loaded shape must match the shape of
+        the default data parameter.
+
+        Parameters
+        ----------
+        name: str
+            The name of the data parameter to load into.
+        file_path: os.PathLike
+            Path to the CSV file.
+        index_col: int | None
+            Column to use as row labels (passed to pd.read_csv). Default 0
+            skips the first column (assumes row labels).
+        header: int | None
+            Row to use as column labels (passed to pd.read_csv). Default 0
+            skips the first row (assumes column headers).
+        """
+        if name not in self.data:
+            raise KeyError(
+                f"Data parameter '{name}' not found. "
+                f"Available: {list(self.data.keys())}"
+            )
+
+        df = pd.read_csv(file_path, index_col=index_col, header=header)
+        tensor = torch.tensor(df.values, dtype=torch.float).squeeze()
+
+        expected_shape = self.data[name]["value"].shape
+        if tensor.shape != expected_shape:
+            raise ValueError(
+                f"Shape mismatch for data parameter '{name}': "
+                f"loaded {tuple(tensor.shape)}, expected {tuple(expected_shape)}"
+            )
+
+        self.data[name]["value"] = tensor
+
+    def load_data_parameters_from_directory(
+        self,
+        data_dir: os.PathLike,
+        mapping: dict[str, str] | None = None,
+        **csv_kwargs,
+    ):
+        """Batch-load data parameters from a directory of CSV files.
+
+        Parameters
+        ----------
+        data_dir: os.PathLike
+            Path to the directory containing CSV files.
+        mapping: dict[str, str] | None
+            A mapping of ``{parameter_name: filename}``. If None, looks for
+            ``{ParameterName}.csv`` for each defined data parameter.
+        **csv_kwargs
+            Additional keyword arguments passed to
+            ``load_data_parameter_from_file`` (e.g. ``index_col``, ``header``).
+        """
+        data_dir = Path(data_dir)
+
+        if mapping is None:
+            mapping = {name: f"{name}.csv" for name in self.data}
+
+        for param_name, filename in mapping.items():
+            file_path = data_dir / filename
+            if not file_path.exists():
+                logger.warning(
+                    f"File not found for data parameter '{param_name}': {file_path}"
+                )
+                continue
+            self.load_data_parameter_from_file(param_name, file_path, **csv_kwargs)
+
     def to_csv(self, file_path: os.PathLike, sphinx_math: bool = False):
         """Convert the parameters to a CSV file.
+
+        Scalar parameters and hyperparameters are written to the main CSV file.
+        Data parameters are written as individual CSVs in a sibling directory
+        named ``{stem}_data/``.
 
         Parameters
         ----------
@@ -572,6 +765,20 @@ class Parameters:
 
         df = pd.concat([par, hyper], axis=0)
         df.to_csv(file_path)
+
+        if self.data:
+            file_path = Path(file_path)
+            data_dir = file_path.parent / f"{file_path.stem}_data"
+            data_dir.mkdir(parents=True, exist_ok=True)
+            for name, info in self.data.items():
+                tensor = info["value"]
+                if tensor.dim() <= 1:
+                    pd.Series(tensor.detach().numpy()).to_csv(data_dir / f"{name}.csv")
+                else:
+                    pd.DataFrame(tensor.detach().numpy()).to_csv(
+                        data_dir / f"{name}.csv"
+                    )
+
         return df
 
     def to_excel(self, file_path: os.PathLike, *args, **kwargs):
@@ -593,20 +800,27 @@ class Parameters:
             The path to the JSON file to save the parameters to.
         """
         self.enforce_constraints()
+        payload = {
+            "Parameters": self.values,
+            "HyperParameters": self.hyper,
+        }
+
+        if self.data:
+            payload["DataParameters"] = {
+                k: {
+                    **{dk: dv for dk, dv in v.items() if dk != "value"},
+                    "value": v["value"].tolist(),
+                }
+                for k, v in self.data.items()
+            }
+
         with open(file_path, "w") as file:
-            json.dump(
-                {
-                    "Parameters": self.values,
-                    "HyperParameters": self.hyper,
-                },
-                file,
-            )
+            json.dump(payload, file)
 
     def to_nn_parameters(self):
         """Convert the parameters to a nn.ParameterDict."""
         self.enforce_constraints()
-        vectorized = self.vectorize_parameters()
-        return torch.nn.ParameterDict(vectorized)
+        return torch.nn.ParameterDict(self.vectorize_parameters())
 
     def vectorize_parameters(self):
         """Vectorize the parameters.
@@ -625,6 +839,8 @@ class Parameters:
         as the index of the sector name in the sorted vector_sectors list. The
         first sector is the row, the second the column of the matrix to be
         populated
+
+        Data parameters (tensors) are included directly by name.
         """
         # Allow users to specify that only a subset of sectors fit the vector/matrix scheme
         if "vector_sectors" in self.hyper:
@@ -664,13 +880,29 @@ class Parameters:
                 v = torch.tensor(info["value"], **kwargs)
                 pvectors[key.replace(".", "_")] = v
 
+        # Include data parameters directly (already tensors). Guard against
+        # silent overwrite of a scalar-vector tensor key by a same-named
+        # data parameter; either side losing values to a key collision is
+        # almost certainly a configuration bug.
+        for key, info in self.data.items():
+            if key in pvectors:
+                raise KeyError(
+                    f"Data parameter '{key}' collides with an existing "
+                    f"scalar-vector tensor key. Rename the data parameter "
+                    f"or the conflicting scalar parameter."
+                )
+            tensor = info["value"]
+            if not isinstance(tensor, torch.Tensor):
+                tensor = torch.tensor(tensor, **kwargs)
+            pvectors[key] = tensor.to(device=kwargs["device"], dtype=kwargs["dtype"])
+
         return pvectors
 
     def verify_bounds(self):
         """Verify that the bounds are valid. By testing first that all
         parameters have bounds, and then that the bounds are valid.
         """
-        # Check that all parameters have bounds
+        # Check scalar parameters
         needed_bounds = set(self.get_default_parameters().keys())
         found_bounds = {}
         for key, info in self.values.items():
@@ -687,13 +919,21 @@ class Parameters:
                 f"Missing bounds for parameters: {needed_bounds - found_bound_params}"
             )
 
-        # Check that the bounds are valid
         for param, bounds in found_bounds.items():
             if bounds[0] > bounds[1]:
                 raise BoundaryError(f"Parameter {param} has invalid bounds: {bounds}")
 
+        # Check data parameters
+        for key, info in self.data.items():
+            lb, ub = info.get("lower_bound"), info.get("upper_bound")
+            if lb is not None and ub is not None and lb > ub:
+                raise BoundaryError(
+                    f"Data parameter {key} has invalid bounds: ({lb}, {ub})"
+                )
+
     def verify_parameters(self):
         """Verify that the parameters are within the bounds."""
+        # Scalar parameters
         for param, info in self.values.items():
             if (
                 info["value"] < info["lower bound"]
@@ -702,6 +942,21 @@ class Parameters:
                 msg = f"Parameter {param} has invalid value: {info['value']}"
                 raise BoundaryError(
                     f"{msg} (bounds: {info['lower bound']}, {info['upper bound']})"
+                )
+
+        # Data parameters
+        for param, info in self.data.items():
+            tensor = info["value"]
+            lb, ub = info.get("lower_bound"), info.get("upper_bound")
+            if lb is not None and tensor.min().item() < lb:
+                raise BoundaryError(
+                    f"Data parameter {param} has values below lower bound {lb} "
+                    f"(min: {tensor.min().item():.6g})"
+                )
+            if ub is not None and tensor.max().item() > ub:
+                raise BoundaryError(
+                    f"Data parameter {param} has values above upper bound {ub} "
+                    f"(max: {tensor.max().item():.6g})"
                 )
 
 

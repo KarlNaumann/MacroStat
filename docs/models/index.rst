@@ -14,4 +14,5 @@ This section contains the documentation of the models available in MacroStat.
    IOPC/IOPC.ipynb
    KirmansAnts/KirmansAnts.ipynb
    NK3E/NK3E.ipynb
+   PichlerEtAl2022DIO/index.rst
    Testing/index.rst

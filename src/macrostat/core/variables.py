@@ -402,22 +402,30 @@ class Variables:
 
     def to_pandas(self):
         """Convert the variables to a pandas DataFrame."""
-        # Copy deep so we can delete/add without affecting core var
+        # gather_timeseries assigns self.timeseries = cat; iterate over a
+        # snapshot so the matrix-flatten loop can mutate the dict safely.
         timeseries = self.gather_timeseries()
+        # Mirror self.info onto flattened keys so the column-lookup loop
+        # below can resolve InventoriesA, InventoriesB, ... back to the
+        # original Inventories sector list.
+        sector_map = {
+            k: info["sectors"] for k, info in self.info.items() if "sectors" in info
+        }
 
         # Flatten matrix variables: a timeseries per row of the matrix
-        for k, v in self.timeseries.items():
+        for k, v in list(self.timeseries.items()):
             if "matrix" in self.info[k]:
                 del timeseries[k]
                 for i, subvar in enumerate(self.info[k]["matrix"]):
                     key = f"{k}{subvar}"
                     timeseries[key] = v[:, i, :]
+                    sector_map[key] = self.info[k]["sectors"]
 
         # Any vector-based parameters will just be
         ts = {}
         for k, v in timeseries.items():
-            if "sectors" in self.info[k]:
-                secs = self.info[k]["sectors"]
+            if k in sector_map:
+                secs = sector_map[k]
             else:
                 secs = list(range(v.squeeze().shape[1]))
 
