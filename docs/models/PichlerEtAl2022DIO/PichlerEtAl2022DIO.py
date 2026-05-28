@@ -104,6 +104,30 @@
 # This section runs the model out of the box with its illustrative
 # three-sector default (sectors A, B, C).  The model code is identical
 # to the 55-sector case; only the parameter source differs.
+#
+# ### Essential-input structure
+#
+# Production in this model uses the *Partially Binding Leontief* (PBL)
+# specification.  Each inter-sector flow $A_{ij}$ is flagged in the
+# *critical-input matrix* $A^{\text{ess}}$ as either critical (no
+# substitution possible -- production fails if the input is missing) or
+# non-critical (some substitution allowed).  The default $A^{\text{ess}}$
+# encodes a serial supply chain
+#
+# $$
+# A \xrightarrow{\text{essential}} B \xrightarrow{\text{essential}} C
+# $$
+#
+# i.e. sector $B$ critically depends on sector $A$'s output, and sector
+# $C$ critically depends on sector $B$'s output.  Sector $C$ produces a
+# final good and has no critical downstream.  All other inter-sector
+# flows are non-critical and can be partially substituted.
+#
+# Combined with the inventory-buffer dynamics, this asymmetry means a
+# shock to upstream sector $A$ propagates downstream with a delay set
+# by the size of sectors $B$ and $C$'s buffers, but in steady state the
+# chain $A \to B \to C$ is the only path through which an upstream
+# shock can reduce $C$'s output.
 
 # %%
 # %load_ext autoreload
@@ -164,8 +188,20 @@ shocked = model.variables.to_pandas()
 
 # %% [markdown]
 # Side-by-side comparison: baseline (grey) vs upstream shock (red).
-# Sector A absorbs the shock immediately; the propagation to B and C
-# is mediated by the inventory buffer and the essential-input mask.
+# Sector $A$ absorbs the shock immediately; sectors $B$ and $C$ drop
+# slowly during the shock window because their inventories of $A$ and
+# $B$ inputs cushion the supply restriction.
+#
+# Note the *deeper trough in sector $B$ after the shock ends*
+# (around $t=45$).  When $A$'s supply was restricted, $B$ throttled its
+# orders for $A$'s output (intermediate orders are tied to last
+# period's production via Eq. 4); when $A$'s capacity returns at
+# $t=40$, $B$ tries to rebuild both its production and its inventory
+# target in the same period, but the order it would have to place
+# exceeds $A$'s current output.  The catch-up sequence produces a
+# transient post-shock dip before the system re-converges to steady
+# state.  This is the model's characteristic inventory-rebound
+# dynamic, not a numerical artefact.
 
 # %%
 fig, axs = plt.subplots(ncols=3, figsize=(12, 3))
