@@ -356,6 +356,10 @@ def gather_docstring_sections(docstring: str) -> dict:
     section = "Description"
     docparts = {section: []}
 
+    # Normalize indentation. Python 3.13 strips common leading whitespace from
+    # docstrings at compile time; 3.11/3.12 do not. cleandoc() makes the parser
+    # behave identically across versions.
+    docstring = inspect.cleandoc(docstring)
     lines = docstring.split("\n")
     for i, line in enumerate(lines):
         if len(line) == 0:
