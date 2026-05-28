@@ -12,16 +12,16 @@
         :target: https://twitter.com/MacroStat
 
 
-.. image:: https://api.cirrus-ci.com/github/KarlNaumann/MacroStat.svg?branch=master
-     :alt: Built Status
-     :target: https://cirrus-ci.com/github/KarlNaumann/MacroStat
+.. image:: https://github.com/KarlNaumann/MacroStat/actions/workflows/ci.yml/badge.svg?branch=master
+     :alt: Build Status
+     :target: https://github.com/KarlNaumann/MacroStat/actions/workflows/ci.yml
 .. image:: https://img.shields.io/pypi/v/MacroStat.svg
   :alt: PyPI-Server
   :target: https://pypi.org/project/MacroStat/
 .. image:: https://readthedocs.org/projects/macrostat/badge/?version=stable
     :target: https://macrostat.readthedocs.io/en/stable/?badge=stable
     :alt: Documentation Status
-.. image:: https://img.shields.io/coveralls/github/KarlNaumann/MacroStat/main.svg
+.. image:: https://img.shields.io/coveralls/github/KarlNaumann/MacroStat/master.svg
      :alt: Coveralls
      :target: https://coveralls.io/r/KarlNaumann/MacroStat
 .. image:: https://img.shields.io/badge/-PyScaffold-005CA0?logo=pyscaffold
@@ -52,6 +52,11 @@ To install the latest version of the package from PyPI::
 Or, directly from GitHub::
 
    pip install git+https://github.com/KarlNaumann/MacroStat.git#egg=macrostat
+
+Continuous Integration
+======================
+
+MacroStat runs on GitHub Actions across Linux (``ubuntu-latest``) and Windows (``windows-latest``) for Python 3.11, 3.12, and 3.13. The full test suite including slow-marked tests runs nightly on ``master``. macOS is not currently covered; it is tracked as a follow-up before the planned JOSS submission.
 
 Development Installation
 ========================
