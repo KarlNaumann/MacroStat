@@ -215,13 +215,8 @@ shocked = model.variables.to_pandas()
 #    even after $A$ recovers around $t=50$, $B$'s production is
 #    capped by its reduced workforce until the slower hiring loop
 #    rebuilds it.
-#
-# The trough is therefore not an inventory-rebuild artefact.  It is
-# the joint consequence of asymmetric labour adjustment in $A$ and
-# the exhaustion of $B$'s essential-input buffer once $A$ can no
-# longer satisfy $B$'s standing orders.
 
-# %%
+# %% jupyter={"source_hidden": true}
 fig, axs = plt.subplots(ncols=3, figsize=(12, 3))
 for ax, name in zip(axs, ["A", "B", "C"]):
     ax.plot(
