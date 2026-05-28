@@ -189,19 +189,37 @@ shocked = model.variables.to_pandas()
 # %% [markdown]
 # Side-by-side comparison: baseline (grey) vs upstream shock (red).
 # Sector $A$ absorbs the shock immediately; sectors $B$ and $C$ drop
-# slowly during the shock window because their inventories of $A$ and
-# $B$ inputs cushion the supply restriction.
+# only modestly during the shock window because their inventories of
+# upstream inputs cushion the supply restriction.
 #
-# Note the *deeper trough in sector $B$ after the shock ends*
-# (around $t=45$).  When $A$'s supply was restricted, $B$ throttled its
-# orders for $A$'s output (intermediate orders are tied to last
-# period's production via Eq. 4); when $A$'s capacity returns at
-# $t=40$, $B$ tries to rebuild both its production and its inventory
-# target in the same period, but the order it would have to place
-# exceeds $A$'s current output.  The catch-up sequence produces a
-# transient post-shock dip before the system re-converges to steady
-# state.  This is the model's characteristic inventory-rebound
-# dynamic, not a numerical artefact.
+# The deeper trough in sector $B$ around $t=43$, three days *after*
+# the shock ends, is the model's characteristic feature.  Three
+# coupled mechanisms drive it.
+#
+# 1. **A's labour was fired during the shock.**  When $A$'s
+#    productive capacity collapsed to 50, the asymmetric labour rule
+#    (Eq. 19-20) fired workers down from 60 to 30 to match.
+# 2. **A's recovery is slow.**  The default hiring rate is
+#    $\gamma_H = 1/30$ per day.  Once the shock ends at $t=40$, $A$'s
+#    capacity rebuilds linearly at about seven units per day (50, 57,
+#    64, 71, ...) and only returns to 100 around $t=50$.
+# 3. **B exhausts its $A$-input inventory before $A$ can resupply.**
+#    During the shock $B$ kept ordering at near-steady-state level
+#    while $A$ delivered only 50.  $B$'s on-hand inventory of $A$'s
+#    output drained to a thin buffer by $t=40$.  In the days after,
+#    $A$ still produces well below $B$'s orders, $B$'s input capacity
+#    falls from $\approx 460$ to $\approx 250$, and at $t=43$ $B$'s
+#    output is *input-bound* at 252, a 16% drop below steady state.
+#    The input shortage then triggers $B$'s own labour adjustment:
+#    asymmetric firing ($\gamma_F = 2/30$) cuts $B$'s capacity, so
+#    even after $A$ recovers around $t=50$, $B$'s production is
+#    capped by its reduced workforce until the slower hiring loop
+#    rebuilds it.
+#
+# The trough is therefore not an inventory-rebuild artefact.  It is
+# the joint consequence of asymmetric labour adjustment in $A$ and
+# the exhaustion of $B$'s essential-input buffer once $A$ can no
+# longer satisfy $B$'s standing orders.
 
 # %%
 fig, axs = plt.subplots(ncols=3, figsize=(12, 3))
