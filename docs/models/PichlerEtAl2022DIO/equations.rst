@@ -23,8 +23,6 @@ Replicates Eq. 2.
 	\end{align}
 
 
-
-
 2. Aggregate Demand
 
 Total demand aggregation.
@@ -40,8 +38,6 @@ exports, investment). Replicates Eq. 3.
 	\begin{align}
 	d_{i,t} = \sum_{j=1}^{N} O_{ij,t} + c^d_{i,t} + f^d_{i,t}
 	\end{align}
-
-
 
 
 3. Compute Production
@@ -88,8 +84,6 @@ inputs based on an industry analyst survey. Replicates Eqs. 8-14.
 	\end{align}
 
 
-
-
 4. Consumption Demand
 
 Muellbauer consumption function with fear-of-infection.
@@ -113,8 +107,6 @@ preference coefficients. Replicates Eqs. 5-6.
 	\right) \\
 	c^d_{i,t} &= \theta_{i,t}\,\tilde{c}^d_t
 	\end{align}
-
-
 
 
 5. Hire Fire
@@ -144,8 +136,6 @@ by the exogenous supply shock. Replicates Eqs. 19-20.
 	\end{align}
 
 
-
-
 6. Intermediate Orders
 
 Inventory-gap ordering of intermediate inputs.
@@ -164,8 +154,6 @@ correction term that moves inventories toward a target of
 	O_{ji,t} = A_{ji}\,d_{i,t-1}
 	+ \frac{1}{\tau}\left(n_i Z_{ji,0} - S_{ji,t-1}\right)
 	\end{align}
-
-
 
 
 7. Inventory Update
@@ -188,8 +176,6 @@ Eq. 18.
 	\end{align}
 
 
-
-
 8. Productive Capacity
 
 Labour-scaled production capacity.
@@ -207,8 +193,6 @@ Replicates Eq. 7.
 	x^{\text{cap}}_{i,t} = \frac{l_{i,t}}{l_{i,0}}\,
 	x^{\text{cap}}_{i,0}
 	\end{align}
-
-
 
 
 9. Rationing
