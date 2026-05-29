@@ -53,10 +53,6 @@ jobs:
     name: test (${{ matrix.os }}, py${{ matrix.python-version }})
     needs: build
     runs-on: ${{ matrix.os }}
-    # Windows legs are advisory pending fixes to torch.compile cache pollution
-    # and joblib USERNAME handling (tests/diff/, tests/estimation/lm_test.py).
-    # Tracked as Outstanding Issues. Linux legs remain required.
-    continue-on-error: ${{ matrix.os == 'windows-latest' }}
     strategy:
       fail-fast: false
       matrix:
