@@ -78,33 +78,36 @@ class Variables:
     def get_stock_variables(self):
         """Get all the stock variables from the info dictionary. Stock variables
         are those that are assets or liabilities, i.e. their "sfc" tuple starts
-        with "asset" or "liability".
+        with "asset" or "liability". Variables without an "sfc" key are skipped
+        (non-SFC path).
         """
         return {
             k: v["sfc"]
             for k, v in self.info.items()
-            if v["sfc"][0][0].lower() in ["asset", "liability"]
+            if "sfc" in v and v["sfc"][0][0].lower() in ["asset", "liability"]
         }
 
     def get_flow_variables(self):
         """Get all the flow variables from the info dictionary. Flow variables
         are those that are flows between sectors i.e. their "sfc" tuple starts
-        with "inflow" or "outflow".
+        with "inflow" or "outflow". Variables without an "sfc" key are skipped
+        (non-SFC path).
         """
         return {
             k: v["sfc"]
             for k, v in self.info.items()
-            if v["sfc"][0][0].lower() in ["inflow", "outflow"]
+            if "sfc" in v and v["sfc"][0][0].lower() in ["inflow", "outflow"]
         }
 
     def get_index_variables(self):
         """Get all the index variables from the info dictionary. Index variables
         are those that are indices, i.e. their "sfc" tuple starts with "index".
+        Variables without an "sfc" key are skipped (non-SFC path).
         """
         return {
             k: v["sfc"]
             for k, v in self.info.items()
-            if v["sfc"][0][0].lower() == "index"
+            if "sfc" in v and v["sfc"][0][0].lower() == "index"
         }
 
     def balance_sheet_theoretical(
@@ -424,12 +427,16 @@ class Variables:
         # Any vector-based parameters will just be
         ts = {}
         for k, v in timeseries.items():
-            if k in sector_map:
+            v_sq = v.squeeze()
+            ncols = v_sq.shape[1] if v_sq.dim() > 1 else 1
+            if k in sector_map and len(sector_map[k]) == ncols:
+                # Label list matches the axis size — use sector labels.
                 secs = sector_map[k]
             else:
-                secs = list(range(v.squeeze().shape[1]))
+                # Het-agent or unresolved-label case — use positional indices.
+                secs = list(range(ncols))
 
-            ts[k] = pd.DataFrame(v.squeeze(), columns=secs)
+            ts[k] = pd.DataFrame(v_sq, columns=secs)
 
         df = pd.concat(ts.values(), keys=ts.keys(), axis=1)
         df.index.name = "time"
@@ -503,24 +510,62 @@ class Variables:
             if "history" in v and v["history"] > 0:
                 self.history[k] = []
 
-        # Initialize the timeseries
+        # Initialize the timeseries; gathered once at end of forward().
         self.timeseries_list = {k: [] for k in self.info}
-        self.timeseries = self.gather_timeseries()
+        self.timeseries = {}
         return state_vars, self.history
 
     def new_state(self, **kwargs):
-        """Initialize the state variables for the given period."""
+        """Initialize the state variables for the given period.
 
+        Each entry in ``info[k]["sectors"]`` is treated as a shape-axis spec.
+        An int literal is used as-is. A string is looked up via
+        ``self.parameters[entry]`` (which falls through to ``hyper``); if it
+        resolves to a positive int (or 1-element int-castable tensor), that
+        value is used. Otherwise the legacy ``len(sectors)`` interpretation
+        is applied (every entry is treated as a sector label).
+        """
         state = {}
         for k, v in self.info.items():
-            if "matrix" in v and len(v["sectors"]) > 0:
-                state[k] = torch.zeros(
-                    len(v["sectors"]), len(v["matrix"]), **self.tensor_kwargs
-                )
-            elif "sectors" in v and len(v["sectors"]) > 0:
-                state[k] = torch.zeros(len(v["sectors"]), **self.tensor_kwargs)
+            sectors = v.get("sectors", [])
+
+            resolved = []
+            all_resolved = True
+            for entry in sectors:
+                if isinstance(entry, int):
+                    resolved.append(entry)
+                elif isinstance(entry, str):
+                    try:
+                        val = self.parameters[entry]
+                    except (KeyError, TypeError):
+                        all_resolved = False
+                        break
+                    if isinstance(val, int) and val > 0:
+                        resolved.append(val)
+                    elif isinstance(val, torch.Tensor) and val.numel() == 1:
+                        try:
+                            resolved.append(max(int(val.item()), 1))
+                        except (ValueError, TypeError):
+                            all_resolved = False
+                            break
+                    else:
+                        all_resolved = False
+                        break
+                else:
+                    all_resolved = False
+                    break
+
+            if all_resolved and resolved:
+                shape = list(resolved)
+            elif sectors:
+                shape = [len(sectors)]
             else:
-                state[k] = torch.zeros(1, **self.tensor_kwargs)
+                shape = [1]
+
+            if "matrix" in v:
+                shape.append(len(v["matrix"]))
+
+            state[k] = torch.zeros(*shape, **self.tensor_kwargs)
 
         return state
 
@@ -579,14 +624,16 @@ class Variables:
         for k in list(key_state.intersection(key_series)):
             try:
                 self.timeseries_list[k].append(state_vars[k].clone())
-                # self.timeseries[k][t, :] = state_vars[k].clone().detach()
             except Exception as e:
                 logger.error(f"Error recording {k}:")
                 logger.error(f"State: {state_vars[k].clone().detach()}")
                 logger.error(f"Timeseries: {self.timeseries_list[k][t, :]}")
                 raise e
 
-        self.gather_timeseries()
+        # gather_timeseries() is called once at end of Behavior.forward().
+        # Repeated per-step calls would re-stack the full history every t and
+        # turn recording into O(T^2). Grep (2026-05-29) confirmed no consumer
+        # reads self.timeseries during the simulation loop.
 
     def _timeseries_tensor_to_list(self, tensordict):
         """Populate the self.timeseries_list given a tensor (e.g. from the
@@ -640,8 +687,8 @@ class Variables:
 
         for k, v in self.info.items():
             if "sfc" not in v:
-                logger.warning(f"No SFC information for {k}")
-                return False
+                logger.debug(f"No SFC information for {k} - treating as non-SFC")
+                continue
 
             if not isinstance(v["sfc"], (tuple, list)):
                 logger.warning(f"Sfc information for {k} is not a list or tuple")

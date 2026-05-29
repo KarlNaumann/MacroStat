@@ -152,14 +152,18 @@ class TestVariables:
         # Check that index variable is included
         assert set(indices.keys()) == {"priceIndex"}
 
-    def test_balance_sheet_theoretical_incomplete_info(self):
-        """Test theoretical balance sheet generation with incomplete info"""
+    def test_balance_sheet_theoretical_partial_sfc(self):
+        """Test theoretical balance sheet generation with one variable's SFC
+        info dropped: the non-SFC variable is silently skipped and the balance
+        sheet is built from the remaining SFC-having variables.
+        """
         v = Variables(
             variable_info=copy.deepcopy(self.variable_info), parameters=self.params
         )
         v.info["householdMoneyStock"].pop("sfc")
-        with pytest.raises(ValueError):
-            v.balance_sheet_theoretical()
+        bs = v.balance_sheet_theoretical()
+        # The dropped variable does not appear in any row index.
+        assert all("MoneyStock" not in str(idx) for idx in bs.index)
 
     def test_balance_sheet_theoretical_content(self):
         """Test theoretical balance sheet generation with content math format"""
@@ -205,14 +209,17 @@ class TestVariables:
         # Check that the total column sums to zero
         assert np.allclose(bs["Total"].sum(), 0)
 
-    def test_transaction_matrix_theoretical_incomplete_info(self):
-        """Test theoretical transaction matrix generation with incomplete info"""
+    def test_transaction_matrix_theoretical_partial_sfc(self):
+        """Test theoretical transaction matrix generation with one variable's
+        SFC info dropped: the non-SFC variable is silently skipped and the
+        matrix is built from the remaining SFC-having variables.
+        """
         v = Variables(
             variable_info=copy.deepcopy(self.variable_info), parameters=self.params
         )
         v.info["householdMoneyStock"].pop("sfc")
-        with pytest.raises(ValueError):
-            v.transaction_matrix_theoretical()
+        tm = v.transaction_matrix_theoretical()
+        assert all("MoneyStock" not in str(idx) for idx in tm.index)
 
     def test_transaction_matrix_theoretical_content(self):
         """Test theoretical transaction matrix generation with content"""
@@ -440,10 +447,13 @@ class TestVariables:
         assert set(history.keys()) == true_history
         # They are initialized as empty lists so no need to check the length
 
-        # Check timeseries initialization
-        assert set(v.timeseries.keys()) == set(self.variable_info.keys())
-        for k in v.timeseries.keys():
-            assert v.timeseries[k].shape == torch.Size([100])
+        # Check timeseries initialization: an empty dict, populated once at
+        # end of Behavior.forward() via gather_timeseries(). The timeseries_list
+        # holds the per-step buffers that gather_timeseries() will stack.
+        assert v.timeseries == {}
+        assert set(v.timeseries_list.keys()) == set(self.variable_info.keys())
+        for k in v.timeseries_list.keys():
+            assert v.timeseries_list[k] == []
 
     def test_new_state(self):
         """Test new state initialization"""
@@ -478,7 +488,12 @@ class TestVariables:
                 assert torch.allclose(history["firmProfit"][0], torch.ones(1) * i)
 
     def test_record_state(self, caplog):
-        """Test recording of state variables"""
+        """Test recording of state variables.
+
+        record_state now appends to timeseries_list per step; self.timeseries
+        is materialized once at end of forward() via gather_timeseries().
+        Tests check both the per-step buffer and the final stacked tensor.
+        """
         v = Variables(variable_info=self.variable_info, parameters=self.params)
         state, _ = v.initialize_tensors()
 
@@ -491,6 +506,17 @@ class TestVariables:
             }
             v.record_state(t, state)
 
+            assert torch.allclose(
+                v.timeseries_list["householdWealth"][t], torch.ones(1) * t
+            )
+            assert torch.allclose(
+                v.timeseries_list["householdConsumption"][t], torch.ones(1) * t
+            )
+            assert torch.allclose(v.timeseries_list["firmProfit"][t], torch.ones(1) * t)
+
+        # End-of-forward() gather populates self.timeseries
+        v.gather_timeseries()
+        for t in range(3):
             assert torch.allclose(v.timeseries["householdWealth"][t], torch.ones(1) * t)
             assert torch.allclose(
                 v.timeseries["householdConsumption"][t], torch.ones(1) * t
@@ -504,14 +530,16 @@ class TestVariables:
             "keys in state variables but not timeseries: {'extra_var'}" in caplog.text
         )
 
-        # Test error handling for mismatched shapes
+        # Test error handling for mismatched shapes: surfaces at end-of-forward
+        # gather_timeseries() rather than per-step record_state.
         state = {
             "householdWealth": torch.ones(2),  # Wrong shape, should be (1,)
             "householdConsumption": torch.ones(1),
             "firmProfit": torch.ones(1),
         }
+        v.record_state(4, state)
         with pytest.raises(Exception):
-            v.record_state(4, state)
+            v.gather_timeseries()
 
     def test_verify_sfc_item_missing_sfc_incorrect_type(self, caplog):
         """Test verification of SFC item: missing SFC"""
@@ -580,12 +608,18 @@ class TestVariables:
         assert not v.verify_sfc_info()
 
     def test_verify_sfc_info_missing_sfc(self, caplog):
-        """Test verification of SFC info: missing SFC info"""
+        """Test verification of SFC info: a variable missing 'sfc' is now
+        silently skipped (treated as non-SFC). verify_sfc_info still returns
+        True provided every *SFC-having* variable carries a valid sfc tuple.
+        """
+        import logging
+
         info = copy.deepcopy(self.variable_info)
         info["householdMoneyStock"].pop("sfc")
         v = Variables(variable_info=info, parameters=self.params)
 
-        assert not v.verify_sfc_info()
+        with caplog.at_level(logging.DEBUG, logger="macrostat.core.variables"):
+            assert v.verify_sfc_info()
         assert "No SFC information for householdMoneyStock" in caplog.text
 
     def test_verify_sfc_info_missing_sfc_item(self, caplog):
