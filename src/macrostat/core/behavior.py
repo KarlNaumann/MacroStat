@@ -337,6 +337,8 @@ class Behavior(torch.nn.Module):
             self.history = self.variables.update_history(self.state)
             self.prior = self.state
 
+        # Materialize self.variables.timeseries once at end (mirrors forward()).
+        self.variables.gather_timeseries()
         return None
 
     def compute_theoretical_steady_state_per_step(self, **kwargs):
