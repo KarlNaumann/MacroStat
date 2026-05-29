@@ -42,7 +42,16 @@ Standard test suite for every model:
 
 ## Migration Notes
 
-Kirman's Ants (SDE, 2 parameters) and Mark0 COVID (heterogeneous-agent ABM, 5000 firms, 23 parameters) are planned for migration from `packages/abmstat`. Key friction points: Variables class assumes SFC structure (needs to be optional for non-SFC models), fixed-shape tensor assumption blocks variable-size agent populations, 6-file convention is heavyweight for simple models.
+Kirman's Ants (SDE, 2 parameters) landed in S11. Mark0 COVID (heterogeneous-agent ABM, 5000 firms, 23 parameters) and Poledna are next.
+
+The two prior `Variables`-class friction points are resolved (dispatch `MacroStat_HetAgentInfra`, branch `feat/hetagent-infra`):
+
+- **Non-SFC mode**: variables without an `sfc` key are silently skipped by the balance-sheet / transaction-matrix builder and by `verify_sfc_info`. No opt-in flag — absence of `sfc` is the signal.
+- **Variable-shape tensor state**: `info[k]["sectors"]` is now a shape-axis list. Each entry is either an int literal or a string resolved via `Parameters.__getitem__` (which falls through to `self.hyper`). All entries resolving to positive ints → that shape tuple. Any failure → legacy `len(sectors)` fallback for SFC-style label lists. Mark-0 / Poledna declare `sectors=["N_firms"]` etc.; SFC models with `sectors=["Households", "Firms", "Banks"]` are unchanged.
+
+The 6-file convention is still heavyweight for simple models but acceptable for the planned ABM ports.
+
+`Behavior.forward()` is the only caller that materializes the wide `self.timeseries` dict (single `gather_timeseries()` at end of loop). `record_state` only appends to `timeseries_list`. Consumers must not read `self.timeseries` mid-loop.
 
 ## Continuous-Time / SDE Models
 
@@ -54,3 +63,5 @@ Kirman's Ants (SDE, 2 parameters) and Mark0 COVID (heterogeneous-agent ABM, 5000
 - **Inner-step recording**: model-local side-buffer (`self._micro_trajectory`) for the full micro-step trajectory; `record_state` continues to record outer values. Treat the side-buffer as model-private.
 
 When a second SDE model lands (Heston, Mark0-stochastic, OU): refactor both into a `ContinuousTimeBehavior` subclass and a frequency-aware `Variables.record_state` that retires the side-buffer.
+
+The `torch.Generator` / per-instance-RNG policy above also applies to heterogeneous-agent ABMs (Mark-0, Poledna): use `self.numpy_rng` / `self.torch_rng`, seed from `self.hyper["seed"]`, never touch global state. Same pattern, same justification (reproducibility across `forward()` calls and across processes).
