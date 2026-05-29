@@ -76,6 +76,15 @@ jobs:
           New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" `
             -Name "LongPathsEnabled" -Value 1 -PropertyType DWORD -Force | Out-Null
 
+      # GitHub's Windows runner runs jobs in a service context without USERNAME
+      # set. torch._inductor's cache_dir builder calls getpass.getuser(), which
+      # raises OSError if no name is available. Setting USERNAME here lets the
+      # cache_dir resolve and unblocks every test that triggers torch.compile.
+      - name: Set USERNAME for torch inductor cache_dir
+        if: runner.os == 'Windows'
+        shell: bash
+        run: echo "USERNAME=runner" >> "$GITHUB_ENV"
+
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
