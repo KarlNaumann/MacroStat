@@ -55,5 +55,6 @@ MANIFEST
 
 # Documentation files
 docs/_autosummary/
-
+EDITLOG.md
+.virtual_documents/
 docs/**/*.csv
