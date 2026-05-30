@@ -245,8 +245,11 @@ Calculate the endogenous deposit rate based on bank liquidity.
 	\begin{align}
 	r_m(t) = r_m(t-1) + \zeta_m \cdot (z_4 - z_5)
 	+ \zeta_b \cdot (r_b(t) - r_b(t-1))
-	where :math:`z_4 = 1` if :math:`BLR^T(t-1) < bot`,
 	\end{align}
+
+
+where :math:`z_4 = 1` if :math:`BLR^T(t-1) < bot`,
+:math:`z_5 = 1` if :math:`BLR^T(t-1) > top`.
 
 
 19. Employment
@@ -444,8 +447,11 @@ Calculate the endogenous loan rate based on bank profit margin.
 	\begin{align}
 	r_l(t) = r_l(t-1) + \zeta_l \cdot (z_6 - z_7)
 	+ (r_b(t) - r_b(t-1))
-	where :math:`z_6 = 1` if :math:`BPM(t) < bot_{pm}`,
 	\end{align}
+
+
+where :math:`z_6 = 1` if :math:`BPM(t) < bot_{pm}`,
+:math:`z_7 = 1` if :math:`BPM(t) > top_{pm}`.
 
 
 34. M1 Demand Tentative
@@ -571,8 +577,10 @@ Calculate the nominal wage via partial adjustment to target real wage.
 
 	\begin{align}
 	W(t) = W(t-1) \cdot (1 + \Omega_3 \cdot (\omega^T(t-1) - \omega(t-1)))
-	where :math:`\omega(t-1) = W(t-1) / p(t-1)`.
 	\end{align}
+
+
+where :math:`\omega(t-1) = W(t-1) / p(t-1)`.
 
 
 43. Nominal Wealth
