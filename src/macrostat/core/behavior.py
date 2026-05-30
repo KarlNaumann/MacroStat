@@ -385,7 +385,10 @@ class Behavior(torch.nn.Module):
             The variable to be converted.
 
         """
-        kwg = {"dtype": torch.float64, "requires_grad": True}
+        kwg = {
+            "dtype": x.dtype,
+            "requires_grad": self.hyper.get("requires_grad", False),
+        }
         return torch.div(
             torch.add(
                 torch.ones(x.size(), **kwg),
