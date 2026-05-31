@@ -98,8 +98,8 @@ logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 # %%
 phases = {
     "FU (R=0.5, Theta=3)": (0.5, 3.0),
-    "RU (R=2, Theta=1)": (2.0, 0.5),
-    "EC (R=2, Theta=2)": (2.0, 1.2),
+    "RU (R=2, Theta=0.5)": (2.0, 0.5),
+    "EC (R=2, Theta=1.2)": (2.0, 1.2),
     "FE (R=2, Theta=5)": (2.0, 5.0),
 }
 
@@ -144,11 +144,5 @@ plt.show()
 #   ``model.variables.timeseries`` is ``(T + 1, N_firms)``; aggregates
 #   are stored as ``(T + 1, 1)``. ``to_pandas()`` returns a multi-column
 #   DataFrame indexed by ``time``.
-# - The frozen-noise reparameterisation makes the forward pass
-#   differentiable with respect to the price, wage, and revival
-#   parameters. Reproducibility under fixed ``seed`` is verified in
-#   :mod:`tests.models.mark0covid_test`.
-# - The default ``dtype = torch.float64`` matches the abmstat reference.
-#   Override via ``ParametersMark0COVID(hyperparameters={"dtype":
-#   torch.float32})`` for faster GPU inference at the cost of larger
-#   trajectory drift versus abmstat.
+
+# %%
