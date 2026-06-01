@@ -113,17 +113,24 @@ class BehaviorMark0COVID(Behavior):
 
     def initialize_rng(self):
         """Allocate a per-instance ``torch.Generator`` seeded from
-        ``hyper["seed"]``. Never touches the global torch RNG."""
+        ``hyper["seed"]``. Never touches the global torch RNG.
+
+        Dependency
+        ----------
+        - hyper: seed
+        """
         self._torch_rng = torch.Generator()
         self._torch_rng.manual_seed(int(self.hyper["seed"]))
 
     def initialize_noise_buffers(self):
         r"""Pre-draw four independent ``(T, N_firms)`` U(0,1) buffers, in the
-        exact interleaved order abmstat uses live:
+        exact interleaved order the reference implementation uses live:
         ``price[t], wage[t], revive[t], revive_y[t]`` per period.
 
+        Notes
+        -----
         Uses the global torch RNG (``torch.manual_seed``) so the underlying
-        stream is bit-identical to abmstat's at the same seed. Saves and
+        stream is bit-identical to the reference at the same seed. Saves and
         restores the global state around the draws so no outside-state is
         polluted.
 
@@ -156,22 +163,56 @@ class BehaviorMark0COVID(Behavior):
     def initialize_firms(self):
         r"""Initialise firm-level state vectors and macro carry-over scalars.
 
-        Initial price and production carry a small linear spread across firms
-        ``2 * i / N - 1``, scaled by ``0.01``, replicating the abmstat
-        reference. Initial assets are ``2 * Y_i * W_i * (i / N)`` and the
-        money stock is rescaled to ``N`` after summing.
+        Firms are indexed :math:`i \in \{0, \ldots, N-1\}`. Initial price and
+        production carry a small linear spread across the index, scaled by
+        :math:`0.01`. Assets are seeded so the cross-section average equals
+        :math:`Y_0 W_0`. The aggregates :math:`\bar P`, :math:`\bar W`,
+        :math:`Y_{tot}`, :math:`A_{tot}` are recorded as production-weighted
+        moments.
+
+        Equations
+        ---------
+        .. math::
+            \begin{align}
+                P_{i,0} &= 1 + 0.01\,(2 i/N - 1), \\
+                Y_{i,0} &= Y_0 + 0.01\,(2 i/N - 1), \\
+                W_{i,0} &= 1, \quad D_{i,0} = Y_0, \\
+                A_{i,0} &= 2\,Y_{i,0}\,W_{i,0}\,(i/N), \\
+                \Pi_{i,0} &= P_{i,0}\,\min(D_{i,0}, Y_{i,0}) - W_{i,0}\,Y_{i,0}, \\
+                \alpha_{i,0} &= 1.
+            \end{align}
+
+        Each firm receives a distinct initial price, production, and asset
+        endowment, producing a non-degenerate cross-section before the first
+        macro step.
 
         Dependency
         ----------
         - params: InitialProductionScale
-        - params: InterestRateBaseline
         - hyper: N_firms
 
         Sets
         ----
-        - FirmPrice, FirmWage, FirmProduction, FirmDemand, FirmAssets,
-          FirmProfits, FirmAlive
-        - AveragePrice, AverageWage, MaxWage
+        - FirmPrice
+        - FirmWage
+        - FirmProduction
+        - FirmDemand
+        - FirmAssets
+        - FirmProfits
+        - FirmAlive
+        - AveragePrice
+        - AverageWage
+        - MaxWage
+        - TotalProduction
+        - FirmAssetsTotal
+        - FirmStayAlive
+        - FirmEnterBankruptcy
+        - FirmPayroll
+        - FirmExcessDemandQuantity
+        - FirmExcessDemandMask
+        - FirmExcessSupplyMask
+        - FirmRenSolvency
+        - FirmUnemployedLabourShare
         """
         n = int(self.hyper["N_firms"])
         kwg = {"dtype": self._dtype}
@@ -210,25 +251,62 @@ class BehaviorMark0COVID(Behavior):
         r"""Initialise macro state: savings, interest rates, employment,
         EWMA registers.
 
-        Total money stock is fixed to ``N`` by rescaling the household
-        savings :math:`S = N \cdot Y / (A + Y)` and firm assets
-        :math:`A_i \leftarrow A_i \cdot N / (A_{tot} + Y_{tot})`. The CB
-        rate, loan rate, and EWMA loan rate are all initialised to
-        ``rho_star``.
+        Total money stock is fixed to :math:`N` by rescaling household
+        savings :math:`S` and firm assets :math:`A_i` against the prior
+        firm endowment. The CB rate, loan rate, and EWMA loan rate are all
+        initialised to the baseline :math:`\rho^\star`; deposit-side rates,
+        inflation registers, and the bankruptcy / propensity / gamma /
+        default accumulators all initialise to zero.
+
+        Equations
+        ---------
+        .. math::
+            \begin{align}
+                S_0 &= N\,\frac{Y_{tot}}{A_{tot} + Y_{tot}}, \\
+                A_{i,0} &\leftarrow A_{i,0}\,\frac{N}{A_{tot} + Y_{tot}}, \\
+                M^0_0 &= N, \\
+                \rho^{CB}_0 = \rho^l_0 = \bar\rho^l_0 &= \rho^\star, \\
+                e_0 &= Y_{tot}/N, \quad u_0 = 1 - e_0.
+            \end{align}
+
+        Rescaling pins :math:`A_{tot} + S = N` exactly at :math:`t=0`, so the
+        money-stock identity holds before any phase fires.
 
         Dependency
         ----------
         - params: InterestRateBaseline
         - hyper: N_firms
-        - prior: FirmAssets, FirmProduction, FirmWage
+        - state: FirmProduction
+        - state: FirmWage
+        - state: FirmAssets
 
         Sets
         ----
-        - HouseholdSavings, M0Stock, CBRate, LoanRate, DepositRate,
-          DepositRateEWMA, LoanRateEWMA, Inflation, ExpectedInflationEWMA,
-          UnemploymentEWMA, Employment, Unemployment, BankruptcyRate,
-          ConsumptionPropensity, FirmSavingsTotal, FirmDebtTotal,
-          TotalPayroll, TotalDemand
+        - FirmAssets
+        - FirmAssetsTotal
+        - HouseholdSavings
+        - M0Stock
+        - CBRate
+        - LoanRate
+        - LoanRateEWMA
+        - DepositRate
+        - DepositRateEWMA
+        - UnemploymentEWMA
+        - Inflation
+        - ExpectedInflationEWMA
+        - ExpectedInflationUsed
+        - BankruptcyRate
+        - ConsumptionPropensity
+        - Employment
+        - Unemployment
+        - FirmSavingsTotal
+        - FirmDebtTotal
+        - TotalPayroll
+        - TotalDemand
+        - FirmGamma
+        - ConsumptionBudget
+        - DefaultedTotal
+        - LowestPrice
         """
         n = int(self.hyper["N_firms"])
         kwg = {"dtype": self._dtype}
@@ -307,6 +385,10 @@ class BehaviorMark0COVID(Behavior):
             Time-indexed scenario values.
         params : dict
             Parameters with scenario shocks applied.
+
+        Sets
+        ----
+        - TotalPayroll
         """
         for k, v in self.prior.items():
             self.state[k] = v.clone()
@@ -343,22 +425,54 @@ class BehaviorMark0COVID(Behavior):
     # ------------------------------------------------------------------
 
     def renormalize_prices(self, t, scenario, params):
-        r"""Rescale all nominal quantities by the average price so that
-        :math:`\bar P_t \equiv 1` going into the wage/price update.
+        r"""Rescale all nominal quantities by the lagged average price so
+        that :math:`\bar P_t \equiv 1` going into the wage/price update.
 
-        Sets
-        ----
-        - FirmPrice, FirmWage, FirmAssets, FirmProfits, HouseholdSavings,
-          AverageWage, MaxWage, M0Stock, AveragePrice
+        Every nominal series — firm prices, wages, assets, profits,
+        household savings, the wage moments, and the money stock — is
+        divided by :math:`\bar P_{t-1}` in lock-step. The carry-over
+        :math:`\bar P` then collapses to 1.
 
         Equations
         ---------
         .. math::
             \begin{align}
-                P_{i,t} \leftarrow P_{i,t} / \bar P_{t-1}, \quad
-                W_{i,t} \leftarrow W_{i,t} / \bar P_{t-1}, \quad
-                A_{i,t} \leftarrow A_{i,t} / \bar P_{t-1}.
+                P_{i,t} &\leftarrow P_{i,t} / \bar P_{t-1}, \\
+                W_{i,t} &\leftarrow W_{i,t} / \bar P_{t-1}, \\
+                A_{i,t} &\leftarrow A_{i,t} / \bar P_{t-1}, \\
+                \Pi_{i,t} &\leftarrow \Pi_{i,t} / \bar P_{t-1}, \\
+                S_t &\leftarrow S_t / \bar P_{t-1}, \\
+                \bar W_t, M_t^{0}, W^{\max}_t &\leftarrow (\cdot) / \bar P_{t-1}, \\
+                \bar P_t &\leftarrow 1.
             \end{align}
+
+        Lock-step rescaling preserves every nominal-quantity ratio while
+        zeroing out trend inflation in the carry-over level, so subsequent
+        wage and price update phases work in unit price units.
+
+        Dependency
+        ----------
+        - state: AveragePrice
+        - state: FirmPrice
+        - state: FirmWage
+        - state: FirmAssets
+        - state: FirmProfits
+        - state: HouseholdSavings
+        - state: AverageWage
+        - state: MaxWage
+        - state: M0Stock
+
+        Sets
+        ----
+        - FirmPrice
+        - FirmWage
+        - FirmAssets
+        - FirmProfits
+        - HouseholdSavings
+        - AverageWage
+        - MaxWage
+        - M0Stock
+        - AveragePrice
         """
         pavg = self.state["AveragePrice"]
         self.state["FirmPrice"] = self.state["FirmPrice"] / pavg
@@ -376,18 +490,48 @@ class BehaviorMark0COVID(Behavior):
         registers; convex combination of EWMA inflation and CB target for
         the expectation used downstream.
 
+        The four EWMA registers share the same memory weight
+        :math:`\omega`. The expected-inflation pipe used by every
+        downstream phase mixes the CB target with the EWMA term in a
+        fixed convex combination.
+
         Equations
         ---------
         .. math::
             \begin{align}
                 \pi^{ema}_t &= \omega\,\pi_{t-1} + (1-\omega)\,\pi^{ema}_{t-1}, \\
+                \bar\rho^d_t &= \omega\,\rho^d_{t-1} + (1-\omega)\,\bar\rho^d_{t-1}, \\
+                \bar\rho^l_t &= \omega\,\rho^l_{t-1} + (1-\omega)\,\bar\rho^l_{t-1}, \\
+                \bar u_t &= \omega\,u_{t-1} + (1-\omega)\,\bar u_{t-1}, \\
                 \hat\pi_t &= \tau^T \pi^\star + \tau^R \pi^{ema}_t.
             \end{align}
 
+        Smoothing the four registers in lock-step makes downstream
+        bank-side and household-side decisions react to slow-moving
+        aggregate signals rather than period noise.
+
+        Dependency
+        ----------
+        - params: EWMAMemory
+        - params: ExpectedInflationEWMAWeight
+        - params: ExpectedInflationTargetWeight
+        - params: CBInflationTarget
+        - state: Inflation
+        - state: ExpectedInflationEWMA
+        - state: DepositRate
+        - state: DepositRateEWMA
+        - state: LoanRate
+        - state: LoanRateEWMA
+        - state: Unemployment
+        - state: UnemploymentEWMA
+
         Sets
         ----
-        - ExpectedInflationEWMA, DepositRateEWMA, LoanRateEWMA,
-          UnemploymentEWMA, ExpectedInflationUsed
+        - ExpectedInflationEWMA
+        - DepositRateEWMA
+        - LoanRateEWMA
+        - UnemploymentEWMA
+        - ExpectedInflationUsed
         """
         omega = params["EWMAMemory"]
         tau_r = params["ExpectedInflationEWMAWeight"]
@@ -418,14 +562,36 @@ class BehaviorMark0COVID(Behavior):
         payroll are positive; survivors stay alive next period, the rest
         enter bankruptcy.
 
+        The differentiable indicator uses :meth:`Behavior.diffwhere` so
+        gradient flows through the solvency threshold. The bankruptcy
+        indicator is the squared complement, giving a smoother gradient
+        at the boundary.
+
         Equations
         ---------
         .. math::
-            \text{stay}_{i,t} = \alpha_{i,t-1} \cdot \text{diffwhere}\big(A_{i,t} + \Theta\, W_{i,t} Y_{i,t},\, 1,\, 0\big).
+            \begin{align}
+                \text{stay}_{i,t} &= \alpha_{i,t-1} \cdot \text{diffwhere}\big(A_{i,t} + \Theta\, W_{i,t} Y_{i,t},\, 1,\, 0\big), \\
+                \text{enter}_{i,t} &= \alpha_{i,t-1}\,(1 - \text{stay}_{i,t})^2.
+            \end{align}
+
+        Firms whose end-of-period assets cover a fraction :math:`\Theta`
+        of the next period's wage bill survive; the rest are flagged for
+        bankruptcy.
+
+        Dependency
+        ----------
+        - params: DefaultThreshold
+        - state: FirmAlive
+        - state: FirmWage
+        - state: FirmProduction
+        - state: FirmAssets
 
         Sets
         ----
-        - TotalPayroll (firm-vector temp), stay_alive (scratch), enter_bankruptcy (scratch)
+        - FirmStayAlive
+        - FirmEnterBankruptcy
+        - FirmPayroll
         """
         theta = params["DefaultThreshold"]
         payroll = self.state["FirmWage"] * self.state["FirmProduction"]
@@ -442,15 +608,40 @@ class BehaviorMark0COVID(Behavior):
         self._payroll_vec = payroll
 
     def demand_production_imbalance(self, t, scenario, params):
-        r"""Compute excess-demand and excess-supply masks.
+        r"""Compute the per-firm demand-production gap and the
+        corresponding excess-demand and excess-supply indicator masks.
 
+        Notes
+        -----
         ``torch.where`` here is differentiable through the value branches
-        (constants) but not the condition — fine because the condition does
-        not depend on any parameter.
+        (constants) but not through the condition. Acceptable because the
+        condition does not depend on any parameter.
+
+        Equations
+        ---------
+        .. math::
+            \begin{align}
+                \Delta Y_{i,t} &= \text{stay}_{i,t}\,(D_{i,t} - Y_{i,t}), \\
+                \mathbf{1}^D_{i,t} &= \mathbb{1}\{\Delta Y_{i,t} > 0\}, \\
+                \mathbf{1}^S_{i,t} &= \alpha_{i,t}\,\mathbb{1}\{D_{i,t} - Y_{i,t} \le 0\}.
+            \end{align}
+
+        The masks partition the surviving firm cross-section into
+        demand-constrained and supply-constrained sub-populations consumed
+        by the subsequent production, price, and wage updates.
+
+        Dependency
+        ----------
+        - state: FirmDemand
+        - state: FirmProduction
+        - state: FirmAlive
+        - state: FirmStayAlive
 
         Sets
         ----
-        - excess_demand (scratch), excess_supply (scratch), dY (scratch)
+        - FirmExcessDemandQuantity
+        - FirmExcessDemandMask
+        - FirmExcessSupplyMask
         """
         one = torch.ones_like(self.state["FirmProduction"])
         zero = torch.zeros_like(self.state["FirmProduction"])
@@ -468,20 +659,36 @@ class BehaviorMark0COVID(Behavior):
         self._excess_supply = excess_supply
 
     def compute_gamma_and_ren(self, t, scenario, params):
-        r"""Bank-side gamma (real-rate gap above baseline) and per-firm
-        ren ratio (gamma times solvency).
+        r"""Bank-side :math:`\Gamma` (real-rate gap above baseline) and
+        per-firm :math:`\text{ren}` ratio (:math:`\Gamma` times solvency).
 
         Equations
         ---------
         .. math::
             \begin{align}
-                \Gamma_t &= \Gamma_0 + \text{ReLU}\big(\alpha_\Gamma (\bar\rho^l_t - \hat\pi_t) - \Gamma_0\big), \\
+                \Gamma_t &= \Gamma_0 + \text{ReLU}\big(\alpha_\Gamma\,(\bar\rho^l_t - \hat\pi_t) - \Gamma_0\big), \\
                 \text{ren}_{i,t} &= \Gamma_t \cdot \frac{A_{i,t}}{W_{i,t} Y_{i,t} + \epsilon}.
             \end{align}
 
+        :math:`\Gamma_t` rises only when the real loan rate exceeds the
+        baseline; :math:`\text{ren}_{i,t}` scales each firm's gross
+        solvency by that bank-side aggressiveness, driving the hiring,
+        wage, and price asymmetries downstream.
+
+        Dependency
+        ----------
+        - params: LoanRateGammaSensitivity
+        - params: GammaBaseline
+        - hyper: epsilon
+        - state: LoanRateEWMA
+        - state: ExpectedInflationUsed
+        - state: FirmAssets
+        - state: FirmPayroll
+
         Sets
         ----
-        - FirmGamma, ren (scratch)
+        - FirmGamma
+        - FirmRenSolvency
         """
         alpha_g = params["LoanRateGammaSensitivity"]
         gamma_0 = params["GammaBaseline"]
@@ -498,12 +705,38 @@ class BehaviorMark0COVID(Behavior):
         self._ren = ren
 
     def compute_ushare(self, t, scenario, params):
-        r"""Per-firm share of unemployed labour pool via logit weight on
-        the wage gap to the maximum wage.
+        r"""Per-firm share of the unemployed labour pool via a logit
+        weight on the wage gap to the maximum wage.
+
+        Equations
+        ---------
+        .. math::
+            \begin{align}
+                z_{i,t} &= \beta\,(W_{i,t} - W^{\max}_t) / \bar W_t, \\
+                w_{i,t} &= \alpha_{i,t}\,e^{z_{i,t}}, \\
+                Z_t &= \sum_i w_{i,t}, \\
+                u^{\text{share}}_{i,t} &= \alpha_{i,t}\,\frac{u_t\,N\,(1 - \text{bust}_t)\,e^{z_{i,t}}}{Z_t + \epsilon}.
+            \end{align}
+
+        Higher-wage live firms attract a larger share of the unemployed
+        pool, allowing them to expand production faster when demand
+        pressure builds.
+
+        Dependency
+        ----------
+        - params: HouseholdIntensityOfChoice
+        - hyper: N_firms
+        - hyper: epsilon
+        - state: FirmWage
+        - state: MaxWage
+        - state: AverageWage
+        - state: FirmAlive
+        - state: Unemployment
+        - state: BankruptcyRate
 
         Sets
         ----
-        - u_share (scratch), wage_norm (scratch)
+        - FirmUnemployedLabourShare
         """
         beta = params["HouseholdIntensityOfChoice"]
         n = float(self.hyper["N_firms"])
@@ -529,8 +762,37 @@ class BehaviorMark0COVID(Behavior):
         self._arg = arg
 
     def production_adjustment(self, t, scenario, params):
-        r"""Adjust production: increase when excess demand, decrease when
-        excess supply. Eta_plus and eta_minus are clamped to ``[0, 1]``.
+        r"""Adjust production: increase when in excess-demand regime,
+        decrease when in excess-supply regime.
+
+        Equations
+        ---------
+        .. math::
+            \begin{align}
+                \eta^+_{i,t} &= \mathrm{clamp}\big(\eta_0 r\,(1 + \text{ren}_{i,t}),\,0,\,1\big), \\
+                \eta^-_{i,t} &= \mathrm{clamp}\big(\eta_0\,(1 - \text{ren}_{i,t}),\,0,\,1\big), \\
+                Y_{i,t} &\leftarrow Y_{i,t}
+                    + \text{stay}_{i,t}\,\mathbf{1}^D_{i,t}\,\min(\eta^+_{i,t}\,\Delta Y_{i,t},\,u^{\text{share}}_{i,t}) \\
+                    &\phantom{\leftarrow Y_{i,t}}\;
+                    + \text{stay}_{i,t}\,\mathbf{1}^S_{i,t}\,\eta^-_{i,t}\,\Delta Y_{i,t}.
+            \end{align}
+
+        Hiring is capped by the firm's share of the unemployed labour
+        pool, and firing is asymmetric to hiring through the
+        :math:`(1 + \text{ren})` versus :math:`(1 - \text{ren})`
+        modulation.
+
+        Dependency
+        ----------
+        - params: FiringPropensity
+        - params: HiringFiringRate
+        - state: FirmProduction
+        - state: FirmStayAlive
+        - state: FirmExcessDemandMask
+        - state: FirmExcessSupplyMask
+        - state: FirmExcessDemandQuantity
+        - state: FirmRenSolvency
+        - state: FirmUnemployedLabourShare
 
         Sets
         ----
@@ -559,23 +821,43 @@ class BehaviorMark0COVID(Behavior):
     def price_adjustment(self, t, scenario, params):
         r"""Price update from the frozen-noise buffer.
 
-        Excess-demand firms with below-average price scale ``P`` up by
-        ``(1 + rp)``; excess-supply firms with above-average price scale
-        down by ``(1 - rp)``. Branching uses ``torch.where`` to match
-        abmstat; gradient flow w.r.t. ``gammap`` is through ``rp``.
+        Excess-demand firms with below-average price scale :math:`P` up
+        by :math:`(1 + r_p)`; excess-supply firms with above-average
+        price scale down by :math:`(1 - r_p)`.
+
+        Notes
+        -----
+        Branching uses ``torch.where`` to match the reference; gradient
+        flow w.r.t. :math:`\gamma_p` is through :math:`r_p`, gradient
+        flow through the condition is suppressed.
 
         Equations
         ---------
         .. math::
             \begin{align}
-                r_p &= \gamma_p \, u^p_{t,i}, \\
-                P_{i,t} &\leftarrow P_{i,t} (1 + r_p)
-                  \text{ if stay}_{i,t}\,\text{excess}^D_{i,t}\,(P_{i,t} < \bar P_t).
+                r_p &= \gamma_p\,u^p_{t,i}, \\
+                P_{i,t} &\leftarrow P_{i,t}\,(1 + r_p)
+                    \quad\text{if}\quad \text{stay}_{i,t}\,\mathbf{1}^D_{i,t}\,(P_{i,t} < \bar P_t), \\
+                P_{i,t} &\leftarrow P_{i,t}\,(1 - r_p)
+                    \quad\text{if}\quad \mathbf{1}^S_{i,t}\,(P_{i,t} > \bar P_t).
             \end{align}
+
+        Below-average price-setters facing excess demand raise prices and
+        above-average price-setters facing excess supply cut prices,
+        pulling the cross-section toward the average.
+
+        Dependency
+        ----------
+        - params: PriceAdjustmentSize
+        - state: FirmPrice
+        - state: AveragePrice
+        - state: FirmStayAlive
+        - state: FirmExcessDemandMask
+        - state: FirmExcessSupplyMask
 
         Sets
         ----
-        - FirmPrice, priceup (scratch), pricedown (scratch)
+        - FirmPrice
         """
         gammap = params["PriceAdjustmentSize"]
         rp = gammap * self._noise_price[t]
@@ -603,17 +885,50 @@ class BehaviorMark0COVID(Behavior):
         r"""Smooth wage update from the frozen-noise buffer.
 
         Excess-demand profitable firms raise wages; excess-supply
-        loss-making firms lower wages. The wage ceiling
-        (cashflow-per-production) is enforced via ``diffmin``.
+        loss-making firms lower wages. The cashflow-per-production
+        ceiling caps wage increases at the firm's affordable level so
+        the asset balance does not turn nominally infeasible.
 
         Equations
         ---------
         .. math::
-            r_w = \gamma_p \cdot r \cdot u^w_{t,i}.
+            \begin{align}
+                r_w &= \gamma_p\,r\,u^w_{t,i}, \\
+                W_{i,t} &\leftarrow W_{i,t}\,[1 + (1 + \text{ren}_{i,t})\,r_w\,e_t]
+                    \quad\text{if}\quad \text{stay}_{i,t}\,\mathbf{1}^D_{i,t}\,(\Pi_{i,t} > 0), \\
+                W_{i,t} &\leftarrow \min\big(W_{i,t},\,\text{cashflow}_{i,t}/Y_{i,t}\big)
+                    \quad\text{(ceiling on the wage rise)}, \\
+                W_{i,t} &\leftarrow W_{i,t}\,[1 - (1 - \text{ren}_{i,t})\,r_w\,u_t]
+                    \quad\text{if}\quad \text{stay}_{i,t}\,\mathbf{1}^S_{i,t}\,(\Pi_{i,t} < 0).
+            \end{align}
+
+        Wage growth is gated on both regime (demand/supply) and firm
+        profitability; the cashflow ceiling prevents wage-driven
+        insolvency, and the :math:`(1 \pm \text{ren})` weighting
+        introduces the same hiring/firing asymmetry seen in production.
+
+        Dependency
+        ----------
+        - params: PriceAdjustmentSize
+        - params: WagePriceAdjustmentRatio
+        - state: FirmWage
+        - state: FirmPrice
+        - state: FirmDemand
+        - state: FirmProduction
+        - state: FirmAssets
+        - state: FirmProfits
+        - state: Employment
+        - state: Unemployment
+        - state: LoanRate
+        - state: DepositRate
+        - state: FirmStayAlive
+        - state: FirmExcessDemandMask
+        - state: FirmExcessSupplyMask
+        - state: FirmRenSolvency
 
         Sets
         ----
-        - FirmWage, mask_wageplus (scratch), mask_wageminus (scratch)
+        - FirmWage
         """
         gammap = params["PriceAdjustmentSize"]
         r_ratio = params["WagePriceAdjustmentRatio"]
@@ -687,9 +1002,30 @@ class BehaviorMark0COVID(Behavior):
         r"""Anticipated inflation pass-through into prices and wages for
         surviving firms.
 
+        Equations
+        ---------
+        .. math::
+            \begin{align}
+                P_{i,t} &\leftarrow P_{i,t}\,(1 + \hat\pi_t) \quad\text{if stay}_{i,t}, \\
+                W_{i,t} &\leftarrow W_{i,t}\,(1 + \hat\pi_t\,w_f) \quad\text{if stay}_{i,t}.
+            \end{align}
+
+        Surviving firms transmit a fraction :math:`w_f` of the expected
+        inflation to wages and the full amount to prices, building in a
+        wedge that drives the loan-rate response.
+
+        Dependency
+        ----------
+        - params: WageInflationFactor
+        - state: ExpectedInflationUsed
+        - state: FirmPrice
+        - state: FirmWage
+        - state: FirmStayAlive
+
         Sets
         ----
-        - FirmPrice, FirmWage
+        - FirmPrice
+        - FirmWage
         """
         wf = params["WageInflationFactor"]
         pi_used = self.state["ExpectedInflationUsed"]
@@ -709,14 +1045,46 @@ class BehaviorMark0COVID(Behavior):
     def recompute_firm_totals_stayalive(self, t, scenario, params):
         r"""Ordering-critical re-aggregation after the wage/price update.
 
-        Enforces non-negative production for surviving firms and recomputes
-        macro totals from the stay-alive mask. The recompute must happen
-        before ``bankrupt_firms`` zeroes out the bankrupt slice.
+        Enforces non-negative production for surviving firms via
+        :meth:`Behavior.diffwhere`, then recomputes macro totals from the
+        stay-alive mask. Must fire before :meth:`bankrupt_firms` zeroes
+        out the bankrupt slice.
+
+        Equations
+        ---------
+        .. math::
+            \begin{align}
+                Y_{i,t} &\leftarrow \text{diffwhere}\big(\text{stay}_{i,t},\,\max(Y_{i,t}, 0),\,Y_{i,t}\big), \\
+                Y_{tot} &= \sum_i \text{stay}_{i,t}\,Y_{i,t}, \\
+                W_{tot} &= \sum_i \text{stay}_{i,t}\,W_{i,t}\,Y_{i,t}, \\
+                \bar W_t &= W_{tot} / (Y_{tot} + \epsilon), \\
+                \bar P_t &= \sum_i \text{stay}_{i,t}\,P_{i,t}\,Y_{i,t} / (Y_{tot} + \epsilon), \\
+                S^{f+}_t &= \sum_i \text{stay}_{i,t}\,\max(A_{i,t}, 0), \\
+                D^{f-}_t &= \sum_i \text{stay}_{i,t}\,\max(-A_{i,t}, 0).
+            \end{align}
+
+        The clamp keeps production weakly positive for solvent firms; the
+        production-weighted averages and total payroll feed the
+        subsequent bank-rate and household-consumption phases.
+
+        Dependency
+        ----------
+        - hyper: epsilon
+        - state: FirmProduction
+        - state: FirmWage
+        - state: FirmPrice
+        - state: FirmAssets
+        - state: FirmStayAlive
 
         Sets
         ----
-        - FirmProduction (clamped), TotalProduction, TotalPayroll,
-          AverageWage, AveragePrice, FirmSavingsTotal, FirmDebtTotal
+        - FirmProduction
+        - TotalProduction
+        - TotalPayroll
+        - AverageWage
+        - AveragePrice
+        - FirmSavingsTotal
+        - FirmDebtTotal
         """
         zero_vec = torch.zeros_like(self.state["FirmProduction"])
         production = self.diffwhere(
@@ -748,11 +1116,27 @@ class BehaviorMark0COVID(Behavior):
         self.state["FirmDebtTotal"] = firm_debt.unsqueeze(0)
 
     def compute_lowest_price(self, t, scenario, params):
-        r"""Lowest price among surviving firms.
+        r"""Lowest price among surviving firms with positive price.
+
+        Equations
+        ---------
+        .. math::
+            \begin{align}
+                P^{\min}_t = \min_{i \in \{i: \text{stay}_{i,t}\,P_{i,t} > 0\}} P_{i,t}.
+            \end{align}
+
+        Dead firms are masked to a large sentinel so the minimum picks
+        up only live, positively-priced firms. The result anchors the
+        household demand allocation in the next phase.
+
+        Dependency
+        ----------
+        - state: FirmPrice
+        - state: FirmStayAlive
 
         Sets
         ----
-        - pmin (scratch)
+        - LowestPrice
         """
         alive_p = torch.where(
             self._stay_alive * self.state["FirmPrice"] > 0,
@@ -763,11 +1147,39 @@ class BehaviorMark0COVID(Behavior):
 
     def bankrupt_firms(self, t, scenario, params):
         r"""Zero out production, assets, wage of bankrupt firms; record
-        defaulted total.
+        the defaulted asset total.
+
+        Equations
+        ---------
+        .. math::
+            \begin{align}
+                D^{\text{def}}_t &= -\sum_i \text{enter}_{i,t}\,A_{i,t}, \\
+                Y_{i,t},\,A_{i,t},\,\alpha_{i,t},\,W_{i,t} &\leftarrow 0
+                    \quad\text{if}\quad \text{enter}_{i,t} = 1.
+            \end{align}
+
+        Bankrupt firms are zeroed simultaneously across production,
+        assets, alive flag, and wage; the negative-asset sum surfaces as
+        the system-level defaulted total, which the loan rate phase uses
+        to set the bankruptcy-adjusted spread.
+
+        Dependency
+        ----------
+        - state: FirmAssets
+        - state: FirmProduction
+        - state: FirmAlive
+        - state: FirmWage
+        - state: FirmStayAlive
+        - state: FirmEnterBankruptcy
 
         Sets
         ----
-        - FirmProduction, FirmAssets, FirmAlive, FirmWage, DefaultedTotal
+        - FirmProduction
+        - FirmAssets
+        - FirmAlive
+        - FirmWage
+        - DefaultedTotal
+        - FirmStayAlive
         """
         eb = self._enter_bankruptcy
         deftot = (eb * self.state["FirmAssets"] * -1.0).sum()
@@ -788,11 +1200,39 @@ class BehaviorMark0COVID(Behavior):
         self._stay_alive = self._stay_alive * self.state["FirmAlive"]
 
     def compute_moments(self, t, scenario, params):
-        r"""Recompute wage and price moments after bankruptcy.
+        r"""Recompute wage and price moments after bankruptcy zeroing.
+
+        Equations
+        ---------
+        .. math::
+            \begin{align}
+                W_{tot} &= \sum_i \text{stay}_{i,t}\,W_{i,t}\,Y_{i,t}, \\
+                \bar W_t &= W_{tot} / (Y_{tot} + \epsilon), \\
+                \bar P_t &= \sum_i \alpha_{i,t}\,P_{i,t}\,Y_{i,t} / (Y_{tot} + \epsilon), \\
+                W^{\max}_t &= \max_i \alpha_{i,t}\,W_{i,t}.
+            \end{align}
+
+        The post-bankruptcy moments anchor the bank-side and
+        household-side decisions: maximum wage drives the unemployment
+        logit, average price drives the demand allocation, average wage
+        feeds the consumption budget.
+
+        Dependency
+        ----------
+        - hyper: epsilon
+        - state: TotalProduction
+        - state: FirmAlive
+        - state: FirmWage
+        - state: FirmPrice
+        - state: FirmProduction
+        - state: FirmStayAlive
 
         Sets
         ----
-        - TotalPayroll, AverageWage, AveragePrice, MaxWage
+        - TotalPayroll
+        - AverageWage
+        - AveragePrice
+        - MaxWage
         """
         eps = self.hyper["epsilon"]
         ytot = self.state["TotalProduction"]
@@ -812,11 +1252,29 @@ class BehaviorMark0COVID(Behavior):
         self.state["MaxWage"] = wmax.unsqueeze(0)
 
     def compute_employment(self, t, scenario, params):
-        r"""Update employment and unemployment scalars.
+        r"""Update aggregate employment and unemployment scalars.
+
+        Equations
+        ---------
+        .. math::
+            \begin{align}
+                e_t &= Y_{tot} / N, \\
+                u_t &= 1 - e_t.
+            \end{align}
+
+        Aggregate employment is the total production normalised to the
+        labour-force ceiling; unemployment is the residual that
+        downstream wage and revival phases consume.
+
+        Dependency
+        ----------
+        - hyper: N_firms
+        - state: TotalProduction
 
         Sets
         ----
-        - Employment, Unemployment
+        - Employment
+        - Unemployment
         """
         n = float(self.hyper["N_firms"])
         employment = self.state["TotalProduction"] / n
@@ -824,13 +1282,41 @@ class BehaviorMark0COVID(Behavior):
         self.state["Unemployment"] = 1.0 - employment
 
     def solve_rounding_errors(self, t, scenario, params):
-        r"""Monetary-closure residual patch.
+        r"""Patch the monetary-closure residual to absorb floating-point
+        drift from earlier denominator regularisations.
 
-        abmstat gates ``S -= count`` on ``|count| > 0`` (line 937). Without the
-        gate, ``+ eps`` leakage from earlier denominator regularisations
-        accumulates monotonically into ``HouseholdSavings``. Gate is preserved
-        via ``torch.where`` value branches — gradient still flows through the
-        patched branch.
+        Notes
+        -----
+        The reference implementation gates the residual subtraction on a
+        finite-residual condition. Without the gate, the
+        ``+ epsilon`` leakage from divisor guards accumulates
+        monotonically into ``HouseholdSavings``. The gate is preserved
+        via ``torch.where`` value branches so the gradient still flows
+        through the patched branch.
+
+        Equations
+        ---------
+        .. math::
+            \begin{align}
+                R_t &= S_t + S^{f+}_t - D^{f-}_t - D^{\text{def}}_t - M^0_t, \\
+                S_t &\leftarrow
+                    \begin{cases}
+                        S_t - R_t & \text{if}\ |R_t| > 10^{-9}, \\
+                        S_t & \text{otherwise}.
+                    \end{cases}
+            \end{align}
+
+        The patch enforces the money-stock identity
+        :math:`M^0 = S + S^{f+} - D^{f-} - D^{\text{def}}` to within
+        floating-point tolerance at every period.
+
+        Dependency
+        ----------
+        - state: HouseholdSavings
+        - state: FirmSavingsTotal
+        - state: FirmDebtTotal
+        - state: DefaultedTotal
+        - state: M0Stock
 
         Sets
         ----
@@ -849,12 +1335,47 @@ class BehaviorMark0COVID(Behavior):
         )
 
     def set_interest_rates(self, t, scenario, params):
-        r"""Set loan rate (CB rate + bankruptcy-adjusted spread) and
-        deposit rate (residual closing the bank's balance sheet).
+        r"""Set loan rate (CB rate plus bankruptcy-adjusted spread) and
+        deposit rate (residual closing the bank's balance sheet); then
+        accrue interest on household savings.
+
+        Equations
+        ---------
+        .. math::
+            \begin{align}
+                \rho^l_t &=
+                    \begin{cases}
+                        \rho^{CB}_t + (1 - f)\,D^{\text{def}}_t / D^{f-}_t & \text{if}\ D^{f-}_t > 0, \\
+                        \rho^{CB}_t & \text{otherwise},
+                    \end{cases} \\
+                I_t &= \rho^l_t\,D^{f-}_t, \\
+                \rho^d_t &=
+                    \begin{cases}
+                        (I_t - D^{\text{def}}_t) / (S_t + S^{f+}_t) & \text{if}\ S_t + S^{f+}_t > 0, \\
+                        0 & \text{otherwise},
+                    \end{cases} \\
+                S_t &\leftarrow (1 + \rho^d_t)\,S_t.
+            \end{align}
+
+        The loan-rate spread compensates the bank for default losses; the
+        deposit rate is whatever residual balances total bank cashflow
+        against accrued interest, so the bank's balance sheet closes
+        without an exogenous funding source.
+
+        Dependency
+        ----------
+        - params: BankruptcyInterestEffect
+        - state: CBRate
+        - state: FirmDebtTotal
+        - state: DefaultedTotal
+        - state: HouseholdSavings
+        - state: FirmSavingsTotal
 
         Sets
         ----
-        - LoanRate, DepositRate, HouseholdSavings
+        - LoanRate
+        - DepositRate
+        - HouseholdSavings
         """
         f = params["BankruptcyInterestEffect"]
 
@@ -887,12 +1408,46 @@ class BehaviorMark0COVID(Behavior):
         ]
 
     def household_consumption(self, t, scenario, params):
-        r"""Logit demand allocation across firms; updates household
-        propensity, budget, demand, and total demand.
+        r"""Update the household consumption propensity, set the budget,
+        and allocate firm-level demand by a logit weight on the price
+        gap to the lowest live price.
+
+        Equations
+        ---------
+        .. math::
+            \begin{align}
+                c_t &= \mathrm{clamp}\big(c_0\,[1 + \alpha_c\,(\hat\pi_t - \bar\rho^d_t)],\,0,\,1\big), \\
+                B_t &= c_t\,[W_{tot} + \max(S_t, 0)], \\
+                z_{i,t} &= \beta\,(P^{\min}_t - P_{i,t}) / \bar P_t, \\
+                D_{i,t} &= \alpha_{i,t}\,\frac{B_t\,e^{z_{i,t}}}{(\sum_j \alpha_{j,t}\,e^{z_{j,t}} + \epsilon)\,P_{i,t}}, \\
+                D_t^{tot} &= \sum_i \alpha_{i,t}\,D_{i,t}.
+            \end{align}
+
+        Real-rate gaps raise the consumption propensity; the logit
+        allocation sends a larger share of demand to lower-priced live
+        firms, transmitting price competition into the real economy.
+
+        Dependency
+        ----------
+        - params: ConsumptionPropensityBaseline
+        - params: ConsumptionRealRateSensitivity
+        - params: HouseholdIntensityOfChoice
+        - hyper: epsilon
+        - state: ExpectedInflationUsed
+        - state: DepositRateEWMA
+        - state: HouseholdSavings
+        - state: TotalPayroll
+        - state: FirmPrice
+        - state: AveragePrice
+        - state: FirmAlive
+        - state: LowestPrice
 
         Sets
         ----
-        - ConsumptionPropensity, ConsumptionBudget, FirmDemand, TotalDemand
+        - ConsumptionPropensity
+        - ConsumptionBudget
+        - FirmDemand
+        - TotalDemand
         """
         c0 = params["ConsumptionPropensityBaseline"]
         alpha_c = params["ConsumptionRealRateSensitivity"]
@@ -928,21 +1483,44 @@ class BehaviorMark0COVID(Behavior):
         self.state["ConsumptionBudget"] = budget
 
     def firm_accounting(self, t, scenario, params):
-        r"""EBIT, profits, household savings drawdown, asset update.
+        r"""Realise per-firm EBIT and profits, draw down household savings
+        by the aggregate EBIT, and update firm assets by the
+        alive-weighted profit stream.
 
         Equations
         ---------
         .. math::
             \begin{align}
-                \text{ebit}_{i,t} &= P_{i,t} \min(D_{i,t}, Y_{i,t}) - W_{i,t} Y_{i,t}, \\
-                \Pi_{i,t} &= \text{ebit}_{i,t} + \rho^l_t \min(A_{i,t}, 0) + \rho^d_t \max(A_{i,t}, 0), \\
-                A_{i,t} &\leftarrow A_{i,t} + \alpha_{i,t} \Pi_{i,t}, \\
-                S_t &\leftarrow S_t - \sum_i \alpha_{i,t} \text{ebit}_{i,t}.
+                \text{ebit}_{i,t} &= P_{i,t}\,\min(D_{i,t}, Y_{i,t}) - W_{i,t}\,Y_{i,t}, \\
+                \Pi_{i,t} &= \text{ebit}_{i,t}
+                    + \rho^l_t\,\min(A_{i,t}, 0)
+                    + \rho^d_t\,\max(A_{i,t}, 0), \\
+                A_{i,t} &\leftarrow A_{i,t} + \alpha_{i,t}\,\Pi_{i,t}, \\
+                S_t &\leftarrow S_t - \sum_i \alpha_{i,t}\,\text{ebit}_{i,t}.
             \end{align}
+
+        The accounting balances aggregate EBIT against the household
+        savings drawdown and pushes profit signals into firm assets,
+        carrying the previous-period balance-sheet effects into the next
+        bankruptcy check.
+
+        Dependency
+        ----------
+        - state: FirmPrice
+        - state: FirmProduction
+        - state: FirmDemand
+        - state: FirmWage
+        - state: FirmAssets
+        - state: FirmAlive
+        - state: LoanRate
+        - state: DepositRate
+        - state: HouseholdSavings
 
         Sets
         ----
-        - FirmProfits, HouseholdSavings, FirmAssets
+        - FirmProfits
+        - HouseholdSavings
+        - FirmAssets
         """
         zero_vec = torch.zeros_like(self.state["FirmAssets"])
         ebit = (
@@ -964,11 +1542,35 @@ class BehaviorMark0COVID(Behavior):
         )
 
     def pay_dividends(self, t, scenario, params):
-        r"""Pay dividends from firms with positive assets and profits.
+        r"""Pay dividends from firms with positive assets and profits;
+        credit household savings, debit firm assets.
+
+        Equations
+        ---------
+        .. math::
+            \begin{align}
+                m_{i,t} &= \alpha_{i,t}\,\mathbb{1}\{A_{i,t} > 0\}\,\mathbb{1}\{\Pi_{i,t} > 0\}, \\
+                d_{i,t} &= m_{i,t}\,A_{i,t}\,\delta, \\
+                S_t &\leftarrow S_t + \sum_i d_{i,t}, \\
+                A_{i,t} &\leftarrow A_{i,t} - d_{i,t}.
+            \end{align}
+
+        The mask gates dividends on both balance-sheet sign and
+        profitability, recycling part of the surviving firms' surplus
+        back to households as a closed-loop income source.
+
+        Dependency
+        ----------
+        - params: DividendShare
+        - state: FirmAlive
+        - state: FirmAssets
+        - state: FirmProfits
+        - state: HouseholdSavings
 
         Sets
         ----
-        - HouseholdSavings, FirmAssets
+        - HouseholdSavings
+        - FirmAssets
         """
         delta = params["DividendShare"]
         ones = torch.ones_like(self.state["FirmAssets"])
@@ -988,10 +1590,31 @@ class BehaviorMark0COVID(Behavior):
         r"""Ordering-critical re-aggregation after firm accounting and
         dividends.
 
+        Equations
+        ---------
+        .. math::
+            \begin{align}
+                D^{tot}_t &= \sum_i \alpha_{i,t}\,D_{i,t}, \\
+                S^{f+}_t &= \sum_i \text{stay}_{i,t}\,\max(A_{i,t}, 0), \\
+                A^{tot}_t &= \sum_i \alpha_{i,t}\,A_{i,t}.
+            \end{align}
+
+        The recompute refreshes the aggregate stocks the revival and
+        balance-sheet-adjustment phases will read, after firm-level
+        profits and dividends have moved cash around.
+
+        Dependency
+        ----------
+        - state: FirmAlive
+        - state: FirmDemand
+        - state: FirmAssets
+        - state: FirmStayAlive
+
         Sets
         ----
-        - TotalDemand, FirmProfits (sum aggregated implicitly),
-          FirmSavingsTotal, FirmAssetsTotal
+        - TotalDemand
+        - FirmSavingsTotal
+        - FirmAssetsTotal
         """
         zero_vec = torch.zeros_like(self.state["FirmAssets"])
         self.state["TotalDemand"] = (
@@ -1007,22 +1630,62 @@ class BehaviorMark0COVID(Behavior):
         )
 
     def revive_firms(self, t, scenario, params):
-        r"""Bernoulli revival of dead firms.
+        r"""Bernoulli revival of dead firms; revived firms receive a
+        fresh production / price / wage / asset endowment.
 
-        Inverse-CDF draw:
-        :math:`\text{revive}_{i,t} = (1 - \alpha_{i,t})\,\mathbf{1}\{u^r_{t,i} < \phi\}`
-        with :math:`u^r_{t,i} \sim U(0,1)` pre-drawn in
-        :meth:`initialize_noise_buffers`. Branch logic uses ``torch.where``
-        to match abmstat; gradient w.r.t. ``phi`` does not flow through the
+        Notes
+        -----
+        Branch logic uses ``torch.where`` to match the reference;
+        gradient w.r.t. :math:`\phi` does not flow through the
         indicator (treated as fixed-noise per period).
 
-        Revived firms receive fresh ``Y, P, W, A``. Defaulted total is
-        updated with the new firm assets.
+        Equations
+        ---------
+        .. math::
+            \begin{align}
+                m^{\text{rev}}_{i,t} &= (1 - \alpha_{i,t})\,\mathbb{1}\{u^r_{t,i} < \phi\}, \\
+                Y_{i,t} &\leftarrow \max(u_t, 0)\,u^{r,Y}_{t,i}
+                    \quad\text{if}\quad m^{\text{rev}}_{i,t} = 1, \\
+                P_{i,t} &\leftarrow \bar P_t,\quad
+                W_{i,t} \leftarrow \bar W_t
+                    \quad\text{if}\quad m^{\text{rev}}_{i,t} = 1, \\
+                A_{i,t} &\leftarrow W_{i,t}\,Y_{i,t}
+                    \quad\text{if}\quad m^{\text{rev}}_{i,t} = 1, \\
+                \Pi_{i,t} &\leftarrow 0
+                    \quad\text{if}\quad m^{\text{rev}}_{i,t} = 1, \\
+                D^{\text{def}}_t &= \sum_i m^{\text{rev}}_{i,t}\,A_{i,t}, \\
+                S^{f+}_t &\leftarrow S^{f+}_t + D^{\text{def}}_t, \\
+                \alpha_{i,t} &\leftarrow \alpha_{i,t} + m^{\text{rev}}_{i,t}.
+            \end{align}
+
+        Revival keeps the firm count steady and seeds new entrants near
+        the average wage and price, preventing the population from
+        collapsing.
+
+        Dependency
+        ----------
+        - params: FirmRevivalProbability
+        - state: FirmAlive
+        - state: FirmProduction
+        - state: FirmPrice
+        - state: FirmWage
+        - state: FirmAssets
+        - state: FirmProfits
+        - state: AveragePrice
+        - state: AverageWage
+        - state: Unemployment
+        - state: FirmSavingsTotal
 
         Sets
         ----
-        - FirmAlive, FirmProduction, FirmPrice, FirmWage, FirmAssets,
-          FirmProfits, DefaultedTotal, FirmSavingsTotal
+        - FirmAlive
+        - FirmProduction
+        - FirmPrice
+        - FirmWage
+        - FirmAssets
+        - FirmProfits
+        - DefaultedTotal
+        - FirmSavingsTotal
         """
         phi = params["FirmRevivalProbability"]
         zero_vec = torch.zeros_like(self.state["FirmProduction"])
@@ -1064,17 +1727,53 @@ class BehaviorMark0COVID(Behavior):
         self._revive_mask = revive_mask
 
     def recompute_firm_totals_revival(self, t, scenario, params):
-        r"""Ordering-critical re-aggregation after revival and the
-        deftot-driven balance-sheet adjustment.
+        r"""Ordering-critical re-aggregation after revival; absorb the
+        default loss into surviving firms' assets, then refresh every
+        macro aggregate that downstream phases will read.
 
-        Adjusts firm assets to absorb the default loss proportional to
-        positive assets, then re-aggregates payroll, production, debt, and
-        price moments.
+        Equations
+        ---------
+        .. math::
+            \begin{align}
+                A_{i,t} &\leftarrow A_{i,t} - A_{i,t}\,\frac{D^{\text{def}}_t}{\tilde S^{f+}_t}
+                    \quad\text{if}\quad \alpha_{i,t}\,S^{f+}_t\,A_{i,t} > 0, \\
+                W_{tot} &= \sum_i \alpha_{i,t}\,W_{i,t}\,Y_{i,t}, \\
+                Y_{tot} &= \sum_i \alpha_{i,t}\,Y_{i,t}, \\
+                A_{tot} &= \sum_i \alpha_{i,t}\,A_{i,t}, \\
+                D^{f-}_t &= \sum_i \alpha_{i,t}\,\max(-A_{i,t}, 0), \\
+                W^{\max}_t &= \max_i \alpha_{i,t}\,W_{i,t}, \\
+                \text{bust}_t &= (N - \sum_i \alpha_{i,t})/N, \\
+                \bar P_t &= \sum_i \alpha_{i,t}\,P_{i,t}\,Y_{i,t} / (Y_{tot} + \epsilon), \\
+                \bar W_t &= W_{tot} / (Y_{tot} + \epsilon).
+            \end{align}
+
+        The proportional default absorption keeps the aggregate-asset
+        identity intact across revival; the refreshed moments feed the
+        inflation phase and the next period's wage and price updates.
+
+        Dependency
+        ----------
+        - hyper: epsilon
+        - hyper: N_firms
+        - state: FirmAssets
+        - state: FirmAlive
+        - state: FirmWage
+        - state: FirmProduction
+        - state: FirmPrice
+        - state: FirmSavingsTotal
+        - state: DefaultedTotal
 
         Sets
         ----
-        - FirmAssets, TotalPayroll, TotalProduction, FirmAssetsTotal,
-          FirmDebtTotal, MaxWage, BankruptcyRate, AveragePrice, AverageWage
+        - FirmAssets
+        - TotalPayroll
+        - TotalProduction
+        - FirmAssetsTotal
+        - FirmDebtTotal
+        - MaxWage
+        - BankruptcyRate
+        - AveragePrice
+        - AverageWage
         """
         eps = self.hyper["epsilon"]
         zero_vec = torch.zeros_like(self.state["FirmAssets"])
@@ -1116,16 +1815,39 @@ class BehaviorMark0COVID(Behavior):
         self.state["AverageWage"] = wavg.unsqueeze(0)
 
     def compute_inflation_and_employment(self, t, scenario, params):
-        r"""Inflation from current/prior average price; employment update.
+        r"""Inflation from the current/prior average price; aggregate
+        employment update.
 
-        After :meth:`renormalize_prices`, the carry-over price level is 1
-        (the prior period's ``AveragePrice`` divided by itself, mirroring
-        abmstat's ``Pold = Pold / Pavg``), so inflation in renormalised units
-        is ``state["AveragePrice"] - 1``.
+        Notes
+        -----
+        After :meth:`renormalize_prices` the carry-over price level is 1
+        (the prior period's average price divided by itself), so
+        inflation in the renormalised units is just
+        :math:`\bar P_t - 1`.
+
+        Equations
+        ---------
+        .. math::
+            \begin{align}
+                \pi_t &= \bar P_t - 1, \\
+                e_t &= Y_{tot} / N, \\
+                u_t &= 1 - e_t.
+            \end{align}
+
+        Re-deriving employment after revival closes the labour-market
+        identity used by the next period's wage and consumption phases.
+
+        Dependency
+        ----------
+        - hyper: N_firms
+        - state: AveragePrice
+        - state: TotalProduction
 
         Sets
         ----
-        - Inflation, Employment, Unemployment
+        - Inflation
+        - Employment
+        - Unemployment
         """
         self.state["Inflation"] = self.state["AveragePrice"] - 1.0
 
@@ -1135,12 +1857,25 @@ class BehaviorMark0COVID(Behavior):
         self.state["Unemployment"] = 1.0 - employment
 
     def monetary_policy(self, t, scenario, params):
-        r"""Central bank policy: Taylor-like rule on EMA inflation only.
+        r"""Central bank policy: Taylor-like rule on EWMA inflation only.
 
         Equations
         ---------
         .. math::
-            \rho^0_t = \rho^\star + \phi_\pi (\pi^{ema}_t - \pi^\star).
+            \begin{align}
+                \rho^{CB}_t = \rho^\star + \phi_\pi\,(\pi^{ema}_t - \pi^\star).
+            \end{align}
+
+        The CB raises the policy rate when EWMA inflation runs above
+        target and lowers it when it runs below, feeding into the next
+        period's loan-rate setting and the household propensity gap.
+
+        Dependency
+        ----------
+        - params: InterestRateBaseline
+        - params: CBInflationReaction
+        - params: CBInflationTarget
+        - state: ExpectedInflationEWMA
 
         Sets
         ----
