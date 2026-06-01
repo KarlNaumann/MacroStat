@@ -216,15 +216,14 @@ class BehaviorMark0COVID(Behavior):
         """
         n = int(self.hyper["N_firms"])
         kwg = {"dtype": self._dtype}
-        y0 = float(self.params["InitialProductionScale"].item())
 
         ratio = torch.arange(n, **kwg) / n
         spread = 2.0 * ratio - 1.0
 
         price = torch.ones(n, **kwg) + 0.01 * spread
-        production = y0 + 0.01 * spread
+        production = self.params["InitialProductionScale"] + 0.01 * spread
         wage = torch.ones(n, **kwg)
-        demand = torch.full((n,), y0, **kwg)
+        demand = torch.ones(n, **kwg) * self.params["InitialProductionScale"]
         assets = 2.0 * production * wage * ratio
         ytot = production.sum()
         payroll = wage * production
@@ -324,10 +323,10 @@ class BehaviorMark0COVID(Behavior):
         self.state["HouseholdSavings"] = ytot * rescale
         self.state["M0Stock"] = torch.tensor(float(n), **kwg)
 
-        rho0 = float(self.params["InterestRateBaseline"].item())
-        self.state["CBRate"] = torch.tensor(rho0, **kwg)
-        self.state["LoanRate"] = torch.tensor(rho0, **kwg)
-        self.state["LoanRateEWMA"] = torch.tensor(rho0, **kwg)
+        rho0 = self.params["InterestRateBaseline"].to(**kwg).reshape(())
+        self.state["CBRate"] = rho0.clone()
+        self.state["LoanRate"] = rho0.clone()
+        self.state["LoanRateEWMA"] = rho0.clone()
         self.state["DepositRate"] = torch.zeros((), **kwg)
         self.state["DepositRateEWMA"] = torch.zeros((), **kwg)
         self.state["UnemploymentEWMA"] = torch.zeros((), **kwg)
@@ -1107,21 +1106,16 @@ class BehaviorMark0COVID(Behavior):
             self.state["FirmProduction"],
         )
 
-        ytot = (self.state["FirmStayAlive"] * self.state["FirmProduction"]).sum()
-        wtot = (
-            self.state["FirmStayAlive"]
-            * self.state["FirmWage"]
-            * self.state["FirmProduction"]
-        ).sum()
+        weighted_y = self.state["FirmStayAlive"] * self.state["FirmProduction"]
+        ytot = weighted_y.sum()
+        wtot = (weighted_y * self.state["FirmWage"]).sum()
 
         self.state["TotalProduction"] = ytot
         self.state["TotalPayroll"] = wtot
         self.state["AverageWage"] = wtot / (ytot + self.hyper["epsilon"])
-        self.state["AveragePrice"] = (
-            self.state["FirmStayAlive"]
-            * self.state["FirmPrice"]
-            * self.state["FirmProduction"]
-        ).sum() / (ytot + self.hyper["epsilon"])
+        self.state["AveragePrice"] = (weighted_y * self.state["FirmPrice"]).sum() / (
+            ytot + self.hyper["epsilon"]
+        )
         self.state["FirmSavingsTotal"] = (
             self.state["FirmStayAlive"]
             * torch.maximum(self.state["FirmAssets"], zero_vec)
