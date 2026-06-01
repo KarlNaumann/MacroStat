@@ -271,4 +271,58 @@ class VariablesMark0COVID(Variables):
                 "history": 0,
                 "sectors": scalar,
             },
+            "FirmStayAlive": {
+                "notation": r"\sigma_{i,t}",
+                "unit": ".",
+                "history": 0,
+                "sectors": firm,
+            },
+            "FirmEnterBankruptcy": {
+                "notation": r"\beta_{i,t}",
+                "unit": ".",
+                "history": 0,
+                "sectors": firm,
+            },
+            "FirmPayroll": {
+                "notation": r"W_{i,t} Y_{i,t}",
+                "unit": ".",
+                "history": 0,
+                "sectors": firm,
+            },
+            "FirmExcessDemandQuantity": {
+                "notation": r"\Delta Y_{i,t}",
+                "unit": ".",
+                "history": 0,
+                "sectors": firm,
+            },
+            "FirmExcessDemandMask": {
+                "notation": r"\mathbf{1}^D_{i,t}",
+                "unit": ".",
+                "history": 0,
+                "sectors": firm,
+            },
+            "FirmExcessSupplyMask": {
+                "notation": r"\mathbf{1}^S_{i,t}",
+                "unit": ".",
+                "history": 0,
+                "sectors": firm,
+            },
+            "FirmRenSolvency": {
+                "notation": r"\text{ren}_{i,t}",
+                "unit": ".",
+                "history": 0,
+                "sectors": firm,
+            },
+            "FirmUnemployedLabourShare": {
+                "notation": r"u^{\text{share}}_{i,t}",
+                "unit": ".",
+                "history": 0,
+                "sectors": firm,
+            },
+            "LowestPrice": {
+                "notation": r"P^{\min}_t",
+                "unit": ".",
+                "history": 0,
+                "sectors": scalar,
+            },
         }

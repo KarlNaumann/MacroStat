@@ -247,6 +247,16 @@ class BehaviorMark0COVID(Behavior):
         self.state["TotalProduction"] = ytot.unsqueeze(0)
         self.state["FirmAssetsTotal"] = atot.unsqueeze(0)
 
+        zero_firm = torch.zeros(n, **kwg)
+        self.state["FirmStayAlive"] = alive
+        self.state["FirmEnterBankruptcy"] = zero_firm.clone()
+        self.state["FirmPayroll"] = wage * production
+        self.state["FirmExcessDemandQuantity"] = zero_firm.clone()
+        self.state["FirmExcessDemandMask"] = zero_firm.clone()
+        self.state["FirmExcessSupplyMask"] = zero_firm.clone()
+        self.state["FirmRenSolvency"] = zero_firm.clone()
+        self.state["FirmUnemployedLabourShare"] = zero_firm.clone()
+
     def initialize_macro(self):
         r"""Initialise macro state: savings, interest rates, employment,
         EWMA registers.
@@ -357,6 +367,7 @@ class BehaviorMark0COVID(Behavior):
         self.state["FirmGamma"] = zero_scalar.clone()
         self.state["ConsumptionBudget"] = zero_scalar.clone()
         self.state["DefaultedTotal"] = zero_scalar.clone()
+        self.state["LowestPrice"] = torch.ones(1, **kwg)
 
     # ------------------------------------------------------------------
     # Per-period step dispatcher
@@ -418,7 +429,7 @@ class BehaviorMark0COVID(Behavior):
         self.recompute_firm_totals_revival(t, scenario, params)
         self.compute_inflation_and_employment(t, scenario, params)
         self.monetary_policy(t, scenario, params)
-        self.state["TotalPayroll"] = self._payroll_vec.sum().unsqueeze(0)
+        self.state["TotalPayroll"] = self.state["FirmPayroll"].sum().unsqueeze(0)
 
     # ------------------------------------------------------------------
     # Phase methods
@@ -603,9 +614,9 @@ class BehaviorMark0COVID(Behavior):
         enter_bankruptcy = (1.0 - stay_alive).pow(2)
 
         alive = self.state["FirmAlive"]
-        self._stay_alive = alive * stay_alive
-        self._enter_bankruptcy = alive * enter_bankruptcy
-        self._payroll_vec = payroll
+        self.state["FirmStayAlive"] = alive * stay_alive
+        self.state["FirmEnterBankruptcy"] = alive * enter_bankruptcy
+        self.state["FirmPayroll"] = payroll
 
     def demand_production_imbalance(self, t, scenario, params):
         r"""Compute the per-firm demand-production gap and the
@@ -646,7 +657,7 @@ class BehaviorMark0COVID(Behavior):
         one = torch.ones_like(self.state["FirmProduction"])
         zero = torch.zeros_like(self.state["FirmProduction"])
 
-        dY = self._stay_alive * (
+        dY = self.state["FirmStayAlive"] * (
             self.state["FirmDemand"] - self.state["FirmProduction"]
         )
         excess_demand = torch.where(dY > 0, one, zero)
@@ -654,9 +665,9 @@ class BehaviorMark0COVID(Behavior):
             self.state["FirmDemand"] - self.state["FirmProduction"] <= 0, one, zero
         )
 
-        self._dY = dY
-        self._excess_demand = excess_demand
-        self._excess_supply = excess_supply
+        self.state["FirmExcessDemandQuantity"] = dY
+        self.state["FirmExcessDemandMask"] = excess_demand
+        self.state["FirmExcessSupplyMask"] = excess_supply
 
     def compute_gamma_and_ren(self, t, scenario, params):
         r"""Bank-side :math:`\Gamma` (real-rate gap above baseline) and
@@ -699,10 +710,10 @@ class BehaviorMark0COVID(Behavior):
             - gamma_0
         )
         gamma = gamma_0 + torch.relu(gap)
-        ren = gamma * (self.state["FirmAssets"] / (self._payroll_vec + eps))
+        ren = gamma * (self.state["FirmAssets"] / (self.state["FirmPayroll"] + eps))
 
         self.state["FirmGamma"] = gamma
-        self._ren = ren
+        self.state["FirmRenSolvency"] = ren
 
     def compute_ushare(self, t, scenario, params):
         r"""Per-firm share of the unemployed labour pool via a logit
@@ -757,7 +768,7 @@ class BehaviorMark0COVID(Behavior):
             / (wage_norm + eps)
         )
 
-        self._u_share = u_share
+        self.state["FirmUnemployedLabourShare"] = u_share
 
     def production_adjustment(self, t, scenario, params):
         r"""Adjust production: increase when in excess-demand regime,
@@ -799,19 +810,21 @@ class BehaviorMark0COVID(Behavior):
         eta0m = params["FiringPropensity"]
         r_param = params["HiringFiringRate"]
 
-        eta_plus = torch.clamp(eta0m * r_param * (1.0 + self._ren), 0.0, 1.0)
-        eta_minus = torch.clamp(eta0m * (1.0 - self._ren), 0.0, 1.0)
+        eta_plus = torch.clamp(
+            eta0m * r_param * (1.0 + self.state["FirmRenSolvency"]), 0.0, 1.0
+        )
+        eta_minus = torch.clamp(eta0m * (1.0 - self.state["FirmRenSolvency"]), 0.0, 1.0)
 
         production = self.state["FirmProduction"]
-        production = (
-            production
-            + self._stay_alive
-            * self._excess_demand
-            * torch.minimum(eta_plus * self._dY, self._u_share)
+        production = production + self.state["FirmStayAlive"] * self.state[
+            "FirmExcessDemandMask"
+        ] * torch.minimum(
+            eta_plus * self.state["FirmExcessDemandQuantity"],
+            self.state["FirmUnemployedLabourShare"],
         )
-        production = production + self._stay_alive * self._excess_supply * (
-            eta_minus * self._dY
-        )
+        production = production + self.state["FirmStayAlive"] * self.state[
+            "FirmExcessSupplyMask"
+        ] * (eta_minus * self.state["FirmExcessDemandQuantity"])
         self.state["FirmProduction"] = production
 
     def price_adjustment(self, t, scenario, params):
@@ -864,13 +877,15 @@ class BehaviorMark0COVID(Behavior):
         zeros = torch.zeros_like(price)
 
         priceup = (
-            self._stay_alive
-            * self._excess_demand
+            self.state["FirmStayAlive"]
+            * self.state["FirmExcessDemandMask"]
             * torch.where(price < pavg, ones, zeros)
         )
         price = torch.where(priceup > 0.0, price * (1.0 + rp), price)
 
-        pricedown = torch.where(self._excess_supply * price > pavg, ones, zeros)
+        pricedown = torch.where(
+            self.state["FirmExcessSupplyMask"] * price > pavg, ones, zeros
+        )
         price = torch.where(pricedown > 0.0, price * (1.0 - rp), price)
 
         self.state["FirmPrice"] = price
@@ -932,8 +947,8 @@ class BehaviorMark0COVID(Behavior):
         rw = gammap * r_ratio * self._noise_wage[t]
 
         mask_wageplus = torch.where(
-            self._stay_alive
-            * self._excess_demand
+            self.state["FirmStayAlive"]
+            * self.state["FirmExcessDemandMask"]
             * (self.state["FirmProfits"] > 0).to(zero_vec.dtype)
             > 0.0,
             ones,
@@ -941,7 +956,7 @@ class BehaviorMark0COVID(Behavior):
         )
 
         employment = self.state["Employment"]
-        coeff_up = 1.0 + (1.0 + self._ren) * rw * employment
+        coeff_up = 1.0 + (1.0 + self.state["FirmRenSolvency"]) * rw * employment
         wage = self.state["FirmWage"]
         wage = torch.where(mask_wageplus > 0.0, wage * coeff_up, wage)
 
@@ -974,14 +989,15 @@ class BehaviorMark0COVID(Behavior):
             wage,
         )
 
-        hard_stay = (self._stay_alive > 0.5).to(zero_vec.dtype)
+        hard_stay = (self.state["FirmStayAlive"] > 0.5).to(zero_vec.dtype)
         mask_wageminus = torch.where(
-            hard_stay * self._excess_supply * self.state["FirmProfits"] < 0.0,
+            hard_stay * self.state["FirmExcessSupplyMask"] * self.state["FirmProfits"]
+            < 0.0,
             ones,
             zero_vec,
         )
         unemp = self.state["Unemployment"]
-        coeff_dn = 1.0 - (1.0 - self._ren) * rw * unemp
+        coeff_dn = 1.0 - (1.0 - self.state["FirmRenSolvency"]) * rw * unemp
         wage = torch.where(
             mask_wageminus > 0.0,
             torch.maximum(wage * coeff_dn, zero_vec),
@@ -1021,7 +1037,7 @@ class BehaviorMark0COVID(Behavior):
         """
         wf = params["WageInflationFactor"]
         pi_used = self.state["ExpectedInflationUsed"]
-        stay = self._stay_alive
+        stay = self.state["FirmStayAlive"]
 
         self.state["FirmPrice"] = torch.where(
             stay > 0.0,
@@ -1080,24 +1096,26 @@ class BehaviorMark0COVID(Behavior):
         """
         zero_vec = torch.zeros_like(self.state["FirmProduction"])
         production = self.diffwhere(
-            self._stay_alive,
+            self.state["FirmStayAlive"],
             torch.maximum(self.state["FirmProduction"], zero_vec),
             self.state["FirmProduction"],
         )
         self.state["FirmProduction"] = production
 
         eps = self.hyper["epsilon"]
-        ytot = (self._stay_alive * production).sum()
-        wtot = (self._stay_alive * self.state["FirmWage"] * production).sum()
+        ytot = (self.state["FirmStayAlive"] * production).sum()
+        wtot = (self.state["FirmStayAlive"] * self.state["FirmWage"] * production).sum()
         wavg = wtot / (ytot + eps)
-        pavg = (self._stay_alive * self.state["FirmPrice"] * production).sum() / (
-            ytot + eps
-        )
+        pavg = (
+            self.state["FirmStayAlive"] * self.state["FirmPrice"] * production
+        ).sum() / (ytot + eps)
         firm_savings = (
-            self._stay_alive * torch.maximum(self.state["FirmAssets"], zero_vec)
+            self.state["FirmStayAlive"]
+            * torch.maximum(self.state["FirmAssets"], zero_vec)
         ).sum()
         firm_debt = (
-            self._stay_alive * (-torch.minimum(self.state["FirmAssets"], zero_vec))
+            self.state["FirmStayAlive"]
+            * (-torch.minimum(self.state["FirmAssets"], zero_vec))
         ).sum()
 
         self.state["TotalProduction"] = ytot.unsqueeze(0)
@@ -1131,11 +1149,11 @@ class BehaviorMark0COVID(Behavior):
         - LowestPrice
         """
         alive_p = torch.where(
-            self._stay_alive * self.state["FirmPrice"] > 0,
+            self.state["FirmStayAlive"] * self.state["FirmPrice"] > 0,
             self.state["FirmPrice"],
             torch.full_like(self.state["FirmPrice"], 1.0e30),
         )
-        self._pmin = alive_p.min()
+        self.state["LowestPrice"] = alive_p.min().unsqueeze(0)
 
     def bankrupt_firms(self, t, scenario, params):
         r"""Zero out production, assets, wage of bankrupt firms; record
@@ -1173,7 +1191,7 @@ class BehaviorMark0COVID(Behavior):
         - DefaultedTotal
         - FirmStayAlive
         """
-        eb = self._enter_bankruptcy
+        eb = self.state["FirmEnterBankruptcy"]
         deftot = (eb * self.state["FirmAssets"] * -1.0).sum()
         zero_vec = torch.zeros_like(self.state["FirmProduction"])
 
@@ -1189,7 +1207,9 @@ class BehaviorMark0COVID(Behavior):
         )
         self.state["FirmWage"] = torch.where(bankrupt, zero_vec, self.state["FirmWage"])
         self.state["DefaultedTotal"] = deftot.unsqueeze(0)
-        self._stay_alive = self._stay_alive * self.state["FirmAlive"]
+        self.state["FirmStayAlive"] = (
+            self.state["FirmStayAlive"] * self.state["FirmAlive"]
+        )
 
     def compute_moments(self, t, scenario, params):
         r"""Recompute wage and price moments after bankruptcy zeroing.
@@ -1229,7 +1249,9 @@ class BehaviorMark0COVID(Behavior):
         eps = self.hyper["epsilon"]
         ytot = self.state["TotalProduction"]
         wtot = (
-            self._stay_alive * self.state["FirmWage"] * self.state["FirmProduction"]
+            self.state["FirmStayAlive"]
+            * self.state["FirmWage"]
+            * self.state["FirmProduction"]
         ).sum()
         wavg = wtot / (ytot + eps)
         pavg = (
@@ -1462,7 +1484,11 @@ class BehaviorMark0COVID(Behavior):
             + torch.maximum(self.state["HouseholdSavings"], zero_scalar)
         )
 
-        arg = beta * (self._pmin - self.state["FirmPrice"]) / self.state["AveragePrice"]
+        arg = (
+            beta
+            * (self.state["LowestPrice"] - self.state["FirmPrice"])
+            / self.state["AveragePrice"]
+        )
         pnorm = (self.state["FirmAlive"] * torch.exp(arg)).sum()
         demand = self.state["FirmAlive"] * (
             budget * torch.exp(arg) / ((pnorm + eps) * self.state["FirmPrice"])
@@ -1613,7 +1639,10 @@ class BehaviorMark0COVID(Behavior):
             (self.state["FirmAlive"] * self.state["FirmDemand"]).sum().unsqueeze(0)
         )
         self.state["FirmSavingsTotal"] = (
-            (self._stay_alive * torch.maximum(self.state["FirmAssets"], zero_vec))
+            (
+                self.state["FirmStayAlive"]
+                * torch.maximum(self.state["FirmAssets"], zero_vec)
+            )
             .sum()
             .unsqueeze(0)
         )
