@@ -758,8 +758,6 @@ class BehaviorMark0COVID(Behavior):
         )
 
         self._u_share = u_share
-        self._wage_norm = wage_norm
-        self._arg = arg
 
     def production_adjustment(self, t, scenario, params):
         r"""Adjust production: increase when in excess-demand regime,
@@ -815,8 +813,6 @@ class BehaviorMark0COVID(Behavior):
             eta_minus * self._dY
         )
         self.state["FirmProduction"] = production
-        self._eta_plus = eta_plus
-        self._eta_minus = eta_minus
 
     def price_adjustment(self, t, scenario, params):
         r"""Price update from the frozen-noise buffer.
@@ -878,8 +874,6 @@ class BehaviorMark0COVID(Behavior):
         price = torch.where(pricedown > 0.0, price * (1.0 - rp), price)
 
         self.state["FirmPrice"] = price
-        self._priceup = priceup
-        self._pricedown = pricedown
 
     def wage_adjustment(self, t, scenario, params):
         r"""Smooth wage update from the frozen-noise buffer.
@@ -995,8 +989,6 @@ class BehaviorMark0COVID(Behavior):
         )
 
         self.state["FirmWage"] = wage
-        self._mask_wageplus = mask_wageplus
-        self._mask_wageminus = mask_wageminus
 
     def expectation_adjustments(self, t, scenario, params):
         r"""Anticipated inflation pass-through into prices and wages for
@@ -1724,7 +1716,6 @@ class BehaviorMark0COVID(Behavior):
             "FirmSavingsTotal"
         ] + deftot_revive.unsqueeze(0)
         self.state["FirmAlive"] = self.state["FirmAlive"] + revive_mask
-        self._revive_mask = revive_mask
 
     def recompute_firm_totals_revival(self, t, scenario, params):
         r"""Ordering-critical re-aggregation after revival; absorb the
@@ -1810,7 +1801,6 @@ class BehaviorMark0COVID(Behavior):
             alive * self.state["FirmPrice"] * self.state["FirmProduction"]
         ).sum() / (ytot + eps)
         wavg = wtot / (ytot + eps)
-        self._pavg_for_inflation = pavg
         self.state["AveragePrice"] = pavg.unsqueeze(0)
         self.state["AverageWage"] = wavg.unsqueeze(0)
 
