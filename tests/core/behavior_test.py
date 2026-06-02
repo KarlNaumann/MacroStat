@@ -214,6 +214,50 @@ class TestBehavior:
         assert result.shape == x.shape
         assert torch.all(result >= 0) and torch.all(result <= 1)
 
+    def test_tanhmask_sign_correctness(self, behavior_instance):
+        """tanhmask saturates to 0 for x<<0, 1 for x>>0, exactly 0.5 at x=0."""
+        behavior_instance.hyper["tanh_constant"] = 1.0e3
+
+        result = behavior_instance.tanhmask(torch.tensor([-1.0, -1e-2, 0.0, 1e-2, 1.0]))
+        assert result[0].item() == pytest.approx(0.0, abs=1e-6)
+        assert result[2].item() == pytest.approx(0.5, abs=1e-9)
+        assert result[4].item() == pytest.approx(1.0, abs=1e-6)
+        assert result[1].item() < 0.05
+        assert result[3].item() > 0.95
+
+    def test_tanhmask_requires_grad_toggle(self, behavior_instance):
+        """tanhmask output requires_grad is gated by hyper['requires_grad'].
+
+        Values are identical regardless of the flag — only the autograd
+        tracking changes.
+        """
+        behavior_instance.hyper["tanh_constant"] = 100.0
+        x = torch.tensor([-0.5, 0.0, 0.5])
+
+        behavior_instance.hyper["requires_grad"] = False
+        out_off = behavior_instance.tanhmask(x)
+        assert out_off.requires_grad is False
+
+        behavior_instance.hyper["requires_grad"] = True
+        out_on = behavior_instance.tanhmask(x)
+        assert out_on.requires_grad is True
+
+        assert torch.allclose(out_off, out_on, atol=1e-12)
+
+    def test_tanhmask_gradient_flow(self, behavior_instance):
+        """tanhmask gradient is non-zero near x=0 and decays to 0 for |x|>>0."""
+        behavior_instance.hyper["tanh_constant"] = 10.0
+        behavior_instance.hyper["requires_grad"] = True
+
+        x = torch.tensor([0.0, 1.0], requires_grad=True)
+        out = behavior_instance.tanhmask(x).sum()
+        out.backward()
+
+        grad = x.grad
+        assert grad is not None
+        assert grad[0].abs().item() > 1.0
+        assert grad[1].abs().item() < 1e-3
+
     def test_diffmin(self, behavior_instance):
         """Test the differentiable min function"""
         behavior_instance.hyper["min_constant"] = 10.0
