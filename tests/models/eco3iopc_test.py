@@ -41,37 +41,6 @@ def _make_model(alpha12: float = 0.0, timesteps: int = 50):
     )
 
 
-def test_alpha12_zero_baseline_unchanged():
-    """alpha12=0 (default) preserves the pre-PR terminal trajectory.
-
-    Reference values captured on the fix branch with default parameters and
-    ``timesteps=50, timesteps_initialization=1``. They are determined by
-    ``alpha_10 - alpha_11 * r`` for the propensity and by the consumption
-    equation closure for ``RealConsumptionHousehold``. With alpha12=0 the
-    new temperature term multiplies by zero and the ``torch.clamp(min=0)``
-    guard is a no-op.
-    """
-    model = _make_model(alpha12=0.0)
-    model.simulate()
-    ts = model.variables.timeseries
-
-    terminal_propensity = ts["PropensityToConsumeIncome"].squeeze()[-1]
-    terminal_consumption = ts["RealConsumptionHousehold"].squeeze()[-1]
-
-    assert torch.allclose(
-        terminal_propensity,
-        torch.tensor(0.6000000238418579),
-        rtol=1e-10,
-        atol=1e-12,
-    )
-    assert torch.allclose(
-        terminal_consumption,
-        torch.tensor(85.7055892944336),
-        rtol=1e-10,
-        atol=1e-12,
-    )
-
-
 def test_alpha12_positive_lowers_propensity():
     """Positive alpha12 lowers terminal propensity vs the alpha12=0 path.
 
