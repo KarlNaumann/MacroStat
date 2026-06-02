@@ -386,10 +386,6 @@ class BehaviorMark0COVID(Behavior):
         ----
         - TotalPayroll
         """
-        # Alias defence: detach prior from state writes
-        for k, v in self.prior.items():
-            self.state[k] = v.clone()
-
         self.renormalize_prices(t, scenario, params)
         self.update_averages(t, scenario, params)
         self.find_surviving_firms(t, scenario, params)
@@ -449,15 +445,15 @@ class BehaviorMark0COVID(Behavior):
 
         Dependency
         ----------
-        - state: AveragePrice
-        - state: FirmPrice
-        - state: FirmWage
-        - state: FirmAssets
-        - state: FirmProfits
-        - state: HouseholdSavings
-        - state: AverageWage
-        - state: MaxWage
-        - state: M0Stock
+        - prior: AveragePrice
+        - prior: FirmPrice
+        - prior: FirmWage
+        - prior: FirmAssets
+        - prior: FirmProfits
+        - prior: HouseholdSavings
+        - prior: AverageWage
+        - prior: MaxWage
+        - prior: M0Stock
 
         Sets
         ----
@@ -471,21 +467,21 @@ class BehaviorMark0COVID(Behavior):
         - M0Stock
         - AveragePrice
         """
-        self.state["FirmPrice"] = self.state["FirmPrice"] / self.state["AveragePrice"]
-        self.state["FirmWage"] = self.state["FirmWage"] / self.state["AveragePrice"]
-        self.state["FirmAssets"] = self.state["FirmAssets"] / self.state["AveragePrice"]
+        self.state["FirmPrice"] = self.prior["FirmPrice"] / self.prior["AveragePrice"]
+        self.state["FirmWage"] = self.prior["FirmWage"] / self.prior["AveragePrice"]
+        self.state["FirmAssets"] = self.prior["FirmAssets"] / self.prior["AveragePrice"]
         self.state["FirmProfits"] = (
-            self.state["FirmProfits"] / self.state["AveragePrice"]
+            self.prior["FirmProfits"] / self.prior["AveragePrice"]
         )
         self.state["HouseholdSavings"] = (
-            self.state["HouseholdSavings"] / self.state["AveragePrice"]
+            self.prior["HouseholdSavings"] / self.prior["AveragePrice"]
         )
         self.state["AverageWage"] = (
-            self.state["AverageWage"] / self.state["AveragePrice"]
+            self.prior["AverageWage"] / self.prior["AveragePrice"]
         )
-        self.state["MaxWage"] = self.state["MaxWage"] / self.state["AveragePrice"]
-        self.state["M0Stock"] = self.state["M0Stock"] / self.state["AveragePrice"]
-        self.state["AveragePrice"] = torch.ones_like(self.state["AveragePrice"])
+        self.state["MaxWage"] = self.prior["MaxWage"] / self.prior["AveragePrice"]
+        self.state["M0Stock"] = self.prior["M0Stock"] / self.prior["AveragePrice"]
+        self.state["AveragePrice"] = torch.ones_like(self.prior["AveragePrice"])
 
     def update_averages(self, t, scenario, params):
         r"""EWMA update of inflation, interest rate, and unemployment
@@ -518,14 +514,14 @@ class BehaviorMark0COVID(Behavior):
         - params: ExpectedInflationEWMAWeight
         - params: ExpectedInflationTargetWeight
         - params: CBInflationTarget
-        - state: Inflation
-        - state: ExpectedInflationEWMA
-        - state: DepositRate
-        - state: DepositRateEWMA
-        - state: LoanRate
-        - state: LoanRateEWMA
-        - state: Unemployment
-        - state: UnemploymentEWMA
+        - prior: Inflation
+        - prior: ExpectedInflationEWMA
+        - prior: DepositRate
+        - prior: DepositRateEWMA
+        - prior: LoanRate
+        - prior: LoanRateEWMA
+        - prior: Unemployment
+        - prior: UnemploymentEWMA
 
         Sets
         ----
@@ -536,22 +532,22 @@ class BehaviorMark0COVID(Behavior):
         - ExpectedInflationUsed
         """
         pi_ema = (
-            params["EWMAMemory"] * self.state["Inflation"]
-            + (1.0 - params["EWMAMemory"]) * self.state["ExpectedInflationEWMA"]
+            params["EWMAMemory"] * self.prior["Inflation"]
+            + (1.0 - params["EWMAMemory"]) * self.prior["ExpectedInflationEWMA"]
         )
 
         self.state["ExpectedInflationEWMA"] = pi_ema
         self.state["DepositRateEWMA"] = (
-            params["EWMAMemory"] * self.state["DepositRate"]
-            + (1.0 - params["EWMAMemory"]) * self.state["DepositRateEWMA"]
+            params["EWMAMemory"] * self.prior["DepositRate"]
+            + (1.0 - params["EWMAMemory"]) * self.prior["DepositRateEWMA"]
         )
         self.state["LoanRateEWMA"] = (
-            params["EWMAMemory"] * self.state["LoanRate"]
-            + (1.0 - params["EWMAMemory"]) * self.state["LoanRateEWMA"]
+            params["EWMAMemory"] * self.prior["LoanRate"]
+            + (1.0 - params["EWMAMemory"]) * self.prior["LoanRateEWMA"]
         )
         self.state["UnemploymentEWMA"] = (
-            params["EWMAMemory"] * self.state["Unemployment"]
-            + (1.0 - params["EWMAMemory"]) * self.state["UnemploymentEWMA"]
+            params["EWMAMemory"] * self.prior["Unemployment"]
+            + (1.0 - params["EWMAMemory"]) * self.prior["UnemploymentEWMA"]
         )
         self.state["ExpectedInflationUsed"] = (
             params["ExpectedInflationTargetWeight"] * params["CBInflationTarget"]
@@ -583,10 +579,10 @@ class BehaviorMark0COVID(Behavior):
         Dependency
         ----------
         - params: DefaultThreshold
-        - state: FirmAlive
-        - state: FirmWage
-        - state: FirmProduction
-        - state: FirmAssets
+        - prior: FirmAlive
+        - prior: FirmProduction
+        - state: FirmWage  (set by renormalize_prices)
+        - state: FirmAssets  (set by renormalize_prices)
 
         Sets
         ----
@@ -594,7 +590,7 @@ class BehaviorMark0COVID(Behavior):
         - FirmEnterBankruptcy
         - FirmPayroll
         """
-        payroll = self.state["FirmWage"] * self.state["FirmProduction"]
+        payroll = self.state["FirmWage"] * self.prior["FirmProduction"]
         payroll_affordability = (
             self.state["FirmAssets"] + params["DefaultThreshold"] * payroll
         )
@@ -605,8 +601,8 @@ class BehaviorMark0COVID(Behavior):
             torch.zeros_like(payroll_affordability),
         )
 
-        self.state["FirmStayAlive"] = self.state["FirmAlive"] * stay_alive
-        self.state["FirmEnterBankruptcy"] = self.state["FirmAlive"] * (
+        self.state["FirmStayAlive"] = self.prior["FirmAlive"] * stay_alive
+        self.state["FirmEnterBankruptcy"] = self.prior["FirmAlive"] * (
             1.0 - stay_alive
         ).pow(2)
         self.state["FirmPayroll"] = payroll
@@ -636,10 +632,10 @@ class BehaviorMark0COVID(Behavior):
 
         Dependency
         ----------
-        - state: FirmDemand
-        - state: FirmProduction
-        - state: FirmAlive
-        - state: FirmStayAlive
+        - prior: FirmDemand
+        - prior: FirmProduction
+        - prior: FirmAlive
+        - state: FirmStayAlive  (set by find_surviving_firms)
 
         Sets
         ----
@@ -647,15 +643,15 @@ class BehaviorMark0COVID(Behavior):
         - FirmExcessDemandMask
         - FirmExcessSupplyMask
         """
-        one = torch.ones_like(self.state["FirmProduction"])
-        zero = torch.zeros_like(self.state["FirmProduction"])
-        imbalance = self.state["FirmDemand"] - self.state["FirmProduction"]
+        one = torch.ones_like(self.prior["FirmProduction"])
+        zero = torch.zeros_like(self.prior["FirmProduction"])
+        imbalance = self.prior["FirmDemand"] - self.prior["FirmProduction"]
 
         self.state["FirmExcessDemandQuantity"] = self.state["FirmStayAlive"] * imbalance
         self.state["FirmExcessDemandMask"] = torch.where(
             self.state["FirmExcessDemandQuantity"] > 0, one, zero
         )
-        self.state["FirmExcessSupplyMask"] = self.state["FirmAlive"] * torch.where(
+        self.state["FirmExcessSupplyMask"] = self.prior["FirmAlive"] * torch.where(
             imbalance <= 0, one, zero
         )
 
@@ -724,27 +720,27 @@ class BehaviorMark0COVID(Behavior):
         - params: HouseholdIntensityOfChoice
         - hyper: N_firms
         - hyper: epsilon
-        - state: FirmWage
-        - state: MaxWage
-        - state: AverageWage
-        - state: FirmAlive
-        - state: Unemployment
-        - state: BankruptcyRate
+        - state: FirmWage  (set by renormalize_prices)
+        - state: MaxWage  (set by renormalize_prices)
+        - state: AverageWage  (set by renormalize_prices)
+        - prior: FirmAlive
+        - prior: Unemployment
+        - prior: BankruptcyRate
 
         Sets
         ----
         - FirmUnemployedLabourShare
         """
-        weights = self.state["FirmAlive"] * torch.exp(
+        weights = self.prior["FirmAlive"] * torch.exp(
             params["HouseholdIntensityOfChoice"]
             * (self.state["FirmWage"] - self.state["MaxWage"])
             / self.state["AverageWage"]
         )
         self.state["FirmUnemployedLabourShare"] = (
             weights
-            * self.state["Unemployment"]
+            * self.prior["Unemployment"]
             * float(self.hyper["N_firms"])
-            * (1.0 - self.state["BankruptcyRate"])
+            * (1.0 - self.prior["BankruptcyRate"])
             / (weights.sum() + self.hyper["epsilon"])
         )
 
@@ -773,13 +769,13 @@ class BehaviorMark0COVID(Behavior):
         ----------
         - params: FiringPropensity
         - params: HiringFiringRate
-        - state: FirmProduction
-        - state: FirmStayAlive
-        - state: FirmExcessDemandMask
-        - state: FirmExcessSupplyMask
-        - state: FirmExcessDemandQuantity
-        - state: FirmRenSolvency
-        - state: FirmUnemployedLabourShare
+        - prior: FirmProduction
+        - state: FirmStayAlive  (set by find_surviving_firms)
+        - state: FirmExcessDemandMask  (set by demand_production_imbalance)
+        - state: FirmExcessSupplyMask  (set by demand_production_imbalance)
+        - state: FirmExcessDemandQuantity  (set by demand_production_imbalance)
+        - state: FirmRenSolvency  (set by compute_gamma_and_ren)
+        - state: FirmUnemployedLabourShare  (set by compute_ushare)
 
         Sets
         ----
@@ -799,7 +795,7 @@ class BehaviorMark0COVID(Behavior):
         )
 
         self.state["FirmProduction"] = (
-            self.state["FirmProduction"]
+            self.prior["FirmProduction"]
             + self.state["FirmStayAlive"]
             * self.state["FirmExcessDemandMask"]
             * torch.minimum(
@@ -908,20 +904,20 @@ class BehaviorMark0COVID(Behavior):
         ----------
         - params: PriceAdjustmentSize
         - params: WagePriceAdjustmentRatio
-        - state: FirmWage
-        - state: FirmPrice
-        - state: FirmDemand
-        - state: FirmProduction
-        - state: FirmAssets
-        - state: FirmProfits
-        - state: Employment
-        - state: Unemployment
-        - state: LoanRate
-        - state: DepositRate
-        - state: FirmStayAlive
-        - state: FirmExcessDemandMask
-        - state: FirmExcessSupplyMask
-        - state: FirmRenSolvency
+        - state: FirmWage  (set by renormalize_prices)
+        - state: FirmPrice  (set by renormalize_prices / price_adjustment)
+        - state: FirmProduction  (set by production_adjustment)
+        - state: FirmAssets  (set by renormalize_prices)
+        - state: FirmProfits  (set by renormalize_prices)
+        - state: FirmStayAlive  (set by find_surviving_firms)
+        - state: FirmExcessDemandMask  (set by demand_production_imbalance)
+        - state: FirmExcessSupplyMask  (set by demand_production_imbalance)
+        - state: FirmRenSolvency  (set by compute_gamma_and_ren)
+        - prior: FirmDemand
+        - prior: Employment
+        - prior: Unemployment
+        - prior: LoanRate
+        - prior: DepositRate
 
         Sets
         ----
@@ -949,7 +945,7 @@ class BehaviorMark0COVID(Behavior):
             self.state["FirmWage"]
             * (
                 1.0
-                + (1.0 + self.state["FirmRenSolvency"]) * rw * self.state["Employment"]
+                + (1.0 + self.state["FirmRenSolvency"]) * rw * self.prior["Employment"]
             ),
             self.state["FirmWage"],
         )
@@ -961,13 +957,13 @@ class BehaviorMark0COVID(Behavior):
             self.state["FirmProduction"] != 0.0,
             (
                 self.state["FirmPrice"]
-                * torch.minimum(self.state["FirmDemand"], self.state["FirmProduction"])
-                + self.state["LoanRate"]
+                * torch.minimum(self.prior["FirmDemand"], self.state["FirmProduction"])
+                + self.prior["LoanRate"]
                 * torch.minimum(
                     self.state["FirmAssets"],
                     torch.zeros_like(self.state["FirmAssets"]),
                 )
-                + self.state["DepositRate"]
+                + self.prior["DepositRate"]
                 * torch.maximum(
                     self.state["FirmAssets"],
                     torch.zeros_like(self.state["FirmAssets"]),
@@ -1004,7 +1000,7 @@ class BehaviorMark0COVID(Behavior):
                     1.0
                     - (1.0 - self.state["FirmRenSolvency"])
                     * rw
-                    * self.state["Unemployment"]
+                    * self.prior["Unemployment"]
                 ),
                 zero_vec,
             ),
@@ -1174,12 +1170,12 @@ class BehaviorMark0COVID(Behavior):
 
         Dependency
         ----------
-        - state: FirmAssets
-        - state: FirmProduction
-        - state: FirmAlive
-        - state: FirmWage
-        - state: FirmStayAlive
-        - state: FirmEnterBankruptcy
+        - state: FirmAssets  (set by renormalize_prices)
+        - state: FirmProduction  (set by production_adjustment / recompute_firm_totals_stayalive)
+        - state: FirmWage  (set by renormalize_prices / wage_adjustment / expectation_adjustments)
+        - state: FirmStayAlive  (set by find_surviving_firms)
+        - state: FirmEnterBankruptcy  (set by find_surviving_firms)
+        - prior: FirmAlive
 
         Sets
         ----
@@ -1203,7 +1199,7 @@ class BehaviorMark0COVID(Behavior):
             bankrupt, zero_vec, self.state["FirmAssets"]
         )
         self.state["FirmAlive"] = torch.where(
-            bankrupt, zero_vec, self.state["FirmAlive"]
+            bankrupt, zero_vec, self.prior["FirmAlive"]
         )
         self.state["FirmWage"] = torch.where(bankrupt, zero_vec, self.state["FirmWage"])
         self.state["FirmStayAlive"] = (
@@ -1375,11 +1371,11 @@ class BehaviorMark0COVID(Behavior):
         Dependency
         ----------
         - params: BankruptcyInterestEffect
-        - state: CBRate
-        - state: FirmDebtTotal
-        - state: DefaultedTotal
-        - state: HouseholdSavings
-        - state: FirmSavingsTotal
+        - prior: CBRate
+        - state: FirmDebtTotal  (set by recompute_firm_totals_stayalive)
+        - state: DefaultedTotal  (set by bankrupt_firms)
+        - state: HouseholdSavings  (set by solve_rounding_errors)
+        - state: FirmSavingsTotal  (set by recompute_firm_totals_stayalive)
 
         Sets
         ----
@@ -1392,7 +1388,7 @@ class BehaviorMark0COVID(Behavior):
 
         loan_rate = torch.where(
             self.state["FirmDebtTotal"] > 0,
-            self.state["CBRate"]
+            self.prior["CBRate"]
             + (1.0 - params["BankruptcyInterestEffect"])
             * torch.where(
                 self.state["FirmDebtTotal"] != 0,
@@ -1404,7 +1400,7 @@ class BehaviorMark0COVID(Behavior):
                 ),
                 zeros,
             ),
-            self.state["CBRate"],
+            self.prior["CBRate"],
         )
         self.state["LoanRate"] = loan_rate
 
