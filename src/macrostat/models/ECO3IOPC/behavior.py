@@ -73,7 +73,21 @@ class BehaviorECO3IOPC(Behavior):
         of Godley & Lavoie, by keeping all variables as zero. Accordingly, we
         can just "pass" the function as by default the state variables are all
         zero. The only exceptions are the price-indices which we initialize to
-        one
+        one. The initial temperature is captured as a reference value for the
+        endogenous propensity-to-consume climate channel.
+
+        Sets
+        -----
+        - Prices
+        - ConsumerPriceIndex
+        - ConsumerPriceInflation
+        - GovernmentPriceIndex
+        - MatterReserves
+        - MatterResources
+        - EnergyReserves
+        - EnergyResources
+        - CO2IntensityNonRenewableEnergy
+        - InitialTemperature
         """
 
         # Economic
@@ -88,6 +102,9 @@ class BehaviorECO3IOPC(Behavior):
         self.state["EnergyReserves"] = 37000 * torch.ones(1)
         self.state["EnergyResources"] = 542000 * torch.ones(1)
         self.state["CO2IntensityNonRenewableEnergy"] = 0.07 * torch.ones(1)
+
+        # Reference temperature for the climate-channel propensity adjustment.
+        self.state["InitialTemperature"] = self.state["Temperature"].clone().detach()
 
     ############################################################################
     # Step
@@ -265,7 +282,11 @@ class BehaviorECO3IOPC(Behavior):
         Equations
         ---------
         .. math::
-            YD^e(t) = YD(t-1)
+            :nowrap:
+
+            \begin{align}
+                YD^e(t) = YD(t-1)
+            \end{align}
 
         Dependency
         ----------
@@ -401,7 +422,14 @@ class BehaviorECO3IOPC(Behavior):
         self, t: int, scenario: dict, params: dict | None = None, **kwargs
     ):
         r"""Endogenous propensity to consume out of income, dependent on the
-        rate of interest
+        rate of interest and on the deviation of temperature from its
+        initial reference value. The reference temperature is captured at
+        ``initialize()`` and carried forward through ``prior`` because
+        ``Behavior.forward`` resets ``state`` at the start of each step. The
+        temperature read is the previous step's value, since
+        ``temperature()`` runs after this method inside ``step``. The
+        propensity is clamped at zero so it cannot become negative under
+        extreme warming.
 
         Parameters
         ----------
@@ -418,22 +446,31 @@ class BehaviorECO3IOPC(Behavior):
             :nowrap:
 
             \begin{align}
-                \alpha_1(t) = \alpha_{10} - \alpha_{11} r(t-1)
+                \alpha_1(t) = \max\!\left(0,\ \alpha_{10} - \alpha_{11} r(t-1) - \alpha_{12}\big(\mathrm{temp}(t-1) - \mathrm{temp}(0)\big)\right)
             \end{align}
 
         Dependency
         ----------
         - prior: InterestRate
+        - prior: Temperature
+        - prior: InitialTemperature
         - params: PropensityToConsumeIncomeBase
         - params: PropensityToConsumeIncomeInterest
+        - params: PropensityToConsumeIncomeTemperature
 
         Sets
         -----
         - PropensityToConsumeIncome
+        - InitialTemperature
         """
-        self.state["PropensityToConsumeIncome"] = params[
-            "PropensityToConsumeIncomeBase"
-        ] - (params["PropensityToConsumeIncomeInterest"] * self.prior["InterestRate"])
+        self.state["InitialTemperature"] = self.prior["InitialTemperature"]
+        self.state["PropensityToConsumeIncome"] = torch.clamp(
+            params["PropensityToConsumeIncomeBase"]
+            - params["PropensityToConsumeIncomeInterest"] * self.prior["InterestRate"]
+            - params["PropensityToConsumeIncomeTemperature"]
+            * (self.prior["Temperature"] - self.state["InitialTemperature"]),
+            min=0.0,
+        )
 
     def consumption(self, t: int, scenario: dict, params: dict | None = None, **kwargs):
         r"""Calculate the consumption.
@@ -1557,7 +1594,7 @@ class BehaviorECO3IOPC(Behavior):
 
         Sets
         -----
-        - CumulativeCO2
+        - Temperature
         """
         self.state["Temperature"] = (
             (1 / (1 - params["NonCO2AnthropocentricForcing"]))
