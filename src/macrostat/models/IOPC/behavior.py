@@ -891,7 +891,7 @@ class BehaviorIOPC(Behavior):
             :nowrap:
 
             \begin{align}
-                B_s(t) = B_s(t-1) + (G(t) - r(t-1)B_s(t-1)) - (T(t) + r(t-1)B_{CB}(t-1))
+                B_s(t) = B_s(t-1) + (G(t) + r(t-1)B_s(t-1)) - (T(t) + r(t-1)B_{CB}(t-1))
             \end{align}
 
         Dependency

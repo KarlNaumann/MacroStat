@@ -54,23 +54,17 @@ class VariablesECO3IOPC(Variables):
 
         Equations
         ---------
-        Redundant equations:
-            .. math::
-                :nowrap:
+        Redundant equation `H_h = H_s` and positivity on assets `A` and
+        liabilities `L`:
 
-                \begin{align}
-                    H_h(t) = H_s(t)
-                \end{align}
+        .. math::
+            :nowrap:
 
-        General checks:
-            .. math::
-                :nowrap:
-
-                \begin{align}
-                    A(t) &> 0 & L(t) &> 0
-                \end{align}
-
-        where :math:`A(t)` are all assets and :math:`L(t)` are all liabilities.
+            \begin{align}
+                H_h(t) &= H_s(t)\\
+                A(t) &> 0\\
+                L(t) &> 0
+            \end{align}
 
         Returns
         -------
@@ -374,6 +368,13 @@ class VariablesECO3IOPC(Variables):
             },
             "Temperature": {
                 "notation": r"temp(t)",
+                "unit": ".",
+                "history": 0,
+                "sectors": ["Macroeconomy"],
+                "sfc": [("Index", "Macroeconomy")],
+            },
+            "InitialTemperature": {
+                "notation": r"temp(0)",
                 "unit": ".",
                 "history": 0,
                 "sectors": ["Macroeconomy"],

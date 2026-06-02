@@ -245,7 +245,7 @@ Calculate the government bill issuance.
 	:nowrap:
 
 	\begin{align}
-	B_s(t) = B_s(t-1) + (G(t) - r(t-1)B_s(t-1)) - (T(t) + r(t-1)B_{CB}(t-1))
+	B_s(t) = B_s(t-1) + (G(t) + r(t-1)B_s(t-1)) - (T(t) + r(t-1)B_{CB}(t-1))
 	\end{align}
 
 
@@ -428,14 +428,21 @@ markup on intermediate prices
 32. Propensity To Consume Income
 
 Endogenous propensity to consume out of income, dependent on the
-rate of interest
+rate of interest and on the deviation of temperature from its
+initial reference value. The reference temperature is captured at
+``initialize()`` and carried forward through ``prior`` because
+``Behavior.forward`` resets ``state`` at the start of each step. The
+temperature read is the previous step's value, since
+``temperature()`` runs after this method inside ``step``. The
+propensity is clamped at zero so it cannot become negative under
+extreme warming.
 
 .. math::
 	:label: propensity_to_consume_income
 	:nowrap:
 
 	\begin{align}
-	\alpha_1(t) = \alpha_{10} - \alpha_{11} r(t-1)
+	\alpha_1(t) = \max\!\left(0,\ \alpha_{10} - \alpha_{11} r(t-1) - \alpha_{12}\big(\mathrm{temp}(t-1) - \mathrm{temp}(0)\big)\right)
 	\end{align}
 
 
