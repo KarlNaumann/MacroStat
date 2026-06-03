@@ -57,8 +57,7 @@ class _DynamicUnresolved:
     @writes(state=("X",))
     def step(self, t, scenario, params=None):
         self.state["X"] = 1
-        key = self._lookup()
-        self.state[key] = 2  # dynamic — observed gets DYNAMIC sentinel
+        self.state[self._lookup()] = 2  # dynamic; walker records DYNAMIC
 
     def _lookup(self):
         return "Y"
@@ -68,8 +67,10 @@ class _DynamicDeclared:
     @writes(state=("X", DYNAMIC))
     def step(self, t, scenario, params=None):
         self.state["X"] = 1
-        key = "Y"
-        self.state[key] = 2
+        self.state[self._lookup()] = 2
+
+    def _lookup(self):
+        return "Y"
 
 
 class _AugAssignFixture:
@@ -119,6 +120,33 @@ class _HyperBuffer:
     @writes(state=("X",))
     def step(self, t, scenario, params=None):
         self.state["X"] = self.hyper["seed"]
+
+
+class _ScenarioGet:
+    @requires(scenario=("Shock",))
+    @writes(state=("X",))
+    def step(self, t, scenario, params=None):
+        self.state["X"] = scenario.get("Shock", 0.0)
+
+
+class _ParamsGetDynamic:
+    @requires(params=(DYNAMIC,))
+    @writes(state=("X",))
+    def step(self, t, scenario, params=None):
+        self.state["X"] = params.get(self._key(), 0.0)
+
+    def _key(self):
+        return "alpha"
+
+
+class _BufferItems:
+    @requires(scenario=(DYNAMIC,))
+    @writes(state=("X",))
+    def step(self, t, scenario, params=None):
+        total = 0.0
+        for _k, v in self.scenarios.items():
+            total = total + v
+        self.state["X"] = total
 
 
 class _MutatorCaller:
@@ -239,29 +267,29 @@ def test_parse_method_returns_module():
 
 
 def test_method_aliases_direct():
-    aliases = _method_aliases(_DirectAliasing)
-    assert aliases == {"do_it": ["do_real"]}
+    assert _method_aliases(_DirectAliasing) == {"do_it": ["do_real"]}
 
 
 def test_method_aliases_match_block():
-    aliases = _method_aliases(_MatchAliasing)
-    assert sorted(aliases["dispatch"]) == ["handle_a", "handle_b"]
+    assert sorted(_method_aliases(_MatchAliasing)["dispatch"]) == [
+        "handle_a",
+        "handle_b",
+    ]
 
 
 def test_reachable_methods_follows_aliases():
-    seen = _reachable_methods(_MatchAliasing, "step")
     # Both branches of the match alias should be reached.
-    assert "handle_a" in seen
-    assert "handle_b" in seen
+    reached = _reachable_methods(_MatchAliasing, "step")
+    assert "handle_a" in reached
+    assert "handle_b" in reached
+    assert "step" in reached
 
 
 def test_reachable_methods_child_override_resolves():
-    seen = _reachable_methods(_ChildDecorated, "step")
-    assert seen == ["step"]
-    # The reached step must be the child's, not the parent's — verified by
-    # checking the spec on the resolved attr.
-    spec = _ChildDecorated.step.__method_spec__
-    assert spec.writes_state == frozenset({"X", "Y"})
+    assert _reachable_methods(_ChildDecorated, "step") == ["step"]
+    # The reached step must be the child's, not the parent's. Check the spec
+    # on the resolved attribute matches the override's decorator.
+    assert _ChildDecorated.step.__method_spec__.writes_state == frozenset({"X", "Y"})
 
 
 # ---------------------------------------------------------------------------
@@ -369,6 +397,9 @@ def test_zero_per_call_cost_no_wrapping():
         (_ParamsKwarg, {"X"}, {"params:alpha"}),
         (_ParamsBuffer, {"X"}, {"params:alpha"}),
         (_HyperBuffer, {"X"}, {"hyper:seed"}),
+        (_ScenarioGet, {"X"}, {"scenario:Shock"}),
+        (_ParamsGetDynamic, {"X"}, {f"params:{DYNAMIC}"}),
+        (_BufferItems, {"X"}, {f"scenario:{DYNAMIC}"}),
     ],
 )
 def test_visitor_buffer_recognition(fixture, expected_writes, expected_requires):
@@ -436,22 +467,20 @@ def test_visitor_augassign_counts_as_read_and_write():
     ],
 )
 def test_lint_class_status(fixture, expected_status):
-    entries = lint_class(fixture, root="step")
-    statuses = [e.status for e in entries if e.method == "step"]
-    assert statuses == [expected_status]
+    assert [
+        e.status for e in lint_class(fixture, root="step") if e.method == "step"
+    ] == [expected_status]
 
 
 def test_lint_class_drift_missing_and_spurious():
-    entries = lint_class(_Drift, root="step")
-    [step_entry] = [e for e in entries if e.method == "step"]
+    [step_entry] = [e for e in lint_class(_Drift, root="step") if e.method == "step"]
     assert step_entry.status is DriftStatus.DRIFT
     assert step_entry.missing == frozenset({"Z"})
     assert step_entry.spurious == frozenset({"Y"})
 
 
 def test_counts_returns_full_keyspace():
-    entries = lint_class(_Green, root="step") + lint_class(_Drift, root="step")
-    c = counts(entries)
+    c = counts(lint_class(_Green, root="step") + lint_class(_Drift, root="step"))
     assert set(c.keys()) == set(DriftStatus)
     assert c[DriftStatus.OK] == 1
     assert c[DriftStatus.DRIFT] == 1
@@ -459,8 +488,7 @@ def test_counts_returns_full_keyspace():
 
 
 def test_truthy_check_pattern():
-    entries = lint_class(_Drift, root="step")
-    bad = [e for e in entries if e.status is not DriftStatus.OK]
+    bad = [e for e in lint_class(_Drift, root="step") if e.status is not DriftStatus.OK]
     assert bad  # at least one non-OK
 
 
@@ -470,14 +498,20 @@ def test_truthy_check_pattern():
 
 
 def test_inheritance_child_without_decorator_is_missing():
-    entries = lint_class(_ChildNoDecorator, root="step")
-    [e] = [entry for entry in entries if entry.method == "step"]
+    [e] = [
+        entry
+        for entry in lint_class(_ChildNoDecorator, root="step")
+        if entry.method == "step"
+    ]
     assert e.status is DriftStatus.MISSING_DECORATOR
 
 
 def test_inheritance_child_decorated_is_ok():
-    entries = lint_class(_ChildDecorated, root="step")
-    [e] = [entry for entry in entries if entry.method == "step"]
+    [e] = [
+        entry
+        for entry in lint_class(_ChildDecorated, root="step")
+        if entry.method == "step"
+    ]
     assert e.status is DriftStatus.OK
 
 
@@ -508,8 +542,9 @@ def test_register_mutator_conflict_raises():
 
 def test_indirect_write_flag_set_after_registration():
     register_mutator("mutate_x", MethodSpec(writes_state=frozenset({"X"})))
-    entries = lint_class(_MutatorCaller, root="step")
-    [step_entry] = [e for e in entries if e.method == "step"]
+    [step_entry] = [
+        e for e in lint_class(_MutatorCaller, root="step") if e.method == "step"
+    ]
     assert step_entry.indirect is True
     # `step` declares writes_state=("X",) and is credited with "X" indirectly.
     # No drift since declared matches observed; the indirect flag triggers
@@ -520,8 +555,9 @@ def test_indirect_write_flag_set_after_registration():
 def test_unregistered_mutator_call_yields_drift():
     # Without registry, the caller's self.mutate_x() is opaque; declared
     # writes_state=("X",) becomes spurious -> DRIFT.
-    entries = lint_class(_MutatorCaller, root="step")
-    [step_entry] = [e for e in entries if e.method == "step"]
+    [step_entry] = [
+        e for e in lint_class(_MutatorCaller, root="step") if e.method == "step"
+    ]
     assert step_entry.status is DriftStatus.DRIFT
     assert step_entry.spurious == frozenset({"X"})
 
@@ -551,17 +587,16 @@ def test_r6d_bad_read_violation():
     violations = check_non_buffer_attrs(_R6dBadRead)
     assert violations
     method, attr, _line, reason = violations[0]
-    assert method == "step"
-    assert attr == "random_attr"
+    assert (method, attr) == ("step", "random_attr")
     assert "read" in reason
 
 
 def test_r6d_canary_write_banned():
     # `scratch` is bound in __init__ but writing to it outside __init__ is
     # still a violation under variant (b).
-    violations = check_non_buffer_attrs(_R6dCanaryWrite)
-    methods = {(m, a) for m, a, _line, _r in violations}
-    assert ("step", "scratch") in methods
+    assert ("step", "scratch") in {
+        (m, a) for m, a, _line, _r in check_non_buffer_attrs(_R6dCanaryWrite)
+    }
 
 
 def test_r6d_underscore_private_ok():

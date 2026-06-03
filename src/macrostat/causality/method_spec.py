@@ -49,6 +49,11 @@ Walker semantics
   — caller credited with the mutator's declared writes; the ``indirect``
   flag is set so :func:`lint_class` can flip ``DRIFT`` to ``INDIRECT_WRITE``
   when the only difference is the indirect contribution.
+* ``<buffer>.get(K, default)`` — recognised as a read on the matching
+  buffer. A literal ``K`` is added to the buffer's frozenset; a non-literal
+  ``K`` inserts the :data:`DYNAMIC` sentinel.
+* ``<buffer>.items()`` / ``.values()`` / ``.keys()`` — iteration over all
+  keys; inserts :data:`DYNAMIC` into the matching buffer's frozenset.
 
 Unrecognised slice shapes (tuple, walrus, starred-LHS, JoinedStr, computed
 expression) insert the :data:`DYNAMIC` sentinel directly into the matching
@@ -99,9 +104,9 @@ import ast
 import dataclasses
 import inspect
 import textwrap
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
-from typing import Callable
 
 DYNAMIC: str = "*"
 r"""Sentinel string declaring a computed (non-literal) key. Inserted into the
@@ -117,6 +122,7 @@ _REQUIRE_BUFFERS: tuple[str, ...] = (
     "scenario",
     "hyper",
 )
+_DICT_READ_METHODS: frozenset[str] = frozenset({"get", "items", "values", "keys"})
 
 
 # ---------------------------------------------------------------------------
@@ -547,6 +553,14 @@ class _AccessVisitor(ast.NodeVisitor):
             for buf in _REQUIRE_BUFFERS:
                 self._requires[buf] |= getattr(mspec, f"requires_{buf}")
             self.indirect = True
+        elif isinstance(f, ast.Attribute) and f.attr in _DICT_READ_METHODS:
+            buffer = self._resolve_subscript_buffer(f.value)
+            if buffer is not None:
+                if f.attr == "get":
+                    key = _literal_key(node.args[0]) if node.args else None
+                    self._record_require(buffer, key)
+                else:
+                    self._record_require(buffer, None)
         self.generic_visit(node)
 
 
