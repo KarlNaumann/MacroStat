@@ -18,6 +18,7 @@ import logging
 
 import torch
 
+from macrostat.causality import requires, writes
 from macrostat.core.behavior import Behavior
 
 from .parameters import ParametersPichlerEtAl2022DIO
@@ -96,6 +97,32 @@ class BehaviorPichlerEtAl2022DIO(Behavior):
                     f"Unknown production function: {self.hyper['production_function']}"
                 )
 
+    @writes(
+        state=(
+            "GrossOutput",
+            "AggregateDemand",
+            "LabourCompensation",
+            "ConsumptionDemand",
+            "RealizedConsumption",
+            "Profits",
+            "ProductiveCapacity",
+            "IntermediateConsumption",
+            "IntermediateOrders",
+            "TotalConsumptionDemand",
+            "InputCapacity",
+            "Inventories",
+        )
+    )
+    @requires(
+        params=(
+            "InitialGrossOutput",
+            "InitialLabourCompensation",
+            "InitialHouseholdConsumption",
+            "InitialProfits",
+            "IntermediateConsumptionMatrix",
+            "InventoryTargetDays",
+        )
+    )
     def initialize(self):
         """Set the initial state from data parameters.
 
@@ -166,6 +193,18 @@ class BehaviorPichlerEtAl2022DIO(Behavior):
     # Step sub-methods
     # ------------------------------------------------------------------
 
+    @writes(state=("LabourCompensation",))
+    @requires(
+        prior=(
+            "InputCapacity",
+            "AggregateDemand",
+            "ProductiveCapacity",
+            "LabourCompensation",
+        ),
+        params=("HiringRate", "FiringRate"),
+        scenario=("SupplyShock",),
+        hyper=("hiring_firing",),
+    )
     def hire_fire(self, t, scenario, params):
         r"""Sluggish labour adjustment towards a target workforce.
 
@@ -242,6 +281,8 @@ class BehaviorPichlerEtAl2022DIO(Behavior):
             self.prior["LabourCompensation"] + gamma * delta_labour,
         )
 
+    @writes(state=("ProductiveCapacity",))
+    @requires(state=("LabourCompensation",))
     def productive_capacity(self, t, scenario, params):
         r"""Labour-scaled production capacity.
 
@@ -287,6 +328,13 @@ class BehaviorPichlerEtAl2022DIO(Behavior):
             self.state["LabourCompensation"] / safe_l0
         ) * self._xcap0
 
+    @writes(state=("TotalConsumptionDemand", "ConsumptionDemand"))
+    @requires(
+        state=("LabourCompensation",),
+        prior=("TotalConsumptionDemand", "ConsumptionDemand"),
+        params=("ConsumptionPersistence", "BenefitRate"),
+        scenario=("PermanentIncomeExpectation", "DemandPreferences", "FearOfInfection"),
+    )
     def consumption_demand(self, t, scenario, params):
         r"""Muellbauer consumption function with fear-of-infection.
 
@@ -376,6 +424,11 @@ class BehaviorPichlerEtAl2022DIO(Behavior):
             * (1.0 - scenario.get("FearOfInfection", torch.tensor(0.0)))
         )
 
+    @writes(state=("IntermediateOrders",))
+    @requires(
+        prior=("AggregateDemand", "Inventories"),
+        params=("TechnicalCoefficients", "InventoryAdjustmentSpeed"),
+    )
     def intermediate_orders(self, t, scenario, params):
         r"""Inventory-gap ordering of intermediate inputs.
 
@@ -425,6 +478,12 @@ class BehaviorPichlerEtAl2022DIO(Behavior):
         )
         self.state["IntermediateOrders"] = torch.clamp(orders, min=0.0)
 
+    @writes(state=("AggregateDemand",))
+    @requires(
+        state=("ConsumptionDemand", "IntermediateOrders"),
+        params=("InitialOtherFinalDemand",),
+        scenario=("OtherFinalDemand",),
+    )
     def aggregate_demand(self, t, scenario, params):
         r"""Total demand aggregation.
 
@@ -475,6 +534,12 @@ class BehaviorPichlerEtAl2022DIO(Behavior):
             + other_final_demand
         )
 
+    @writes(state=("InputCapacity", "GrossOutput"))
+    @requires(
+        state=("ProductiveCapacity", "AggregateDemand"),
+        prior=("Inventories",),
+        params=("TechnicalCoefficients", "CriticalInputMatrix"),
+    )
     def compute_production(self, t, scenario, params):
         r"""Production function and output-level choice.
 
@@ -564,6 +629,16 @@ class BehaviorPichlerEtAl2022DIO(Behavior):
             self.state["AggregateDemand"],
         )
 
+    @writes(state=("IntermediateConsumption", "RealizedConsumption"))
+    @requires(
+        state=(
+            "GrossOutput",
+            "AggregateDemand",
+            "IntermediateOrders",
+            "ConsumptionDemand",
+        ),
+        hyper=("firm_priority",),
+    )
     def rationing(self, t, scenario, params):
         r"""Proportional rationing of output across buyers.
 
@@ -652,6 +727,12 @@ class BehaviorPichlerEtAl2022DIO(Behavior):
                 self.state["ConsumptionDemand"] * share_final
             )
 
+    @writes(state=("Inventories",))
+    @requires(
+        state=("GrossOutput", "IntermediateConsumption"),
+        prior=("Inventories",),
+        params=("TechnicalCoefficients",),
+    )
     def inventory_update(self, t, scenario, params):
         r"""Inventory accumulation from deliveries minus usage.
 
@@ -705,6 +786,16 @@ class BehaviorPichlerEtAl2022DIO(Behavior):
             min=0.0,
         )
 
+    @writes(state=("Profits", "Savings"))
+    @requires(
+        state=(
+            "GrossOutput",
+            "IntermediateConsumption",
+            "LabourCompensation",
+            "RealizedConsumption",
+        ),
+        params=("OtherCostCoefficients", "HouseholdOtherCostCoefficient"),
+    )
     def accounting(self, t, scenario, params):
         r"""Firm profits and household savings.
 

@@ -180,6 +180,51 @@ class TestVariablesPichlerEtAl2022DIO:
         assert "Savings" in defaults
 
 
+class TestMethodSpecLint:
+    """Static MethodSpec lint of the Pichler behavior class.
+
+    Confirms that every step sub-method and ``initialize`` carries a
+    ``@writes`` / ``@requires`` decorator whose declared buffer accesses
+    match what the AST walker observes. Also verifies the R6d non-buffer
+    attribute rule on the class, which depends on the match-block
+    aliasing in ``__init__`` being correctly resolved by
+    ``_method_aliases``.
+    """
+
+    @pytest.mark.parametrize("root", ["step", "initialize"])
+    def test_method_spec_lint_clean(self, root):
+        from macrostat.causality import DriftStatus, lint_class
+        from macrostat.models.PichlerEtAl2022DIO.behavior import (
+            BehaviorPichlerEtAl2022DIO,
+        )
+
+        bad = [
+            e
+            for e in lint_class(BehaviorPichlerEtAl2022DIO, root=root)
+            if e.status is not DriftStatus.OK
+        ]
+        assert (
+            not bad
+        ), f"lint_class({root!r}) found {len(bad)} non-OK entries: " + "; ".join(
+            f"{e.method}={e.status.name} miss={sorted(e.missing)} "
+            f"spur={sorted(e.spurious)}"
+            for e in bad
+        )
+
+    def test_r6d_attribute_rule_clean(self):
+        from macrostat.causality import check_non_buffer_attrs
+        from macrostat.models.PichlerEtAl2022DIO.behavior import (
+            BehaviorPichlerEtAl2022DIO,
+        )
+
+        violations = check_non_buffer_attrs(BehaviorPichlerEtAl2022DIO)
+        assert (
+            not violations
+        ), f"R6d found {len(violations)} violation(s): " + "; ".join(
+            f"{m}:{ln} {a} ({r})" for m, a, ln, r in violations
+        )
+
+
 # ======================================================================
 # Simulation tests (require data files)
 # ======================================================================
