@@ -115,6 +115,7 @@ jobs:
           fi
 
       - name: Upload coverage to Coveralls (parallel leg)
+        if: ${{ github.event_name != 'schedule' }}
         uses: coverallsapp/github-action@v2
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
