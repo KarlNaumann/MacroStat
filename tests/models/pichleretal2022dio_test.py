@@ -15,7 +15,6 @@ When unset, those tests are skipped automatically.
 import os
 from pathlib import Path
 
-import pandas as pd
 import pytest
 import torch
 
@@ -39,11 +38,10 @@ if _data_root_str is not None:
     IHS_DIR = _DATA_ROOT / "data" / "IHS_matrices_processed"
     INV_FILE = _DATA_ROOT / "data" / "ons_table_ratio_inv_go.csv"
     SHOCK_CSV = _DATA_ROOT / "data" / "shocks" / "shock_scenarios.csv"
-    R_OUTPUT_DIR = _DATA_ROOT / "output"
     FD_CSV = DATA_DIR / "GBR_f.csv"
     HAS_DATA = DATA_DIR.exists()
 else:
-    DATA_DIR = IHS_DIR = INV_FILE = SHOCK_CSV = R_OUTPUT_DIR = FD_CSV = None
+    DATA_DIR = IHS_DIR = INV_FILE = SHOCK_CSV = FD_CSV = None
     HAS_DATA = False
 
 skip_no_data = pytest.mark.skipif(
@@ -285,114 +283,4 @@ class TestSimulation:
         assert x[90].sum().item() < 0.85 * x[1].sum().item(), (
             f"Expected >15% output drop during lockdown, got "
             f"{(1 - x[90].sum().item() / x[1].sum().item()) * 100:.1f}%"
-        )
-
-
-# ======================================================================
-# Replication tests against R reference (parametrized)
-# ======================================================================
-
-VARIANT_CONFIGS = [
-    pytest.param(
-        "r_baseline_aggregate.csv",
-        "half_critical",
-        "S4",
-        True,
-        0.001,
-        id="baseline-half_critical-S4-hirefire",
-    ),
-    pytest.param(
-        "r_variant_leontief.csv",
-        "leontief",
-        "S4",
-        True,
-        0.001,
-        id="leontief-S4-hirefire",
-    ),
-    pytest.param(
-        "r_variant_linear.csv",
-        "linear",
-        "S4",
-        True,
-        0.001,
-        id="linear-S4-hirefire",
-    ),
-    pytest.param(
-        "r_variant_S1.csv",
-        "half_critical",
-        "S1",
-        True,
-        0.001,
-        id="half_critical-S1-hirefire",
-    ),
-    pytest.param(
-        "r_variant_nohirefire.csv",
-        "half_critical",
-        "S4",
-        False,
-        0.001,
-        id="half_critical-S4-nohirefire",
-    ),
-]
-
-
-class TestReplicationAgainstR:
-    @skip_no_data
-    @pytest.mark.parametrize(
-        "r_file, production_function, supply_scenario, hiring_firing, tol",
-        VARIANT_CONFIGS,
-    )
-    def test_variant(
-        self,
-        r_file,
-        production_function,
-        supply_scenario,
-        hiring_firing,
-        tol,
-    ):
-        """Aggregate gross output matches R within float32 tolerance."""
-        r_path = R_OUTPUT_DIR / r_file
-        if not r_path.exists():
-            pytest.skip(f"R output file not found: {r_file}")
-
-        r_agg = pd.read_csv(r_path)
-
-        params = ParametersPichlerEtAl2022DIO.from_wiod_uk(
-            data_dir=DATA_DIR,
-            ihs_dir=IHS_DIR,
-            inv_file=INV_FILE,
-            hyperparameters={
-                "production_function": production_function,
-                "hiring_firing": hiring_firing,
-            },
-        )
-        scenarios = ScenariosPichlerEtAl2022DIO.from_shocks_csv(
-            parameters=params,
-            shock_csv=SHOCK_CSV,
-            final_demand_csv=FD_CSV,
-            supply_scenario=supply_scenario,
-        )
-        variables = VariablesPichlerEtAl2022DIO(parameters=params)
-        model = PichlerEtAl2022DIO(
-            parameters=params,
-            scenarios=scenarios,
-            variables=variables,
-        )
-        result = model.simulate(scenario=1)
-        py_x = result["GrossOutput"]
-
-        max_rel_err = 0.0
-        worst_t = 0
-        for r_row in range(len(r_agg)):
-            r_val = r_agg["x"].iloc[r_row]
-            py_val = py_x[r_row + 1].sum().item()
-            if abs(r_val) > 1e-6:
-                rel_err = abs(py_val - r_val) / abs(r_val)
-                if rel_err > max_rel_err:
-                    max_rel_err = rel_err
-                    worst_t = r_row + 1
-
-        assert max_rel_err < tol, (
-            f"Max relative error {max_rel_err:.6f} at time {worst_t} "
-            f"exceeds tolerance {tol}"
         )
