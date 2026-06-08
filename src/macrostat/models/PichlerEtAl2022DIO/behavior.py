@@ -18,6 +18,7 @@ import logging
 
 import torch
 
+from macrostat.causality import requires, writes
 from macrostat.core.behavior import Behavior
 
 from .parameters import ParametersPichlerEtAl2022DIO
@@ -37,10 +38,12 @@ class BehaviorPichlerEtAl2022DIO(Behavior):
     3. ``consumption_demand`` -- Muellbauer consumption function.
     4. ``intermediate_orders`` -- inventory-gap ordering.
     5. ``aggregate_demand`` -- total demand aggregation.
-    6. ``compute_production`` -- min(capacity, input limit, demand).
-    7. ``rationing`` -- proportional rationing of output.
-    8. ``inventory_update`` -- inventory accumulation.
-    9. ``accounting`` -- profits and household savings.
+    6. ``production`` -- input-based capacity (dispatched by
+       ``production_function`` hyperparameter to one of five variants).
+    7. ``compute_gross_output`` -- min(capacity, input limit, demand).
+    8. ``rationing`` -- proportional rationing of output.
+    9. ``inventory_update`` -- inventory accumulation.
+    10. ``accounting`` -- profits and household savings.
 
     Equation numbers cited in sub-method summaries refer to Pichler et al.
     (2022). Paper-symbol ↔ code-variable mapping is documented in
@@ -96,13 +99,40 @@ class BehaviorPichlerEtAl2022DIO(Behavior):
                     f"Unknown production function: {self.hyper['production_function']}"
                 )
 
+    @writes(
+        state=(
+            "GrossOutput",
+            "AggregateDemand",
+            "LabourCompensation",
+            "ConsumptionDemand",
+            "RealizedConsumption",
+            "Profits",
+            "ProductiveCapacity",
+            "IntermediateConsumption",
+            "IntermediateOrders",
+            "TotalConsumptionDemand",
+            "InputCapacity",
+            "Inventories",
+        )
+    )
+    @requires(
+        params=(
+            "InitialGrossOutput",
+            "InitialLabourCompensation",
+            "InitialHouseholdConsumption",
+            "InitialProfits",
+            "IntermediateConsumptionMatrix",
+            "InventoryTargetDays",
+        )
+    )
     def initialize(self):
         """Set the initial state from data parameters.
 
-        Populates all state variables with their steady-state values
-        derived from the loaded IO data, and caches reference quantities
-        used during the simulation (``_x0``, ``_l0``, ``_xcap0``,
-        ``_S_tar``, ``_mpc``).
+        Populates all state variables with their steady-state values derived
+        from the loaded IO data. The simulation reads every reference
+        quantity live from :attr:`params` so a scenario shock on any
+        ``Initial*`` key propagates uniformly through the labour, capacity,
+        production, consumption, and inventory blocks.
         """
         self.state["GrossOutput"] = self.params["InitialGrossOutput"].clone()
         self.state["AggregateDemand"] = self.params["InitialGrossOutput"].clone()
@@ -127,16 +157,10 @@ class BehaviorPichlerEtAl2022DIO(Behavior):
             self.params["InitialHouseholdConsumption"].sum().unsqueeze(0)
         )
         self.state["InputCapacity"] = self.params["InitialGrossOutput"].clone()
-        inventory_target = self.params["IntermediateConsumptionMatrix"] * self.params[
-            "InventoryTargetDays"
-        ].unsqueeze(0)
-        self.state["Inventories"] = inventory_target.clone()
-
-        self._x0 = self.params["InitialGrossOutput"].clone()
-        self._l0 = self.params["InitialLabourCompensation"].clone()
-        self._xcap0 = self._x0.clone()
-        self._S_tar = inventory_target
-        self._mpc = self.params["InitialHouseholdConsumption"].sum() / self._l0.sum()
+        self.state["Inventories"] = (
+            self.params["IntermediateConsumptionMatrix"]
+            * self.params["InventoryTargetDays"].unsqueeze(0)
+        ).clone()
 
     def step(self, t, scenario, params, **kwargs):
         """Execute one daily time step of the model.
@@ -157,7 +181,8 @@ class BehaviorPichlerEtAl2022DIO(Behavior):
         self.consumption_demand(t, scenario, params)
         self.intermediate_orders(t, scenario, params)
         self.aggregate_demand(t, scenario, params)
-        self.compute_production(t, scenario, params)
+        self.production(t, scenario, params)
+        self.compute_gross_output(t, scenario, params)
         self.rationing(t, scenario, params)
         self.inventory_update(t, scenario, params)
         self.accounting(t, scenario, params)
@@ -166,6 +191,23 @@ class BehaviorPichlerEtAl2022DIO(Behavior):
     # Step sub-methods
     # ------------------------------------------------------------------
 
+    @writes(state=("LabourCompensation",))
+    @requires(
+        prior=(
+            "InputCapacity",
+            "AggregateDemand",
+            "ProductiveCapacity",
+            "LabourCompensation",
+        ),
+        params=(
+            "HiringRate",
+            "FiringRate",
+            "InitialLabourCompensation",
+            "InitialGrossOutput",
+        ),
+        scenario=("SupplyShock",),
+        hyper=("hiring_firing",),
+    )
     def hire_fire(self, t, scenario, params):
         r"""Sluggish labour adjustment towards a target workforce.
 
@@ -217,13 +259,21 @@ class BehaviorPichlerEtAl2022DIO(Behavior):
         See :doc:`/models/PichlerEtAl2022DIO/notation` for symbol definitions.
         """
         if not self.hyper["hiring_firing"]:
-            supply_shock = scenario.get("SupplyShock", torch.zeros_like(self._l0))
-            self.state["LabourCompensation"] = self._l0 * (1.0 - supply_shock)
+            supply_shock = scenario.get(
+                "SupplyShock", torch.zeros_like(params["InitialLabourCompensation"])
+            )
+            self.state["LabourCompensation"] = params["InitialLabourCompensation"] * (
+                1.0 - supply_shock
+            )
             return
 
-        supply_shock = scenario.get("SupplyShock", torch.zeros_like(self._l0))
-        labor_share = self._l0 / torch.where(
-            self._x0 != 0, self._x0, torch.ones_like(self._x0)
+        supply_shock = scenario.get(
+            "SupplyShock", torch.zeros_like(params["InitialLabourCompensation"])
+        )
+        labor_share = params["InitialLabourCompensation"] / torch.where(
+            params["InitialGrossOutput"] != 0,
+            params["InitialGrossOutput"],
+            torch.ones_like(params["InitialGrossOutput"]),
         )
 
         hire_target = torch.min(
@@ -238,10 +288,15 @@ class BehaviorPichlerEtAl2022DIO(Behavior):
         )
 
         self.state["LabourCompensation"] = torch.min(
-            self._l0 * (1.0 - supply_shock),
+            params["InitialLabourCompensation"] * (1.0 - supply_shock),
             self.prior["LabourCompensation"] + gamma * delta_labour,
         )
 
+    @writes(state=("ProductiveCapacity",))
+    @requires(
+        state=("LabourCompensation",),
+        params=("InitialLabourCompensation", "InitialGrossOutput"),
+    )
     def productive_capacity(self, t, scenario, params):
         r"""Labour-scaled production capacity.
 
@@ -282,11 +337,27 @@ class BehaviorPichlerEtAl2022DIO(Behavior):
         -----
         See :doc:`/models/PichlerEtAl2022DIO/notation` for symbol definitions.
         """
-        safe_l0 = torch.where(self._l0 != 0, self._l0, torch.ones_like(self._l0))
+        safe_labour = torch.where(
+            params["InitialLabourCompensation"] != 0,
+            params["InitialLabourCompensation"],
+            torch.ones_like(params["InitialLabourCompensation"]),
+        )
         self.state["ProductiveCapacity"] = (
-            self.state["LabourCompensation"] / safe_l0
-        ) * self._xcap0
+            self.state["LabourCompensation"] / safe_labour
+        ) * params["InitialGrossOutput"]
 
+    @writes(state=("TotalConsumptionDemand", "ConsumptionDemand"))
+    @requires(
+        state=("LabourCompensation",),
+        prior=("TotalConsumptionDemand", "ConsumptionDemand"),
+        params=(
+            "ConsumptionPersistence",
+            "BenefitRate",
+            "InitialLabourCompensation",
+            "InitialHouseholdConsumption",
+        ),
+        scenario=("PermanentIncomeExpectation", "DemandPreferences", "FearOfInfection"),
+    )
     def consumption_demand(self, t, scenario, params):
         r"""Muellbauer consumption function with fear-of-infection.
 
@@ -337,7 +408,8 @@ class BehaviorPichlerEtAl2022DIO(Behavior):
         -----
         See :doc:`/models/PichlerEtAl2022DIO/notation` for symbol definitions.
         """
-        initial_labour_total = self._l0.sum()
+        initial_labour_total = params["InitialLabourCompensation"].sum()
+        mpc = params["InitialHouseholdConsumption"].sum() / initial_labour_total
         labour_total_effective = (
             params["BenefitRate"] * initial_labour_total
             + (1.0 - params["BenefitRate"]) * self.state["LabourCompensation"].sum()
@@ -347,12 +419,10 @@ class BehaviorPichlerEtAl2022DIO(Behavior):
         log_total_consumption_demand = torch.log(
             torch.clamp(total_consumption_demand_prior, min=1e-10)
         )
-        log_labour = torch.log(
-            torch.clamp(self._mpc * labour_total_effective, min=1e-10)
-        )
+        log_labour = torch.log(torch.clamp(mpc * labour_total_effective, min=1e-10))
         log_labour_permanent = torch.log(
             torch.clamp(
-                self._mpc
+                mpc
                 * initial_labour_total
                 * scenario.get("PermanentIncomeExpectation", torch.tensor(1.0)),
                 min=1e-10,
@@ -376,6 +446,16 @@ class BehaviorPichlerEtAl2022DIO(Behavior):
             * (1.0 - scenario.get("FearOfInfection", torch.tensor(0.0)))
         )
 
+    @writes(state=("IntermediateOrders",))
+    @requires(
+        prior=("AggregateDemand", "Inventories"),
+        params=(
+            "TechnicalCoefficients",
+            "InventoryAdjustmentSpeed",
+            "IntermediateConsumptionMatrix",
+            "InventoryTargetDays",
+        ),
+    )
     def intermediate_orders(self, t, scenario, params):
         r"""Inventory-gap ordering of intermediate inputs.
 
@@ -418,13 +498,22 @@ class BehaviorPichlerEtAl2022DIO(Behavior):
         -----
         See :doc:`/models/PichlerEtAl2022DIO/notation` for symbol definitions.
         """
+        inventory_target = params["IntermediateConsumptionMatrix"] * params[
+            "InventoryTargetDays"
+        ].unsqueeze(0)
         orders = (
             params["TechnicalCoefficients"] * self.prior["AggregateDemand"].unsqueeze(0)
-            + (self._S_tar - self.prior["Inventories"])
+            + (inventory_target - self.prior["Inventories"])
             / params["InventoryAdjustmentSpeed"]
         )
         self.state["IntermediateOrders"] = torch.clamp(orders, min=0.0)
 
+    @writes(state=("AggregateDemand",))
+    @requires(
+        state=("ConsumptionDemand", "IntermediateOrders"),
+        params=("InitialOtherFinalDemand",),
+        scenario=("OtherFinalDemand",),
+    )
     def aggregate_demand(self, t, scenario, params):
         r"""Total demand aggregation.
 
@@ -475,17 +564,14 @@ class BehaviorPichlerEtAl2022DIO(Behavior):
             + other_final_demand
         )
 
-    def compute_production(self, t, scenario, params):
-        r"""Production function and output-level choice.
+    @writes(state=("GrossOutput",))
+    @requires(state=("ProductiveCapacity", "InputCapacity", "AggregateDemand"))
+    def compute_gross_output(self, t, scenario, params):
+        r"""Realized output as the binding minimum.
 
-        Realized output is the minimum of three constraints: labour
-        capacity, input-based capacity (from inventories and the chosen
-        production function), and demand.  The input-based capacity depends
-        on the ``production_function`` hyperparameter; five functional forms
-        range from Leontief (all inputs binding) through partially binding
-        Leontief variants to linear (perfect substitutes).  The partially
-        binding Leontief distinguishes critical, important, and non-critical
-        inputs based on an industry analyst survey. Replicates Eqs. 8-14.
+        Realized output is the minimum of three constraints already written
+        in this step: labour capacity, input-based capacity, and demand.
+        Replicates Eq. 8.
 
         Parameters
         ----------
@@ -502,68 +588,38 @@ class BehaviorPichlerEtAl2022DIO(Behavior):
             :nowrap:
 
             \begin{align}
-                x_{i,t} &= \min\{x^{\text{cap}}_{i,t},\;
-                                 x^{\text{inp}}_{i,t},\;
-                                 d_{i,t}\} \\[6pt]
-                x^{\text{inp}}_{i,t} &= \begin{cases}
-                    \displaystyle\min_{\{j:\,A_{ji}>0\}}
-                        \frac{S_{ji,t}}{A_{ji}}
-                        & \text{leontief} \\
-                    \displaystyle\min_{j \in \mathcal{V}_i \cup \mathcal{U}_i}
-                        \frac{S_{ji,t}}{A_{ji}}
-                        & \text{strongly\_critical} \\
-                    \displaystyle\min\!\left\{
-                        \min_{j\in\mathcal{V}_i}\frac{S_{ji,t}}{A_{ji}},\;
-                        \tfrac{1}{2}\!\left(
-                            \min_{k\in\mathcal{U}_i}\frac{S_{ki,t}}{A_{ki}}
-                            + x^{\text{cap}}_{i,0}
-                        \right)
-                    \right\}
-                        & \text{half\_critical} \\
-                    \displaystyle\min_{j \in \mathcal{V}_i}
-                        \frac{S_{ji,t}}{A_{ji}}
-                        & \text{weakly\_critical} \\
-                    \displaystyle\sum_j S_{ji,t} \big/ \sum_j A_{ji}
-                        & \text{linear}
-                \end{cases}
+                x_{i,t} = \min\{x^{\text{cap}}_{i,t},\;
+                                x^{\text{inp}}_{i,t},\;
+                                d_{i,t}\}
             \end{align}
 
         Dependency
         ----------
-        - state: ProductiveCapacity, AggregateDemand
-        - prior: Inventories
-        - params: TechnicalCoefficients, CriticalInputMatrix
+        - state: ProductiveCapacity, InputCapacity, AggregateDemand
 
         Sets
         ----
-        - InputCapacity
         - GrossOutput
 
         Notes
         -----
-        The dispatcher selects one of five production-function variants by
-        the ``production_function`` hyperparameter, set at construction:
-
-        - ``leontief`` -- all inputs with positive technical coefficient bind.
-        - ``strongly_critical`` -- critical and important inputs bind.
-        - ``half_critical`` -- critical inputs bind; important inputs at
-          half capacity.
-        - ``weakly_critical`` -- only critical inputs bind.
-        - ``linear`` -- perfect substitution across inputs.
-
         See :doc:`/models/PichlerEtAl2022DIO/notation` for symbol definitions.
         """
-        self.state["InputCapacity"] = self.production(
-            self.prior["Inventories"],
-            params["TechnicalCoefficients"],
-            params["CriticalInputMatrix"],
-            self._xcap0,
-        )
         self.state["GrossOutput"] = torch.min(
             torch.min(self.state["ProductiveCapacity"], self.state["InputCapacity"]),
             self.state["AggregateDemand"],
         )
 
+    @writes(state=("IntermediateConsumption", "RealizedConsumption"))
+    @requires(
+        state=(
+            "GrossOutput",
+            "AggregateDemand",
+            "IntermediateOrders",
+            "ConsumptionDemand",
+        ),
+        hyper=("firm_priority",),
+    )
     def rationing(self, t, scenario, params):
         r"""Proportional rationing of output across buyers.
 
@@ -652,6 +708,12 @@ class BehaviorPichlerEtAl2022DIO(Behavior):
                 self.state["ConsumptionDemand"] * share_final
             )
 
+    @writes(state=("Inventories",))
+    @requires(
+        state=("GrossOutput", "IntermediateConsumption"),
+        prior=("Inventories",),
+        params=("TechnicalCoefficients",),
+    )
     def inventory_update(self, t, scenario, params):
         r"""Inventory accumulation from deliveries minus usage.
 
@@ -705,6 +767,16 @@ class BehaviorPichlerEtAl2022DIO(Behavior):
             min=0.0,
         )
 
+    @writes(state=("Profits", "Savings"))
+    @requires(
+        state=(
+            "GrossOutput",
+            "IntermediateConsumption",
+            "LabourCompensation",
+            "RealizedConsumption",
+        ),
+        params=("OtherCostCoefficients", "HouseholdOtherCostCoefficient"),
+    )
     def accounting(self, t, scenario, params):
         r"""Firm profits and household savings.
 
@@ -772,211 +844,186 @@ class BehaviorPichlerEtAl2022DIO(Behavior):
     # Production functions
     # ------------------------------------------------------------------
 
-    def production_leontief(
-        self,
-        inventory_matrix,
-        technical_coefficients,
-        critical_input_matrix,
-        capacity_initial,
-    ):
-        """Standard Leontief: all inputs with positive ``A`` are binding.
+    @writes(state=("InputCapacity",))
+    @requires(prior=("Inventories",), params=("TechnicalCoefficients",))
+    def production_leontief(self, t, scenario, params):
+        r"""Standard Leontief: all inputs with positive ``A`` bind.
 
-        Parameters
+        Writes :math:`x^{\text{inp}}_{i,t} = \min_{j:\,A_{ji}>0}
+        S_{ji,t-1} / A_{ji}` to ``self.state["InputCapacity"]``.
+
+        Dependency
         ----------
-        inventory_matrix : torch.Tensor
-            ``(N, N)`` inventory matrix :math:`S_{ji,t}`.
-        technical_coefficients : torch.Tensor
-            ``(N, N)`` technical coefficients matrix :math:`A_{ji}`.
-        critical_input_matrix : torch.Tensor
-            ``(N, N)`` critical-input matrix (unused in this variant).
-        capacity_initial : torch.Tensor
-            ``(N,)`` baseline productive capacity :math:`x^{\\text{cap}}_{i,0}`.
+        - prior: Inventories
+        - params: TechnicalCoefficients
 
-        Returns
-        -------
-        torch.Tensor
-            ``(N,)`` input-constrained production capacity.
+        Sets
+        ----
+        - InputCapacity
         """
-        n_sectors = inventory_matrix.shape[1]
+        n_sectors = self.prior["Inventories"].shape[1]
         input_capacity = torch.full((n_sectors,), float("inf"))
         for k in range(n_sectors):
-            mask = technical_coefficients[:, k] > 0
+            mask = params["TechnicalCoefficients"][:, k] > 0
             if mask.any():
                 safe_a = torch.where(
                     mask,
-                    technical_coefficients[:, k],
-                    torch.ones_like(technical_coefficients[:, k]),
+                    params["TechnicalCoefficients"][:, k],
+                    torch.ones_like(params["TechnicalCoefficients"][:, k]),
                 )
-                ratios = inventory_matrix[:, k] / safe_a
+                ratios = self.prior["Inventories"][:, k] / safe_a
                 ratios = torch.where(mask, ratios, torch.tensor(float("inf")))
                 input_capacity[k] = ratios.min()
-        return input_capacity
+        self.state["InputCapacity"] = input_capacity
 
-    def production_strongly_critical(
-        self,
-        inventory_matrix,
-        technical_coefficients,
-        critical_input_matrix,
-        capacity_initial,
-    ):
-        """Critical and important inputs are binding (score >= 0.5).
+    @writes(state=("InputCapacity",))
+    @requires(
+        prior=("Inventories",),
+        params=("TechnicalCoefficients", "CriticalInputMatrix"),
+    )
+    def production_strongly_critical(self, t, scenario, params):
+        r"""Critical and important inputs bind (score :math:`\ge 0.5`).
 
-        Parameters
+        Writes :math:`x^{\text{inp}}_{i,t} = \min_{j \in \mathcal{V}_i \cup
+        \mathcal{U}_i} S_{ji,t-1} / A_{ji}` to ``self.state["InputCapacity"]``.
+
+        Dependency
         ----------
-        inventory_matrix : torch.Tensor
-            ``(N, N)`` inventory matrix.
-        technical_coefficients : torch.Tensor
-            ``(N, N)`` technical coefficients matrix.
-        critical_input_matrix : torch.Tensor
-            ``(N, N)`` critical-input matrix.
-        capacity_initial : torch.Tensor
-            ``(N,)`` baseline productive capacity.
+        - prior: Inventories
+        - params: TechnicalCoefficients, CriticalInputMatrix
 
-        Returns
-        -------
-        torch.Tensor
-            ``(N,)`` input-constrained production capacity.
+        Sets
+        ----
+        - InputCapacity
         """
-        n_sectors = inventory_matrix.shape[1]
+        n_sectors = self.prior["Inventories"].shape[1]
         input_capacity = torch.full((n_sectors,), float("inf"))
         for k in range(n_sectors):
-            mask = critical_input_matrix[:, k] >= 0.5
+            mask = params["CriticalInputMatrix"][:, k] >= 0.5
             if mask.any():
                 safe_a = torch.where(
                     mask,
-                    technical_coefficients[:, k],
-                    torch.ones_like(technical_coefficients[:, k]),
+                    params["TechnicalCoefficients"][:, k],
+                    torch.ones_like(params["TechnicalCoefficients"][:, k]),
                 )
-                ratios = inventory_matrix[:, k] / safe_a
+                ratios = self.prior["Inventories"][:, k] / safe_a
                 ratios = torch.where(mask, ratios, torch.tensor(float("inf")))
                 input_capacity[k] = ratios.min()
-        return input_capacity
+        self.state["InputCapacity"] = input_capacity
 
-    def production_half_critical(
-        self,
-        inventory_matrix,
-        technical_coefficients,
-        critical_input_matrix,
-        capacity_initial,
-    ):
-        """Critical inputs fully binding; important inputs half-binding.
+    @writes(state=("InputCapacity",))
+    @requires(
+        prior=("Inventories",),
+        params=(
+            "TechnicalCoefficients",
+            "CriticalInputMatrix",
+            "InitialGrossOutput",
+        ),
+    )
+    def production_half_critical(self, t, scenario, params):
+        r"""Critical inputs fully binding; important inputs half-binding.
 
-        Parameters
+        Critical inputs (score :math:`> 0.5`) follow the Leontief rule;
+        important inputs (score :math:`= 0.5`) contribute at half capacity
+        relative to the baseline :math:`x^{\text{cap}}_{i,0}`. Writes
+        the binding minimum to ``self.state["InputCapacity"]``.
+
+        Dependency
         ----------
-        inventory_matrix : torch.Tensor
-            ``(N, N)`` inventory matrix.
-        technical_coefficients : torch.Tensor
-            ``(N, N)`` technical coefficients matrix.
-        critical_input_matrix : torch.Tensor
-            ``(N, N)`` critical-input matrix.
-        capacity_initial : torch.Tensor
-            ``(N,)`` baseline productive capacity.
+        - prior: Inventories
+        - params: TechnicalCoefficients, CriticalInputMatrix, InitialGrossOutput
 
-        Returns
-        -------
-        torch.Tensor
-            ``(N,)`` input-constrained production capacity.
+        Sets
+        ----
+        - InputCapacity
         """
-        n_sectors = inventory_matrix.shape[1]
+        n_sectors = self.prior["Inventories"].shape[1]
         input_capacity = torch.full((n_sectors,), float("inf"))
         for k in range(n_sectors):
-            critical = critical_input_matrix[:, k] > 0.5
-            important = critical_input_matrix[:, k] == 0.5
+            critical = params["CriticalInputMatrix"][:, k] > 0.5
+            important = params["CriticalInputMatrix"][:, k] == 0.5
 
             vals = []
             if critical.any():
                 safe_a = torch.where(
                     critical,
-                    technical_coefficients[:, k],
-                    torch.ones_like(technical_coefficients[:, k]),
+                    params["TechnicalCoefficients"][:, k],
+                    torch.ones_like(params["TechnicalCoefficients"][:, k]),
                 )
-                ratios = inventory_matrix[:, k] / safe_a
+                ratios = self.prior["Inventories"][:, k] / safe_a
                 ratios = torch.where(critical, ratios, torch.tensor(float("inf")))
                 vals.append(ratios.min())
 
             if important.any():
                 safe_a = torch.where(
                     important,
-                    technical_coefficients[:, k],
-                    torch.ones_like(technical_coefficients[:, k]),
+                    params["TechnicalCoefficients"][:, k],
+                    torch.ones_like(params["TechnicalCoefficients"][:, k]),
                 )
-                ratios = (inventory_matrix[:, k] / safe_a) * 0.5 + capacity_initial[
-                    k
-                ] / 2.0
+                ratios = (self.prior["Inventories"][:, k] / safe_a) * 0.5 + params[
+                    "InitialGrossOutput"
+                ][k] / 2.0
                 ratios = torch.where(important, ratios, torch.tensor(float("inf")))
                 vals.append(ratios.min())
 
             if vals:
                 input_capacity[k] = torch.stack(vals).min()
-        return input_capacity
+        self.state["InputCapacity"] = input_capacity
 
-    def production_weakly_critical(
-        self,
-        inventory_matrix,
-        technical_coefficients,
-        critical_input_matrix,
-        capacity_initial,
-    ):
-        """Only critical inputs (score > 0.5) are binding.
+    @writes(state=("InputCapacity",))
+    @requires(
+        prior=("Inventories",),
+        params=("TechnicalCoefficients", "CriticalInputMatrix"),
+    )
+    def production_weakly_critical(self, t, scenario, params):
+        r"""Only critical inputs (score :math:`> 0.5`) bind.
 
-        Parameters
+        Writes :math:`x^{\text{inp}}_{i,t} = \min_{j \in \mathcal{V}_i}
+        S_{ji,t-1} / A_{ji}` to ``self.state["InputCapacity"]``.
+
+        Dependency
         ----------
-        inventory_matrix : torch.Tensor
-            ``(N, N)`` inventory matrix.
-        technical_coefficients : torch.Tensor
-            ``(N, N)`` technical coefficients matrix.
-        critical_input_matrix : torch.Tensor
-            ``(N, N)`` critical-input matrix.
-        capacity_initial : torch.Tensor
-            ``(N,)`` baseline productive capacity.
+        - prior: Inventories
+        - params: TechnicalCoefficients, CriticalInputMatrix
 
-        Returns
-        -------
-        torch.Tensor
-            ``(N,)`` input-constrained production capacity.
+        Sets
+        ----
+        - InputCapacity
         """
-        n_sectors = inventory_matrix.shape[1]
+        n_sectors = self.prior["Inventories"].shape[1]
         input_capacity = torch.full((n_sectors,), float("inf"))
         for k in range(n_sectors):
-            mask = critical_input_matrix[:, k] > 0.5
+            mask = params["CriticalInputMatrix"][:, k] > 0.5
             if mask.any():
                 safe_a = torch.where(
                     mask,
-                    technical_coefficients[:, k],
-                    torch.ones_like(technical_coefficients[:, k]),
+                    params["TechnicalCoefficients"][:, k],
+                    torch.ones_like(params["TechnicalCoefficients"][:, k]),
                 )
-                ratios = inventory_matrix[:, k] / safe_a
+                ratios = self.prior["Inventories"][:, k] / safe_a
                 ratios = torch.where(mask, ratios, torch.tensor(float("inf")))
                 input_capacity[k] = ratios.min()
-        return input_capacity
+        self.state["InputCapacity"] = input_capacity
 
-    def production_linear(
-        self,
-        inventory_matrix,
-        technical_coefficients,
-        critical_input_matrix,
-        capacity_initial,
-    ):
-        """Linear production: all inputs are perfect substitutes.
+    @writes(state=("InputCapacity",))
+    @requires(prior=("Inventories",), params=("TechnicalCoefficients",))
+    def production_linear(self, t, scenario, params):
+        r"""Linear production: all inputs are perfect substitutes.
 
-        Parameters
+        Writes :math:`x^{\text{inp}}_{i,t} = \sum_j S_{ji,t-1} / \sum_j
+        A_{ji}` to ``self.state["InputCapacity"]``.
+
+        Dependency
         ----------
-        inventory_matrix : torch.Tensor
-            ``(N, N)`` inventory matrix.
-        technical_coefficients : torch.Tensor
-            ``(N, N)`` technical coefficients matrix.
-        critical_input_matrix : torch.Tensor
-            ``(N, N)`` critical-input matrix (unused in this variant).
-        capacity_initial : torch.Tensor
-            ``(N,)`` baseline productive capacity.
+        - prior: Inventories
+        - params: TechnicalCoefficients
 
-        Returns
-        -------
-        torch.Tensor
-            ``(N,)`` input-constrained production capacity.
+        Sets
+        ----
+        - InputCapacity
         """
-        col_sum_technical_coefficients = technical_coefficients.sum(dim=0)
-        col_sum_inventory_matrix = inventory_matrix.sum(dim=0)
+        col_sum_technical_coefficients = params["TechnicalCoefficients"].sum(dim=0)
+        col_sum_inventory_matrix = self.prior["Inventories"].sum(dim=0)
         safe_denom = torch.where(
             col_sum_technical_coefficients != 0,
             col_sum_technical_coefficients,
@@ -988,4 +1035,4 @@ class BehaviorPichlerEtAl2022DIO(Behavior):
             input_capacity,
             torch.tensor(float("inf")),
         )
-        return input_capacity
+        self.state["InputCapacity"] = input_capacity

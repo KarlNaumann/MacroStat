@@ -40,47 +40,21 @@ exports, investment). Replicates Eq. 3.
 	\end{align}
 
 
-3. Compute Production
+3. Compute Gross Output
 
-Production function and output-level choice.
-Realized output is the minimum of three constraints: labour
-capacity, input-based capacity (from inventories and the chosen
-production function), and demand.  The input-based capacity depends
-on the ``production_function`` hyperparameter; five functional forms
-range from Leontief (all inputs binding) through partially binding
-Leontief variants to linear (perfect substitutes).  The partially
-binding Leontief distinguishes critical, important, and non-critical
-inputs based on an industry analyst survey. Replicates Eqs. 8-14.
+Realized output as the binding minimum.
+Realized output is the minimum of three constraints already written
+in this step: labour capacity, input-based capacity, and demand.
+Replicates Eq. 8.
 
 .. math::
-	:label: compute_production
+	:label: compute_gross_output
 	:nowrap:
 
 	\begin{align}
-	x_{i,t} &= \min\{x^{\text{cap}}_{i,t},\;
+	x_{i,t} = \min\{x^{\text{cap}}_{i,t},\;
 	x^{\text{inp}}_{i,t},\;
-	d_{i,t}\} \\[6pt]
-	x^{\text{inp}}_{i,t} &= \begin{cases}
-	\displaystyle\min_{\{j:\,A_{ji}>0\}}
-	\frac{S_{ji,t}}{A_{ji}}
-	& \text{leontief} \\
-	\displaystyle\min_{j \in \mathcal{V}_i \cup \mathcal{U}_i}
-	\frac{S_{ji,t}}{A_{ji}}
-	& \text{strongly\_critical} \\
-	\displaystyle\min\!\left\{
-	\min_{j\in\mathcal{V}_i}\frac{S_{ji,t}}{A_{ji}},\;
-	\tfrac{1}{2}\!\left(
-	\min_{k\in\mathcal{U}_i}\frac{S_{ki,t}}{A_{ki}}
-	+ x^{\text{cap}}_{i,0}
-	\right)
-	\right\}
-	& \text{half\_critical} \\
-	\displaystyle\min_{j \in \mathcal{V}_i}
-	\frac{S_{ji,t}}{A_{ji}}
-	& \text{weakly\_critical} \\
-	\displaystyle\sum_j S_{ji,t} \big/ \sum_j A_{ji}
-	& \text{linear}
-	\end{cases}
+	d_{i,t}\}
 	\end{align}
 
 

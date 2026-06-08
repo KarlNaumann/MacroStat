@@ -1,0 +1,5 @@
+fixture,median_ms
+_Empty (no buffer access),0.1076
+"_Small (3 keys, OK)",0.3166
+"_Wide (60 keys, loop)",0.5127
+BUDGET (empty MODELS_LINTED),100.0000
