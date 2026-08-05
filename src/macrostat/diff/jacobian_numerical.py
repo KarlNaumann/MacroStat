@@ -286,8 +286,8 @@ class JacobianNumerical(JacobianBase):
         if param_names is None:
             param_names = self.model.parameters.get_free_param_names()
 
-        output_base = self.model.simulate(scenario=self.scenario)
-        loss_base = loss_fn(output_base)
+        self.output_base = self.model.simulate(scenario=self.scenario)
+        self.loss_base = loss_fn(self.output_base)
 
         tasks = self._generate_tasks(param_names, loss_fn, mode)
 
@@ -342,11 +342,11 @@ class JacobianNumerical(JacobianBase):
             if all([mode == "central", "pos" in losses, "neg" in losses]):
                 grad = (losses["pos"] - losses["neg"]) / delta_central
             elif mode == "forward" and "pos" in losses:
-                grad = (losses["pos"] - loss_base) / delta_fwd
+                grad = (losses["pos"] - self.loss_base) / delta_fwd
             elif mode == "backward" and "neg" in losses:
-                grad = (loss_base - losses["neg"]) / delta_bwd
+                grad = (self.loss_base - losses["neg"]) / delta_bwd
             else:
-                grad = torch.zeros_like(loss_base)
+                grad = torch.zeros_like(self.loss_base)
 
             jacobian[param_name] = grad
 
