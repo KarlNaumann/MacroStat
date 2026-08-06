@@ -21,52 +21,60 @@ class ParametersLINEAR2D(Parameters):
 
     where :math:`x_t \\in \\mathbb{R}^2` and :math:`A \\in \\mathbb{R}^{2\\times 2}`.
 
-    We parameterize:
+    Parameters follow the sector-indexed naming convention so that
+    :meth:`Parameters.vectorize_parameters` assembles them once at
+    construction rather than on every :meth:`step`. With
+    ``vector_sectors = ["S1", "S2"]``:
 
-    - ``a11, a12, a21, a22``: entries of :math:`A`
-    - ``x0_1, x0_2``: entries of the initial state :math:`x_0`
+    - ``S1.S1.a, S1.S2.a, S2.S1.a, S2.S2.a``: entries of the matrix
+      :math:`A`, assembled into a single ``(2, 2)`` tensor keyed ``a``.
+    - ``S1.x0, S2.x0``: entries of the initial state :math:`x_0`,
+      assembled into a single ``(2,)`` tensor keyed ``x0``.
+
+    The four ``a`` entries and two ``x0`` entries remain independent scalar
+    parameters, so the Jacobian tooling still reports one column per entry.
     """
 
     version = "LINEAR2D"
 
     def get_default_parameters(self):
         return {
-            "a11": {
+            "S1.S1.a": {
                 "lower bound": -10.0,
                 "upper bound": 10.0,
                 "notation": r"a_{11}",
                 "unit": ".",
                 "value": 0.9,
             },
-            "a12": {
+            "S1.S2.a": {
                 "lower bound": -10.0,
                 "upper bound": 10.0,
                 "notation": r"a_{12}",
                 "unit": ".",
                 "value": 0.1,
             },
-            "a21": {
+            "S2.S1.a": {
                 "lower bound": -10.0,
                 "upper bound": 10.0,
                 "notation": r"a_{21}",
                 "unit": ".",
                 "value": -0.2,
             },
-            "a22": {
+            "S2.S2.a": {
                 "lower bound": -10.0,
                 "upper bound": 10.0,
                 "notation": r"a_{22}",
                 "unit": ".",
                 "value": 0.8,
             },
-            "x0_1": {
+            "S1.x0": {
                 "lower bound": -10.0,
                 "upper bound": 10.0,
                 "notation": r"x_{0,1}",
                 "unit": ".",
                 "value": 1.0,
             },
-            "x0_2": {
+            "S2.x0": {
                 "lower bound": -10.0,
                 "upper bound": 10.0,
                 "notation": r"x_{0,2}",
@@ -82,5 +90,5 @@ class ParametersLINEAR2D(Parameters):
         hyper["timesteps_initialization"] = 0
         # Minimal sector info to keep core utilities happy
         hyper.setdefault("sectors", ["Linear2D"])
-        hyper.setdefault("vector_sectors", [])
+        hyper.setdefault("vector_sectors", ["S1", "S2"])
         return hyper

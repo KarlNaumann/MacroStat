@@ -8,14 +8,15 @@ parameters of a model's Behavior module.
 
 from __future__ import annotations
 
-from typing import Callable, Dict, Literal
+from collections.abc import Callable
+from typing import Literal
 
 import torch
 from torch.func import functional_call, jacfwd, jacrev
 
 from macrostat.diff.jacobian_base import JacobianBase
 
-LossFn = Callable[[Dict[str, torch.Tensor]], torch.Tensor]
+LossFn = Callable[[dict[str, torch.Tensor]], torch.Tensor]
 
 
 class JacobianAutograd(JacobianBase):
@@ -26,7 +27,8 @@ class JacobianAutograd(JacobianBase):
     -----
     - Currently supports differentiation with respect to **parameters only**.
     - The loss function can return a scalar tensor or tensor of any shape.
-    - Output structure matches numerical Jacobian exactly for plug-and-play interchangeability.
+    - Output structure matches the numerical Jacobian exactly for
+      plug-and-play interchangeability.
     """
 
     def compute(
@@ -34,7 +36,7 @@ class JacobianAutograd(JacobianBase):
         loss_fn: LossFn,
         mode: Literal["rev", "fwd"] = "rev",
         chunk_size: int | None = None,
-    ) -> Dict[str, torch.Tensor]:
+    ) -> dict[str, torch.Tensor]:
         """
         Compute the Jacobian of the loss with respect to the model parameters.
 
@@ -65,18 +67,35 @@ class JacobianAutograd(JacobianBase):
 
         behavior, base_params = self._get_behavior_and_params()
 
-        def compute_loss(params: Dict[str, torch.Tensor]) -> torch.Tensor:
-            output = functional_call(behavior, params, ())
-            loss = loss_fn(output)
-            return loss
+        def compute_loss(params: dict[str, torch.Tensor]) -> torch.Tensor:
+            return loss_fn(functional_call(behavior, params, ()))
 
         if mode == "rev":
             grads = jacrev(compute_loss)(base_params)
         else:  # mode == "fwd"
             grads = jacfwd(compute_loss)(base_params)
 
-        # jacrev/jacfwd return a structure matching the inputs (dict[name -> tensor])
-        # where names have "params." prefix. Strip prefix to match model.parameters format
-        jacobian = {name.replace("params.", "", 1): g for name, g in grads.items()}
+        # jacrev/jacfwd return a dict keyed by the ParameterDict leaves, each
+        # prefixed with "params.". A single leaf may be an assembled sector-
+        # indexed vector or matrix (e.g. an input-output coefficient matrix),
+        # so it can carry several scalar model parameters at once. Decompose
+        # each leaf back into its scalar free parameters via the constraint
+        # resolver, so the output is keyed by the same free-parameter names as
+        # the numerical Jacobian and every downstream tool sees one gradient
+        # per scalar parameter. For a leaf gradient of shape
+        # ``(*loss_shape, *param_shape)`` the leading axes are the loss and the
+        # trailing axes the parameter, so an indexed slot reads ``leaf[..., i, j]``.
+        leaf_grads = {name.replace("params.", "", 1): g for name, g in grads.items()}
+        resolver = self.model.parameters.get_constraint_resolver()
+
+        jacobian = {}
+        for pname in self.model.parameters.get_free_param_names():
+            location = resolver.locate(pname)
+            leaf = leaf_grads[location.tensor_key]
+            if location.index is None:
+                jacobian[pname] = leaf
+            else:
+                jacobian[pname] = leaf[(...,) + location.index]
+
         self.jacobian = jacobian
         return jacobian

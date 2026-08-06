@@ -48,12 +48,12 @@ class TestDiffLinear2D:
 
     def test_autograd_vs_numerical_close(self):
         loss_fn = self.make_loss_fn()
-        auto = JacobianAutograd(self.model)
-        num = JacobianNumerical(self.model, epsilon=1e-5, parameter_space="direct")
+        grads_auto = JacobianAutograd(self.model).compute(loss_fn=loss_fn, mode="rev")
+        grads_num = JacobianNumerical(
+            self.model, epsilon=1e-5, parameter_space="direct"
+        ).compute(loss_fn=loss_fn, mode="central")
 
-        grads_auto = auto.compute(loss_fn=loss_fn, mode="rev")
-        grads_num = num.compute(loss_fn=loss_fn, mode="central")
-
+        assert set(grads_auto.keys()) == set(grads_num.keys())
         for name in grads_auto:
             ga = grads_auto[name]
             gn = grads_num[name]
@@ -63,11 +63,38 @@ class TestDiffLinear2D:
             rel = (ga - gn).abs() / denom
             assert rel.max().item() < 1e-2
 
-    def test_checker_reports_small_relative_errors(self):
+    def test_vectorized_params_expose_scalar_jacobian_keys(self):
+        """Assembled matrix/vector leaves decompose to per-scalar Jacobian keys.
+
+        LINEAR2D assembles its parameters into a 2x2 ``a`` matrix and a
+        length-2 ``x0`` vector via ``vector_sectors``. The autograd backend
+        must still report one gradient per scalar parameter, keyed by the
+        free-parameter names, and matching the numerical backend element for
+        element (which perturbs those scalars directly).
+        """
         loss_fn = self.make_loss_fn()
+        free_names = set(self.model.parameters.get_free_param_names())
+
+        grads_auto = JacobianAutograd(self.model).compute(loss_fn=loss_fn, mode="rev")
+        assert set(grads_auto.keys()) == free_names
+        assert "S1.S2.a" in grads_auto  # off-diagonal entry differentiated on its own
+
+        grads_num = JacobianNumerical(
+            self.model, epsilon=1e-5, parameter_space="direct"
+        ).compute(loss_fn=loss_fn, mode="central")
+        # A transposed decomposition would read leaf[j, i] instead of leaf[i, j]
+        # and so swap the two off-diagonal entries. They are distinct, so each
+        # autograd entry must sit closer to its own numerical counterpart than
+        # to the other one.
+        for name, swapped in (("S1.S2.a", "S2.S1.a"), ("S2.S1.a", "S1.S2.a")):
+            dist_self = (grads_auto[name] - grads_num[name]).abs().max()
+            dist_swapped = (grads_auto[name] - grads_num[swapped]).abs().max()
+            assert dist_self < dist_swapped
+
+    def test_checker_reports_small_relative_errors(self):
         report = check_model_differentiability(
             model=self.model,
-            loss_fn=loss_fn,
+            loss_fn=self.make_loss_fn(),
             scenario=0,
             rtol=1e-5,
             atol=1e-8,
@@ -86,24 +113,26 @@ class TestDiffLinear2D:
         assert report.rel_err_autodiff_num < 1e-2
 
     def test_log_space_zero_parameter_error(self):
-        """Test that log-space raises ValueError for zero parameters."""
-        loss_fn = self.make_loss_fn()
-        jac_num = JacobianNumerical(self.model, epsilon=1e-5, parameter_space="log")
+        """Log-space perturbation rejects a zero-valued parameter."""
+        # Force a parameter to zero regardless of the model defaults, so the
+        # guard is exercised even if the shipped defaults are all non-zero.
+        self.model.parameters[self.model.parameters.get_free_param_names()[0]] = 0.0
 
-        # LINEAR2D model has x0_2 parameter with value 0, which should raise ValueError
         with pytest.raises(
             ValueError, match="Cannot use log-space with zero parameters"
         ):
-            jac_num.compute(loss_fn=loss_fn, mode="central")
+            JacobianNumerical(self.model, epsilon=1e-5, parameter_space="log").compute(
+                loss_fn=self.make_loss_fn(), mode="central"
+            )
 
     def test_log_space_parameter_steps(self):
         """Test log-space parameter steps with non-zero parameters."""
         loss_fn = self.make_loss_fn()
 
-        # Create a model and modify x0_2 to be non-zero
+        # Create a model and modify S2.x0 to be non-zero
         model = self.model_cls()
-        # Set x0_2 to a small positive value (it's 0 by default)
-        model.parameters["x0_2"] = 0.1
+        # Set S2.x0 to a small positive value (it's 0 by default)
+        model.parameters["S2.x0"] = 0.1
 
         jac_num = JacobianNumerical(model, epsilon=1e-5, parameter_space="log")
 
@@ -121,11 +150,12 @@ class TestDiffLinear2D:
 
     def test_non_scalar_loss_function(self):
         """Test non-scalar loss functions."""
-        jac_num = JacobianNumerical(self.model, epsilon=1e-5)
-        jac_auto = JacobianAutograd(self.model)
-
-        grads_num = jac_num.compute(loss_fn=loss_fn_non_scalar_1d, mode="central")
-        grads_auto = jac_auto.compute(loss_fn=loss_fn_non_scalar_1d, mode="rev")
+        grads_num = JacobianNumerical(self.model, epsilon=1e-5).compute(
+            loss_fn=loss_fn_non_scalar_1d, mode="central"
+        )
+        grads_auto = JacobianAutograd(self.model).compute(
+            loss_fn=loss_fn_non_scalar_1d, mode="rev"
+        )
 
         # Check structure matches
         assert set(grads_num.keys()) == set(grads_auto.keys())
@@ -137,11 +167,12 @@ class TestDiffLinear2D:
 
     def test_non_scalar_loss_2d(self):
         """Test 2D loss function output."""
-        jac_num = JacobianNumerical(self.model, epsilon=1e-5)
-        jac_auto = JacobianAutograd(self.model)
-
-        grads_num = jac_num.compute(loss_fn=loss_fn_non_scalar_2d, mode="central")
-        grads_auto = jac_auto.compute(loss_fn=loss_fn_non_scalar_2d, mode="rev")
+        grads_num = JacobianNumerical(self.model, epsilon=1e-5).compute(
+            loss_fn=loss_fn_non_scalar_2d, mode="central"
+        )
+        grads_auto = JacobianAutograd(self.model).compute(
+            loss_fn=loss_fn_non_scalar_2d, mode="rev"
+        )
 
         # Check structure matches
         assert set(grads_num.keys()) == set(grads_auto.keys())
@@ -152,9 +183,9 @@ class TestDiffLinear2D:
 
     def test_jacobian_to_tensor(self):
         """Test to_tensor helper."""
-        loss_fn = self.make_loss_fn()
+        self.model.parameters["S2.x0"] = 0.1  # non-zero so default log-space is valid
         jac_num = JacobianNumerical(self.model, epsilon=1e-5)
-        jac_dict = jac_num.compute(loss_fn=loss_fn, mode="central")
+        jac_dict = jac_num.compute(loss_fn=self.make_loss_fn(), mode="central")
 
         # Convert to tensor using class method
         jac_tensor = jac_num.to_tensor(jac_dict)
@@ -167,6 +198,7 @@ class TestDiffLinear2D:
 
     def test_jacobian_to_tensor_non_scalar(self):
         """Test to_tensor with non-scalar loss."""
+        self.model.parameters["S2.x0"] = 0.1  # non-zero so default log-space is valid
         jac_num = JacobianNumerical(self.model, epsilon=1e-5)
         jac_dict = jac_num.compute(loss_fn=loss_fn_non_scalar_1d, mode="central")
 
@@ -219,6 +251,9 @@ class TestJacobianBase:
         """Set up test fixtures."""
         self.model_cls = get_model("LINEAR2D")
         self.model = self.model_cls()
+        # S2.x0 is 0 by default; set it non-zero so the default log-space
+        # perturbation is valid for these helper tests.
+        self.model.parameters["S2.x0"] = 0.1
         self.jac_num = JacobianNumerical(self.model, epsilon=1e-5)
         self.jac_auto = JacobianAutograd(self.model)
         self.loss_fn = loss_fn_mse
@@ -249,34 +284,29 @@ class TestJacobianBase:
 
     def test_to_tensor_no_jacobian_raises_error(self):
         """Test to_tensor raises error when no jacobian available."""
-        jac_new = JacobianNumerical(self.model, epsilon=1e-5)
         # No jacobian computed yet, so self.jacobian doesn't exist
-
         with pytest.raises(ValueError, match="jacobian_dict must be provided"):
-            jac_new.to_tensor()
+            JacobianNumerical(self.model, epsilon=1e-5).to_tensor()
 
     def test_to_tensor_empty_dict(self):
         """Test to_tensor with empty jacobian_dict."""
-        jac_tensor = self.jac_num.to_tensor(jacobian_dict={})
-        assert jac_tensor.numel() == 0
+        assert self.jac_num.to_tensor(jacobian_dict={}).numel() == 0
 
     def test_to_tensor_custom_param_order(self):
         """Test to_tensor with custom param_order."""
         param_order = list(reversed(list(self.jacobian_dict.keys())))
-        jac_tensor = self.jac_num.to_tensor(
-            jacobian_dict=self.jacobian_dict, param_order=param_order
-        )
 
         # Verify columns match the specified order
-        assert jac_tensor.shape[1] == len(param_order)
+        assert self.jac_num.to_tensor(
+            jacobian_dict=self.jacobian_dict, param_order=param_order
+        ).shape[1] == len(param_order)
 
     def test_to_tensor_missing_parameter_in_order(self):
         """Test to_tensor raises error for missing parameter in param_order."""
-        param_order = list(self.jacobian_dict.keys()) + ["nonexistent_param"]
-
         with pytest.raises(ValueError, match="Parameter nonexistent_param not found"):
             self.jac_num.to_tensor(
-                jacobian_dict=self.jacobian_dict, param_order=param_order
+                jacobian_dict=self.jacobian_dict,
+                param_order=list(self.jacobian_dict.keys()) + ["nonexistent_param"],
             )
 
     def test_to_tensor_incompatible_shapes(self):
@@ -300,6 +330,19 @@ class TestJacobianBase:
         assert jac_tensor.shape[0] == 2
         assert jac_tensor.shape[1] == len(jac_dict)
 
+    def test_to_tensor_no_flatten_preserves_loss_shape(self):
+        """Test to_tensor(flatten=False) keeps the native (T, N) loss shape."""
+        jac_dict = self.jac_num.compute(loss_fn=loss_fn_non_scalar_2d, mode="central")
+        flat = self.jac_num.to_tensor(jacobian_dict=jac_dict, flatten=True)
+        unflat = self.jac_num.to_tensor(jacobian_dict=jac_dict, flatten=False)
+
+        # Loss is (3, 2); flat is (6, P), unflat is (3, 2, P).
+        n_params = len(jac_dict)
+        assert flat.shape == (6, n_params)
+        assert unflat.shape == (3, 2, n_params)
+        # The two are related by a reshape (C-order): byte-equal.
+        assert torch.equal(unflat, flat.reshape(3, 2, n_params))
+
     # Tests for to_pandas method
     def test_to_pandas_with_jacobian_dict(self):
         """Test to_pandas with explicit jacobian_dict parameter."""
@@ -321,10 +364,8 @@ class TestJacobianBase:
 
     def test_to_pandas_no_jacobian_raises_error(self):
         """Test to_pandas raises error when no jacobian available."""
-        jac_new = JacobianNumerical(self.model, epsilon=1e-5)
-
         with pytest.raises(ValueError, match="jacobian_dict must be provided"):
-            jac_new.to_pandas()
+            JacobianNumerical(self.model, epsilon=1e-5).to_pandas()
 
     def test_to_pandas_empty_dict(self):
         """Test to_pandas with empty jacobian_dict."""
@@ -343,8 +384,11 @@ class TestJacobianBase:
 
     def test_to_pandas_1d_loss_no_structure(self):
         """Test to_pandas with 1D loss and no structure info."""
-        jac_dict = self.jac_num.compute(loss_fn=loss_fn_non_scalar_1d, mode="central")
-        df = self.jac_num.to_pandas(jacobian_dict=jac_dict)
+        df = self.jac_num.to_pandas(
+            jacobian_dict=self.jac_num.compute(
+                loss_fn=loss_fn_non_scalar_1d, mode="central"
+            )
+        )
 
         # Should create flat RangeIndex
         assert len(df.index) == 2  # loss_fn_non_scalar_1d returns shape (2,)
@@ -353,8 +397,12 @@ class TestJacobianBase:
 
     def test_to_pandas_1d_loss_with_timesteps(self):
         """Test to_pandas with 1D loss and only timesteps provided."""
-        jac_dict = self.jac_num.compute(loss_fn=loss_fn_non_scalar_1d, mode="central")
-        df = self.jac_num.to_pandas(jacobian_dict=jac_dict, timesteps=2)
+        df = self.jac_num.to_pandas(
+            jacobian_dict=self.jac_num.compute(
+                loss_fn=loss_fn_non_scalar_1d, mode="central"
+            ),
+            timesteps=2,
+        )
 
         # Should create timestep index
         assert len(df.index) == 2
@@ -363,10 +411,12 @@ class TestJacobianBase:
 
     def test_to_pandas_1d_loss_with_variable_names(self):
         """Test to_pandas with 1D loss and only variable_names provided."""
-        jac_dict = self.jac_num.compute(loss_fn=loss_fn_non_scalar_1d, mode="central")
         variable_names = ["var1", "var2"]
         df = self.jac_num.to_pandas(
-            jacobian_dict=jac_dict, variable_names=variable_names
+            jacobian_dict=self.jac_num.compute(
+                loss_fn=loss_fn_non_scalar_1d, mode="central"
+            ),
+            variable_names=variable_names,
         )
 
         # Should create variable index
@@ -376,24 +426,31 @@ class TestJacobianBase:
 
     def test_to_pandas_1d_loss_mismatched_timesteps(self):
         """Test to_pandas raises error for mismatched timesteps."""
-        jac_dict = self.jac_num.compute(loss_fn=loss_fn_non_scalar_1d, mode="central")
-
         with pytest.raises(ValueError, match="does not match shape"):
-            self.jac_num.to_pandas(jacobian_dict=jac_dict, timesteps=5)
+            self.jac_num.to_pandas(
+                jacobian_dict=self.jac_num.compute(
+                    loss_fn=loss_fn_non_scalar_1d, mode="central"
+                ),
+                timesteps=5,
+            )
 
     def test_to_pandas_1d_loss_mismatched_variable_names(self):
         """Test to_pandas raises error for mismatched variable_names."""
-        jac_dict = self.jac_num.compute(loss_fn=loss_fn_non_scalar_1d, mode="central")
-
         with pytest.raises(ValueError, match="does not match shape"):
             self.jac_num.to_pandas(
-                jacobian_dict=jac_dict, variable_names=["var1", "var2", "var3"]
+                jacobian_dict=self.jac_num.compute(
+                    loss_fn=loss_fn_non_scalar_1d, mode="central"
+                ),
+                variable_names=["var1", "var2", "var3"],
             )
 
     def test_to_pandas_2d_loss_no_structure(self):
         """Test to_pandas with 2D loss and no structure info."""
-        jac_dict = self.jac_num.compute(loss_fn=loss_fn_non_scalar_2d, mode="central")
-        df = self.jac_num.to_pandas(jacobian_dict=jac_dict)
+        df = self.jac_num.to_pandas(
+            jacobian_dict=self.jac_num.compute(
+                loss_fn=loss_fn_non_scalar_2d, mode="central"
+            )
+        )
 
         # Should infer timesteps and create default variable names
         assert len(df.index) == 6  # 3 timesteps * 2 variables
@@ -402,8 +459,12 @@ class TestJacobianBase:
 
     def test_to_pandas_2d_loss_with_timesteps_only(self):
         """Test to_pandas with 2D loss and only timesteps provided."""
-        jac_dict = self.jac_num.compute(loss_fn=loss_fn_non_scalar_2d, mode="central")
-        df = self.jac_num.to_pandas(jacobian_dict=jac_dict, timesteps=3)
+        df = self.jac_num.to_pandas(
+            jacobian_dict=self.jac_num.compute(
+                loss_fn=loss_fn_non_scalar_2d, mode="central"
+            ),
+            timesteps=3,
+        )
 
         # Should infer variable names
         assert len(df.index) == 6
@@ -416,10 +477,12 @@ class TestJacobianBase:
 
     def test_to_pandas_2d_loss_with_variable_names_only(self):
         """Test to_pandas with 2D loss and only variable_names provided."""
-        jac_dict = self.jac_num.compute(loss_fn=loss_fn_non_scalar_2d, mode="central")
         variable_names = ["x", "y"]
         df = self.jac_num.to_pandas(
-            jacobian_dict=jac_dict, variable_names=variable_names
+            jacobian_dict=self.jac_num.compute(
+                loss_fn=loss_fn_non_scalar_2d, mode="central"
+            ),
+            variable_names=variable_names,
         )
 
         # Should infer timesteps
@@ -427,49 +490,56 @@ class TestJacobianBase:
         assert isinstance(df.index, pd.MultiIndex)
         assert df.index.names == ["timestep", "variable"]
         # Check variable names match
-        unique_vars = df.index.get_level_values("variable").unique()
-        assert list(unique_vars) == variable_names
+        assert list(df.index.get_level_values("variable").unique()) == variable_names
 
     def test_to_pandas_2d_loss_with_both(self):
         """Test to_pandas with 2D loss and both timesteps and variable_names."""
-        jac_dict = self.jac_num.compute(loss_fn=loss_fn_non_scalar_2d, mode="central")
         variable_names = ["x", "y"]
         df = self.jac_num.to_pandas(
-            jacobian_dict=jac_dict, timesteps=3, variable_names=variable_names
+            jacobian_dict=self.jac_num.compute(
+                loss_fn=loss_fn_non_scalar_2d, mode="central"
+            ),
+            timesteps=3,
+            variable_names=variable_names,
         )
 
         # Should create MultiIndex
         assert len(df.index) == 6
         assert isinstance(df.index, pd.MultiIndex)
         assert df.index.names == ["timestep", "variable"]
-        unique_vars = df.index.get_level_values("variable").unique()
-        assert list(unique_vars) == variable_names
+        assert list(df.index.get_level_values("variable").unique()) == variable_names
 
     def test_to_pandas_2d_loss_mismatched_dimensions(self):
         """Test to_pandas raises error for mismatched 2D dimensions."""
-        jac_dict = self.jac_num.compute(loss_fn=loss_fn_non_scalar_2d, mode="central")
-
         with pytest.raises(ValueError, match="do not match shape"):
             self.jac_num.to_pandas(
-                jacobian_dict=jac_dict, timesteps=5, variable_names=["x", "y"]
+                jacobian_dict=self.jac_num.compute(
+                    loss_fn=loss_fn_non_scalar_2d, mode="central"
+                ),
+                timesteps=5,
+                variable_names=["x", "y"],
             )
 
     def test_to_pandas_3d_loss_raises_error(self):
         """Test to_pandas raises error for 3D+ loss."""
-        jac_dict = self.jac_num.compute(loss_fn=loss_fn_3d, mode="central")
-
         with pytest.raises(ValueError, match="Unsupported loss shape"):
-            self.jac_num.to_pandas(jacobian_dict=jac_dict)
+            self.jac_num.to_pandas(
+                jacobian_dict=self.jac_num.compute(loss_fn=loss_fn_3d, mode="central")
+            )
 
     def test_to_pandas_custom_param_order(self):
         """Test to_pandas with custom param_order."""
         param_order = list(reversed(list(self.jacobian_dict.keys())))
-        df = self.jac_num.to_pandas(
-            jacobian_dict=self.jacobian_dict, param_order=param_order
-        )
 
         # Verify columns match the specified order
-        assert list(df.columns) == param_order
+        assert (
+            list(
+                self.jac_num.to_pandas(
+                    jacobian_dict=self.jacobian_dict, param_order=param_order
+                ).columns
+            )
+            == param_order
+        )
 
     def test_to_pandas_incompatible_shapes(self):
         """Test to_pandas raises error for incompatible loss shapes."""
@@ -483,12 +553,14 @@ class TestJacobianBase:
 
     def test_to_tensor_and_to_pandas_consistency(self):
         """Test that to_tensor and to_pandas produce consistent results."""
-        jac_tensor = self.jac_num.to_tensor(jacobian_dict=self.jacobian_dict)
-        df = self.jac_num.to_pandas(jacobian_dict=self.jacobian_dict)
-
         # Convert DataFrame to numpy and compare
-        df_values = df.values
-        tensor_values = jac_tensor.detach().cpu().numpy()
+        df_values = self.jac_num.to_pandas(jacobian_dict=self.jacobian_dict).values
+        tensor_values = (
+            self.jac_num.to_tensor(jacobian_dict=self.jacobian_dict)
+            .detach()
+            .cpu()
+            .numpy()
+        )
 
         # Should match (allowing for floating point differences)
         assert df_values.shape == tensor_values.shape
@@ -497,21 +569,22 @@ class TestJacobianBase:
     def test_to_pandas_with_non_scalar_loss(self):
         """Test to_pandas with non-scalar loss (1D and 2D)."""
         # Test 1D
-        jac_dict_1d = self.jac_num.compute(
-            loss_fn=loss_fn_non_scalar_1d, mode="central"
-        )
         df_1d = self.jac_num.to_pandas(
-            jacobian_dict=jac_dict_1d, variable_names=["x", "y"]
+            jacobian_dict=self.jac_num.compute(
+                loss_fn=loss_fn_non_scalar_1d, mode="central"
+            ),
+            variable_names=["x", "y"],
         )
         assert len(df_1d.index) == 2
         assert df_1d.index.name == "variable"
 
         # Test 2D
-        jac_dict_2d = self.jac_num.compute(
-            loss_fn=loss_fn_non_scalar_2d, mode="central"
-        )
         df_2d = self.jac_num.to_pandas(
-            jacobian_dict=jac_dict_2d, timesteps=3, variable_names=["x", "y"]
+            jacobian_dict=self.jac_num.compute(
+                loss_fn=loss_fn_non_scalar_2d, mode="central"
+            ),
+            timesteps=3,
+            variable_names=["x", "y"],
         )
         assert len(df_2d.index) == 6
         assert isinstance(df_2d.index, pd.MultiIndex)
@@ -540,8 +613,7 @@ class TestCompareJacobianDicts:
         jac_a = {"p1": torch.tensor([10.0, 20.0])}
         jac_b = {"p1": torch.tensor([10.1, 20.0])}
 
-        report = compare_jacobian_dicts(jac_a, jac_b)
-        pc = report.per_parameter["p1"]
+        pc = compare_jacobian_dicts(jac_a, jac_b).per_parameter["p1"]
 
         assert pc.max_abs_diff == pytest.approx(0.1, abs=1e-6)
         assert pc.mean_abs_diff == pytest.approx(0.05, abs=1e-6)
@@ -554,32 +626,34 @@ class TestCompareJacobianDicts:
         jac_a = {"p1": torch.tensor([1.0, float("nan")])}
         jac_b = {"p1": torch.tensor([1.0, 2.0])}
 
-        report = compare_jacobian_dicts(jac_a, jac_b)
-        assert report.per_parameter["p1"].has_nan_inf is True
+        assert (
+            compare_jacobian_dicts(jac_a, jac_b).per_parameter["p1"].has_nan_inf is True
+        )
 
     def test_inf_detection(self):
         """Inf in one dict is flagged in has_nan_inf."""
         jac_a = {"p1": torch.tensor([1.0, float("inf")])}
         jac_b = {"p1": torch.tensor([1.0, 2.0])}
 
-        report = compare_jacobian_dicts(jac_a, jac_b)
-        assert report.per_parameter["p1"].has_nan_inf is True
+        assert (
+            compare_jacobian_dicts(jac_a, jac_b).per_parameter["p1"].has_nan_inf is True
+        )
 
     def test_missing_keys_only_shared(self):
         """Only shared keys are compared; disjoint keys are ignored."""
         jac_a = {"shared": torch.tensor([1.0]), "only_a": torch.tensor([2.0])}
         jac_b = {"shared": torch.tensor([1.0]), "only_b": torch.tensor([3.0])}
 
-        report = compare_jacobian_dicts(jac_a, jac_b)
-        assert set(report.per_parameter.keys()) == {"shared"}
+        assert set(compare_jacobian_dicts(jac_a, jac_b).per_parameter.keys()) == {
+            "shared"
+        }
 
     def test_scalar_jacobian(self):
         """Scalar (0-dim) tensors are handled."""
         jac_a = {"p": torch.tensor(5.0)}
         jac_b = {"p": torch.tensor(5.5)}
 
-        report = compare_jacobian_dicts(jac_a, jac_b)
-        pc = report.per_parameter["p"]
+        pc = compare_jacobian_dicts(jac_a, jac_b).per_parameter["p"]
         assert pc.num_elements == 1
         assert pc.max_abs_diff == pytest.approx(0.5, abs=1e-6)
 
@@ -588,8 +662,7 @@ class TestCompareJacobianDicts:
         jac_a = {"p": torch.ones(10, 5)}
         jac_b = {"p": torch.ones(10, 5) + 0.01}
 
-        report = compare_jacobian_dicts(jac_a, jac_b)
-        pc = report.per_parameter["p"]
+        pc = compare_jacobian_dicts(jac_a, jac_b).per_parameter["p"]
         assert pc.num_elements == 50
         assert pc.max_abs_diff == pytest.approx(0.01, abs=1e-6)
 
@@ -606,8 +679,7 @@ class TestCompareJacobianDicts:
             "ugly": torch.tensor([150.0]),  # 50% rel diff
         }
 
-        report = compare_jacobian_dicts(jac_a, jac_b)
-        worst = report.worst_parameters(n=3)
+        worst = compare_jacobian_dicts(jac_a, jac_b).worst_parameters(n=3)
         assert worst[0].name == "ugly"
         assert worst[1].name == "bad"
         assert worst[2].name == "good"
@@ -622,8 +694,7 @@ class TestCompareJacobianDicts:
     def test_summary_runs(self):
         """summary() returns a non-empty string without errors."""
         jac = {"a": torch.tensor([1.0, 2.0])}
-        report = compare_jacobian_dicts(jac, jac, "fwd", "rev")
-        text = report.summary()
+        text = compare_jacobian_dicts(jac, jac, "fwd", "rev").summary()
         assert isinstance(text, str)
         assert "fwd" in text
         assert "rev" in text

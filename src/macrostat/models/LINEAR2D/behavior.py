@@ -14,8 +14,6 @@ from __future__ import annotations
 
 import logging
 
-import torch
-
 from macrostat.core.behavior import Behavior
 from macrostat.models.LINEAR2D.parameters import ParametersLINEAR2D
 from macrostat.models.LINEAR2D.scenarios import ScenariosLINEAR2D
@@ -53,18 +51,14 @@ class BehaviorLINEAR2D(Behavior):
         )
 
     def initialize(self):
-        """Initialize the 2D state from the x0 parameters."""
-        x0_1 = self.params["x0_1"]
-        x0_2 = self.params["x0_2"]
-        self.state["State"] = torch.stack([x0_1, x0_2])
+        """Initialize the 2D state from the assembled ``x0`` parameter vector."""
+        self.state["State"] = self.params["x0"]
 
     def step(self, t: int, scenario: dict, params: dict | None = None):
-        """Single-step update: x_{t+1} = A x_t."""
-        a11 = self.params["a11"]
-        a12 = self.params["a12"]
-        a21 = self.params["a21"]
-        a22 = self.params["a22"]
-        A = torch.stack([a11, a12, a21, a22]).reshape(2, 2)
+        """Single-step update: x_{t+1} = A x_t.
 
-        x_prev = self.prior["State"]
-        self.state["State"] = A @ x_prev
+        ``A`` is the 2x2 matrix assembled once at construction from the
+        sector-indexed ``a`` parameters, and ``params`` carries any
+        step-time parameter shocks applied by :meth:`Behavior.forward`.
+        """
+        self.state["State"] = params["a"] @ self.prior["State"]
