@@ -53,7 +53,7 @@ class JacobianNumerical(JacobianBase):
     Compute Jacobians using numerical finite differences.
 
     This class supports:
-    - Direct and log-space parameter perturbations
+    - Three perturbation schemes: "direct", "relative", and "log"
     - Multiprocessing for large-scale models
     - Non-scalar loss functions (e.g., time series outputs)
     """
@@ -63,7 +63,7 @@ class JacobianNumerical(JacobianBase):
         model,
         scenario: int | str = 0,
         epsilon: float = 1e-3,
-        parameter_space: Literal["direct", "log"] = "log",
+        parameter_space: Literal["direct", "relative", "log"] | None = None,
     ):
         """
         Initialize numerical Jacobian computation.
@@ -76,11 +76,11 @@ class JacobianNumerical(JacobianBase):
             Scenario to use for computation, by default 0
         epsilon : float, optional
             Perturbation size for finite differences, by default 1e-3.
-            In log-space, this gives a relative perturbation of ~0.1%,
-            which balances truncation error against float32 noise for
-            typical SFC models running 50-200 timesteps.
+            In the "relative" and "log" schemes this gives a fractional
+            perturbation of ~0.1%, which balances truncation error against
+            float32 noise for typical SFC models running 50-200 timesteps.
 
-            Epsilon guidance (log-space, float32):
+            Epsilon guidance (relative/log scheme, float32):
             - 1e-3: Best general-purpose choice. Verified accurate for
               parameters spanning 4 orders of magnitude (2e-4 to 1.0).
             - 1e-4: Better for smooth, weakly-nonlinear parameters but
@@ -89,57 +89,59 @@ class JacobianNumerical(JacobianBase):
               for strongly nonlinear parameters.
 
             For float64 computation, 1e-5 to 1e-7 are viable.
-        parameter_space : {"direct", "log"}, optional
-            Space in which to apply perturbations, by default "log".
-            Log-space (p -> p*exp(±eps)) gives scale-invariant relative
-            perturbations, avoiding the problem where a fixed eps is too
-            large for small parameters and too small for large ones.
-            Use "direct" only for parameters that are exactly zero or
-            when you need additive perturbations for a specific reason.
+        parameter_space : {"direct", "relative", "log"}, optional
+            Scheme for perturbing parameters, by default "relative". The
+            choice sets both the step size and the returned derivative:
+
+            - "direct": additive step p -> p +/- eps; returns df/dp.
+            - "relative": fractional step p -> p*exp(+/-eps); returns df/dp.
+              Scale-invariant, so one eps suits parameters of very different
+              magnitude. Recommended default.
+            - "log": same fractional step as "relative", but returns the
+              logarithmic derivative df/dlog|p| = p * df/dp. Differentiates
+              w.r.t. log|p| (not log p, which is complex for p < 0); the sign
+              of p is held fixed, so the result carries the sign of p and,
+              for p < 0, is opposite in sign to df/d|p|.
+
+            "relative" and "log" are undefined for p = 0 and raise; use
+            "direct" in that case.
+
+        Notes
+        -----
+        Passing ``parameter_space="log"`` explicitly emits a ``FutureWarning``:
+        before v0.7.0 the "log" scheme returned the direct derivative df/dp
+        (that behaviour is now named "relative"). Pass "relative" to keep the
+        old numbers.
         """
         super().__init__(model, scenario)
         self.epsilon = epsilon
-        self.parameter_space = parameter_space
 
-    def _validate_log_space_params(self, param_names: list[str]):
-        """Validate parameters for log-space computation.
-
-        Parameters
-        ----------
-        param_names : list[str]
-            List of parameter names to validate.
-
-        Raises
-        ------
-        ValueError
-            If any zero parameters found.
-
-        Warns
-        -----
-        UserWarning
-            If any negative parameters found.
-        """
-        zero_params = []
-        negative_params = []
-
-        for name in param_names:
-            value = self.model.parameters[name]
-
-            if value == 0:
-                zero_params.append(name)
-            if value < 0:
-                negative_params.append(name)
-
-        if zero_params:
-            raise ValueError(
-                f"Cannot use log-space with zero parameters: {zero_params}"
-            )
-
-        if negative_params:
+        # ``None`` is the silent default (-> "relative"); only an explicit
+        # "log" string trips the deprecation warning about the semantic change.
+        if parameter_space == "log":
             warnings.warn(
-                f"Found negative parameters in log-space mode: {negative_params}. "
-                "Using sign-preserving transformation: sign(p) * exp(log(abs(p)) + epsilon)"
+                "parameter_space='log' now returns the logarithmic derivative "
+                "df/dlog|p| = p * df/dp. Before v0.7.0 it returned the direct "
+                "derivative df/dp; pass parameter_space='relative' for that "
+                "behaviour.",
+                FutureWarning,
+                stacklevel=2,
             )
+        if parameter_space is None:
+            parameter_space = "relative"
+        if parameter_space not in {"direct", "relative", "log"}:
+            raise ValueError(
+                f"Unsupported parameter_space '{parameter_space}'. "
+                "Use 'direct', 'relative', or 'log'."
+            )
+
+        self.parameter_space = parameter_space
+        # Two independent axes resolved once, so the shared "2*eps" denominator
+        # of "direct" and "log" can never be edited into each other's branch:
+        #   _relative_step -> which perturbation _apply_perturbation applies
+        #   _log_output    -> which derivative the denominator returns
+        self._relative_step = parameter_space in {"relative", "log"}
+        self._log_output = parameter_space == "log"
 
     def _apply_perturbation(
         self,
@@ -164,8 +166,8 @@ class JacobianNumerical(JacobianBase):
         value_tensor = torch.tensor(param_value)
 
         # Apply perturbation
-        if self.parameter_space == "log":
-            # Log-space perturbation
+        if self._relative_step:
+            # Fractional (relative) step, shared by "relative" and "log".
             sign = torch.sign(value_tensor)
             abs_value = torch.abs(value_tensor)
             log_value = torch.log(abs_value)
@@ -207,8 +209,11 @@ class JacobianNumerical(JacobianBase):
         """
         tasks = []
 
-        if self.parameter_space == "log":
-            self._validate_log_space_params(param_names)
+        # "relative" and "log" both step through log|p|, so a zero parameter
+        # has no valid perturbation: numerical raises (it cannot subset the
+        # column out the way autograd zero-fills it).
+        if self._relative_step:
+            self._validate_relative_space_params(param_names, raise_on_zero=True)
 
         for param_name in param_names:
             base_value = self.model.parameters[param_name]
@@ -320,21 +325,27 @@ class JacobianNumerical(JacobianBase):
             losses = results_by_param.get(param_name, {})
             base_value = self.model.parameters[param_name]
 
-            # Compute the actual perturbation in parameter space.
-            # In direct space: delta = epsilon.
-            # In log space: p+ = p*exp(eps), p- = p*exp(-eps),
-            #   so delta_central = p*(exp(eps) - exp(-eps)),
-            #      delta_fwd    = p*(exp(eps) - 1),
-            #      delta_bwd    = p*(1 - exp(-eps)).
-            if self.parameter_space == "log" and base_value != 0:
-                # p+ = p*exp(eps), p- = p*exp(-eps), so:
-                # p+ - p- = p*(exp(eps) - exp(-eps))  [signed]
+            # Denominator = the step in the variable we differentiate against.
+            if self._log_output:
+                # Differentiate w.r.t. log|p|. The relative step lands at
+                # log|p| +/- eps exactly, so the denominator is eps-based and
+                # independent of p (candidate-a log finite difference). This
+                # matches the "direct" denominator numerically but is reached
+                # for a different reason and applied to a relative-step
+                # numerator, giving df/dlog|p| = p * df/dp.
+                delta_central = 2.0 * self.epsilon
+                delta_fwd = self.epsilon
+                delta_bwd = self.epsilon
+            elif self._relative_step and base_value != 0:
+                # Fractional step p -> p*exp(+/-eps); return df/dp, so divide
+                # by the actual parameter-space perturbation p+ - p-.
                 exp_pos = torch.exp(torch.tensor(self.epsilon)).item()
                 exp_neg = torch.exp(torch.tensor(-self.epsilon)).item()
                 delta_central = base_value * (exp_pos - exp_neg)
                 delta_fwd = base_value * (exp_pos - 1.0)
                 delta_bwd = base_value * (1.0 - exp_neg)
             else:
+                # Additive step p -> p +/- eps.
                 delta_central = 2.0 * self.epsilon
                 delta_fwd = self.epsilon
                 delta_bwd = self.epsilon

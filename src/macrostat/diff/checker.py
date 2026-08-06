@@ -100,7 +100,7 @@ def check_model_differentiability(
     compare_numerical: bool = True,
     numerical_mode: Literal["central", "forward", "backward"] = "central",
     epsilon: float = 1e-5,
-    parameter_space: Literal["direct", "log"] = "direct",
+    parameter_space: Literal["direct", "relative", "log"] = "direct",
     raise_on_failure: Optional[bool] = None,
 ) -> DifferentiabilityReport:
     """
@@ -127,8 +127,11 @@ def check_model_differentiability(
     epsilon :
         Step size for finite differences.
     parameter_space :
-        Space in which to apply perturbations for numerical Jacobian.
-        Default ``"direct"`` is safe for all parameters including zeros.
+        Perturbation scheme for the comparison, one of ``"direct"``,
+        ``"relative"``, or ``"log"``. Forwarded to BOTH backends so they are
+        compared in the same derivative space (``"relative"`` maps to
+        ``"direct"`` for autograd, which has no finite step). Default
+        ``"direct"`` is safe for all parameters including zeros.
     raise_on_failure :
         If True and checks fail, raise a RuntimeError instead of just returning
         the report. If None, do not raise.
@@ -143,7 +146,12 @@ def check_model_differentiability(
     # ------------------------------------------------------------------
     # Autograd (reverse-mode) baseline
     # ------------------------------------------------------------------
-    auto = JacobianAutograd(model=model, scenario=scenario)
+    # Map to the autograd space so both backends return the same derivative:
+    # autograd has no finite step, so "relative" is identical to "direct".
+    autograd_space = "log" if parameter_space == "log" else "direct"
+    auto = JacobianAutograd(
+        model=model, scenario=scenario, parameter_space=autograd_space
+    )
     grads_rev = auto.compute(loss_fn=loss_fn, mode="rev")
     nan_or_inf = _has_nan_or_inf(grads_rev)
     details["autograd_rev"] = {"nan_or_inf": nan_or_inf}

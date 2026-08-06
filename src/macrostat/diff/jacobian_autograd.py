@@ -31,6 +31,36 @@ class JacobianAutograd(JacobianBase):
       plug-and-play interchangeability.
     """
 
+    def __init__(
+        self,
+        model,
+        scenario: int | str = 0,
+        parameter_space: Literal["direct", "log"] = "direct",
+    ):
+        """
+        Parameters
+        ----------
+        model :
+            A MacroStat model instance.
+        scenario :
+            Scenario index or name to use when constructing the behavior.
+        parameter_space : {"direct", "log"}, optional
+            Derivative to return, by default "direct". "direct" returns
+            df/dp (autograd has no finite step, so "relative" would be
+            identical and is not accepted here). "log" returns the
+            logarithmic derivative df/dlog|p| = p * df/dp; a zero-valued
+            parameter has no log-derivative and its column is reported as an
+            exact zero (the numerical backend raises instead).
+        """
+        super().__init__(model, scenario)
+        if parameter_space not in {"direct", "log"}:
+            raise ValueError(
+                f"Unsupported parameter_space '{parameter_space}'. "
+                "JacobianAutograd supports 'direct' or 'log'."
+            )
+        self.parameter_space = parameter_space
+        self._log_output = parameter_space == "log"
+
     def compute(
         self,
         loss_fn: LossFn,
@@ -96,6 +126,15 @@ class JacobianAutograd(JacobianBase):
                 jacobian[pname] = leaf
             else:
                 jacobian[pname] = leaf[(...,) + location.index]
+
+        if self._log_output:
+            # df/dlog|p| = p * df/dp. Multiply by the signed parameter value
+            # (theta=0 collapses the column to an exact zero, matching the
+            # numerical backend's raised-on-zero contract via a zero column).
+            # The shared validator emits the negative-theta warning for parity.
+            self._validate_relative_space_params(list(jacobian), raise_on_zero=False)
+            for pname, grad in jacobian.items():
+                jacobian[pname] = grad * float(self.model.parameters[pname])
 
         self.jacobian = jacobian
         return jacobian

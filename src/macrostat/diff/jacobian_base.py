@@ -7,6 +7,7 @@ in a way that is compatible with PyTorch's autograd and torch.func APIs.
 
 from __future__ import annotations
 
+import warnings
 from typing import Dict, Tuple
 
 import pandas as pd
@@ -69,6 +70,62 @@ class JacobianBase:
         }
         return behavior, params
 
+    def _validate_relative_space_params(
+        self, param_names: list[str], *, raise_on_zero: bool
+    ) -> list[str]:
+        """Validate parameters for the ``relative`` / ``log`` schemes.
+
+        The relative step :math:`p \\mapsto p\\,e^{\\pm\\varepsilon}` and the
+        logarithmic derivative :math:`\\partial f/\\partial\\log|p|` are both
+        defined through :math:`\\log|p|`, so a zero-valued parameter has no
+        valid perturbation (numerical) and no finite log-derivative (autograd).
+        Negative parameters are handled by the sign-preserving transform
+        :math:`\\mathrm{sign}(p)\\,e^{\\log|p|\\pm\\varepsilon}` and only warn.
+
+        Parameters
+        ----------
+        param_names : list[str]
+            Parameter names to validate.
+        raise_on_zero : bool
+            If True, raise on any zero-valued parameter (numerical, which
+            cannot take a log-space step of zero). If False, return the
+            zero-valued names so the caller can handle them (autograd, which
+            reports the column as an exact zero).
+
+        Returns
+        -------
+        list[str]
+            The zero-valued parameter names.
+
+        Raises
+        ------
+        ValueError
+            If ``raise_on_zero`` and any parameter equals zero.
+
+        Warns
+        -----
+        UserWarning
+            If any parameter is negative.
+        """
+        zero_params = [n for n in param_names if self.model.parameters[n] == 0]
+        negative_params = [n for n in param_names if self.model.parameters[n] < 0]
+
+        if negative_params:
+            warnings.warn(
+                f"Found negative parameters in relative/log mode: {negative_params}. "
+                "Using sign-preserving transformation: "
+                "sign(p) * exp(log(abs(p)) +/- epsilon)."
+            )
+
+        if raise_on_zero and zero_params:
+            raise ValueError(
+                "Cannot use parameter_space in {'relative', 'log'} with zero "
+                f"parameters: {zero_params}. Use 'direct', or exclude them via "
+                "param_names."
+            )
+
+        return zero_params
+
     # ------------------------------------------------------------------
     # Abstract API
     # ------------------------------------------------------------------
@@ -92,8 +149,9 @@ class JacobianBase:
         self,
         jacobian_dict: Dict[str, torch.Tensor] | None = None,
         param_order: list[str] | None = None,
+        flatten: bool = True,
     ) -> torch.Tensor:
-        """Convert Jacobian dict to single 2D tensor.
+        """Convert Jacobian dict to a single tensor with parameters on the last axis.
 
         Parameters
         ----------
@@ -102,12 +160,19 @@ class JacobianBase:
             If None, uses self.jacobian if available.
         param_order : list[str], optional
             Order of parameters for columns. If None, uses dict iteration order.
+        flatten : bool, default True
+            If True, collapse the loss shape into a single axis. If False, keep
+            the native loss shape, e.g. a ``(timesteps, variables)`` loss yields
+            a ``(timesteps, variables, num_params)`` tensor.
 
         Returns
         -------
         torch.Tensor
-            2D tensor of shape (loss_elements, num_params) where loss_elements
-            is the number of elements in the loss output.
+            If ``flatten`` is True, a 2D tensor of shape (loss_elements, num_params)
+            where loss_elements is the number of elements in the loss output. If
+            ``flatten`` is False, a tensor of shape (*loss_shape, num_params). The
+            two are related by ``to_tensor(flatten=False)`` equals
+            ``to_tensor(flatten=True).reshape(*loss_shape, num_params)``.
 
         Raises
         ------
@@ -142,9 +207,12 @@ class JacobianBase:
                     f"expected {loss_shape}"
                 )
 
-        # Stack gradients into a single tensor
-        gradients = [jacobian_dict[pname].flatten() for pname in param_order]
-        return torch.stack(gradients, dim=1)  # Shape: (loss_elements, num_params)
+        # Stack gradients into a single tensor, parameters on the last axis.
+        if flatten:
+            gradients = [jacobian_dict[pname].flatten() for pname in param_order]
+            return torch.stack(gradients, dim=1)  # (loss_elements, num_params)
+        gradients = [jacobian_dict[pname] for pname in param_order]
+        return torch.stack(gradients, dim=-1)  # (*loss_shape, num_params)
 
     def to_pandas(
         self,
