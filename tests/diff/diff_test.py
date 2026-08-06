@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 import pytest
 import torch
@@ -37,10 +38,79 @@ def loss_fn_3d(output: dict[str, torch.Tensor]) -> torch.Tensor:
     return state[-3:].unsqueeze(0).repeat(2, 1, 1)  # Shape: (2, 3, 2)
 
 
+def loss_fn_full_state(output: dict[str, torch.Tensor]) -> torch.Tensor:
+    """Full State trajectory (T, 2) for analytic log-Jacobian cross-checks.
+
+    Module-level so JacobianNumerical can pickle it for its worker pool.
+    """
+    return output["State"]
+
+
+# LINEAR2D default free-parameter values, pinned in setup_method so the tests
+# are independent of the model's shared-default mutation across instances.
+_LINEAR2D_DEFAULTS = {
+    "S1.S1.a": 0.9,
+    "S1.S2.a": 0.1,
+    "S2.S1.a": -0.2,
+    "S2.S2.a": 0.8,
+    "S1.x0": 1.0,
+    "S2.x0": 0.1,  # non-zero so the default "relative" scheme is valid
+}
+
+
+def _linear2d_analytic_log_jacobian(model, timesteps: int) -> dict[str, np.ndarray]:
+    """Closed-form d(A^t x0)/dlog|theta| for LINEAR2D, keyed by full param names.
+
+    Row ``t`` matches recorded State row ``t = A^t x0`` (row 0 = x0). Columns:
+
+    - matrix entry ``a_{rc}``:
+      ``a_{rc} * (sum_{k=0}^{t-1} A^k E_{rc} A^{t-1-k}) x0`` (empty sum = 0 at t=0)
+    - initial state ``x0_i``: ``x0_i * A^t e_i``
+
+    Ground-truth reference validated against finite differences to ~1.9e-5.
+    """
+    p = model.parameters
+    A = np.array(
+        [
+            [float(p["S1.S1.a"]), float(p["S1.S2.a"])],
+            [float(p["S2.S1.a"]), float(p["S2.S2.a"])],
+        ]
+    )
+    x0 = np.array([float(p["S1.x0"]), float(p["S2.x0"])])
+    Apow = [np.linalg.matrix_power(A, t) for t in range(timesteps)]
+
+    out: dict[str, np.ndarray] = {}
+    for name, (r, c) in {
+        "S1.S1.a": (0, 0),
+        "S1.S2.a": (0, 1),
+        "S2.S1.a": (1, 0),
+        "S2.S2.a": (1, 1),
+    }.items():
+        E = np.zeros((2, 2))
+        E[r, c] = 1.0
+        col = np.zeros((timesteps, 2))
+        for t in range(1, timesteps):
+            s = sum(Apow[k] @ E @ Apow[t - 1 - k] for k in range(t))
+            col[t] = float(p[name]) * (s @ x0)
+        out[name] = col
+    for name, i in {"S1.x0": 0, "S2.x0": 1}.items():
+        col = np.zeros((timesteps, 2))
+        for t in range(timesteps):
+            col[t] = float(p[name]) * Apow[t][:, i]
+        out[name] = col
+    return out
+
+
 class TestDiffLinear2D:
     def setup_method(self):
         self.model_cls = get_model("LINEAR2D")
         self.model = self.model_cls()
+        # LINEAR2D shares its default parameter dict across instances, so a
+        # prior test that mutated a parameter can leak into this fresh model.
+        # Pin the known defaults so every test starts from a clean, order-
+        # independent state (and the mutation also cleans the shared default).
+        for name, value in _LINEAR2D_DEFAULTS.items():
+            self.model.parameters[name] = value
 
     def make_loss_fn(self):
         """Return module-level loss function."""
@@ -112,41 +182,36 @@ class TestDiffLinear2D:
         assert report.rel_err_autodiff_num is not None
         assert report.rel_err_autodiff_num < 1e-2
 
-    def test_log_space_zero_parameter_error(self):
-        """Log-space perturbation rejects a zero-valued parameter."""
-        # Force a parameter to zero regardless of the model defaults, so the
-        # guard is exercised even if the shipped defaults are all non-zero.
+    @pytest.mark.parametrize("space", ["relative", "log"])
+    def test_relative_log_zero_parameter_error(self, space):
+        """ "relative" and "log" both reject a zero-valued parameter."""
+        # Force a parameter to zero so the guard is exercised for both schemes.
         self.model.parameters[self.model.parameters.get_free_param_names()[0]] = 0.0
 
-        with pytest.raises(
-            ValueError, match="Cannot use log-space with zero parameters"
-        ):
-            JacobianNumerical(self.model, epsilon=1e-5, parameter_space="log").compute(
+        with pytest.raises(ValueError, match="zero parameters"):
+            JacobianNumerical(self.model, epsilon=1e-5, parameter_space=space).compute(
                 loss_fn=self.make_loss_fn(), mode="central"
             )
 
-    def test_log_space_parameter_steps(self):
-        """Test log-space parameter steps with non-zero parameters."""
+    def test_relative_space_parameter_steps(self):
+        """ "relative" (renamed old "log") matches "direct" structure."""
         loss_fn = self.make_loss_fn()
 
-        # Create a model and modify S2.x0 to be non-zero
-        model = self.model_cls()
-        # Set S2.x0 to a small positive value (it's 0 by default)
-        model.parameters["S2.x0"] = 0.1
-
-        jac_num = JacobianNumerical(model, epsilon=1e-5, parameter_space="log")
-
-        # Should work for positive parameters
-        grads_log = jac_num.compute(loss_fn=loss_fn, mode="central")
+        jac_num = JacobianNumerical(
+            self.model, epsilon=1e-5, parameter_space="relative"
+        )
+        grads_rel = jac_num.compute(loss_fn=loss_fn, mode="central")
 
         # Compare with direct space (should be different but reasonable)
-        jac_direct = JacobianNumerical(model, epsilon=1e-5, parameter_space="direct")
+        jac_direct = JacobianNumerical(
+            self.model, epsilon=1e-5, parameter_space="direct"
+        )
         grads_direct = jac_direct.compute(loss_fn=loss_fn, mode="central")
 
         # Both should produce same structure
-        assert set(grads_log.keys()) == set(grads_direct.keys())
-        for name in grads_log:
-            assert grads_log[name].shape == grads_direct[name].shape
+        assert set(grads_rel.keys()) == set(grads_direct.keys())
+        for name in grads_rel:
+            assert grads_rel[name].shape == grads_direct[name].shape
 
     def test_non_scalar_loss_function(self):
         """Test non-scalar loss functions."""
@@ -234,14 +299,112 @@ class TestDiffLinear2D:
         for name in grads_num_ns:
             assert grads_num_ns[name].shape == grads_auto_ns[name].shape
 
-    def test_negative_parameter_warning(self):
-        """Test that negative parameters in log-space issue warning."""
-        # This is hard to test without modifying model parameters
-        # The warning is issued during _validate_log_space_params
-        # We'll just verify the method exists and can be called
-        # If model has negative params, warning will be issued during compute
-        # For this test model, we assume it doesn't have negative params
-        JacobianNumerical(self.model, epsilon=1e-5, parameter_space="log")
+    def test_log_derivative_matches_analytic(self):
+        """Numerical-central and autograd "log" match the closed-form log-Jacobian.
+
+        Both backends are pinned to an independently-derived ground truth
+        (not merely to each other), so a wrong theta factor or a row-offset
+        error is caught.
+        """
+        # epsilon=1e-3 is the float32-recommended step; smaller steps suffer
+        # cancellation in the finite-difference numerator.
+        grads_num = JacobianNumerical(
+            self.model, epsilon=1e-3, parameter_space="log"
+        ).compute(loss_fn=loss_fn_full_state, mode="central")
+        grads_auto = JacobianAutograd(self.model, parameter_space="log").compute(
+            loss_fn=loss_fn_full_state, mode="rev"
+        )
+
+        timesteps = next(iter(grads_num.values())).shape[0]
+        analytic = _linear2d_analytic_log_jacobian(self.model, timesteps)
+
+        for name, ref in analytic.items():
+            ref_t = torch.tensor(ref, dtype=grads_num[name].dtype)
+            # autograd is near machine-exact for this linear system
+            torch.testing.assert_close(grads_auto[name], ref_t, atol=1e-4, rtol=1e-3)
+            # numerical central is float32 finite-difference accurate
+            torch.testing.assert_close(grads_num[name], ref_t, atol=2e-3, rtol=1e-2)
+
+    def test_log_equals_relative_times_theta(self):
+        """ "log" output equals "relative" output scaled by the signed parameter."""
+        grads_rel = JacobianNumerical(
+            self.model, epsilon=1e-3, parameter_space="relative"
+        ).compute(loss_fn=loss_fn_full_state, mode="central")
+        grads_log = JacobianNumerical(
+            self.model, epsilon=1e-3, parameter_space="log"
+        ).compute(loss_fn=loss_fn_full_state, mode="central")
+
+        # The identity log == relative*theta is exact in real arithmetic; in
+        # float32 the "relative" denominator theta*(e^eps - e^-eps) carries an
+        # exp-cancellation error that "log"'s 2*eps avoids, so allow ~1e-2.
+        for name in grads_rel:
+            theta = float(self.model.parameters[name])
+            torch.testing.assert_close(
+                grads_log[name], grads_rel[name] * theta, atol=1e-3, rtol=1e-2
+            )
+
+    def test_log_negative_theta_sign_and_warning(self):
+        """For theta < 0 the log-derivative carries theta's sign; warning fires."""
+        with pytest.warns(UserWarning, match="negative parameters"):
+            grads_rel = JacobianNumerical(
+                self.model, epsilon=1e-3, parameter_space="relative"
+            ).compute(loss_fn=loss_fn_full_state, mode="central")
+        with pytest.warns(UserWarning, match="negative parameters"):
+            grads_log = JacobianNumerical(
+                self.model, epsilon=1e-3, parameter_space="log"
+            ).compute(loss_fn=loss_fn_full_state, mode="central")
+
+        theta = float(self.model.parameters["S2.S1.a"])  # a21 = -0.2
+        assert theta < 0
+        rel = grads_rel["S2.S1.a"]
+        log = grads_log["S2.S1.a"]
+        torch.testing.assert_close(log, rel * theta, atol=1e-3, rtol=1e-2)
+        nz = rel.abs() > 1e-6
+        assert torch.all(torch.sign(log[nz]) == -torch.sign(rel[nz]))
+
+    def test_log_forward_backward_smoke(self):
+        """Forward/backward "log" pin the epsilon denominator against analytic."""
+        timesteps = None
+        for mode in ("forward", "backward"):
+            grads = JacobianNumerical(
+                self.model, epsilon=1e-3, parameter_space="log"
+            ).compute(loss_fn=loss_fn_full_state, mode=mode)
+            if timesteps is None:
+                timesteps = next(iter(grads.values())).shape[0]
+                analytic = _linear2d_analytic_log_jacobian(self.model, timesteps)
+            for name, ref in analytic.items():
+                ref_t = torch.tensor(ref, dtype=grads[name].dtype)
+                # first-order (O(eps)) scheme: a wrong (theta-scaled) denominator
+                # would be off by ~theta, far outside this band.
+                torch.testing.assert_close(grads[name], ref_t, atol=5e-3, rtol=5e-2)
+
+    def test_checker_forwards_log_space_to_both_backends(self):
+        """check_model_differentiability in "log" compares both backends in-space."""
+        report = check_model_differentiability(
+            model=self.model,
+            loss_fn=loss_fn_full_state,
+            parameter_space="log",
+            epsilon=1e-3,
+            rtol=5e-2,
+            compare_forward_reverse=True,
+            compare_numerical=True,
+        )
+        assert not report.nan_or_inf
+        assert report.autodiff_vs_numerical_ok
+        assert report.rel_err_autodiff_num is not None
+        assert report.rel_err_autodiff_num < 5e-2
+
+    def test_future_warning_on_explicit_log(self):
+        """Passing "log" explicitly warns; the default ("relative") does not."""
+        with pytest.warns(FutureWarning, match="log"):
+            JacobianNumerical(self.model, epsilon=1e-5, parameter_space="log")
+
+        import warnings as _warnings
+
+        with _warnings.catch_warnings():
+            _warnings.simplefilter("error")
+            JacobianNumerical(self.model, epsilon=1e-5)  # default -> relative
+            JacobianNumerical(self.model, epsilon=1e-5, parameter_space="relative")
 
 
 class TestJacobianBase:
