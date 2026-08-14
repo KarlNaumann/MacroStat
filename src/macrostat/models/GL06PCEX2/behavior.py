@@ -549,18 +549,24 @@ class BehaviorGL06PCEX2(Behavior):
         -----
         - HouseholdBillDemand
         """
+        positive_wealth = self.state["ExpectedWealth"] > 0
+        safe_wealth = torch.where(
+            positive_wealth,
+            self.state["ExpectedWealth"],
+            torch.ones_like(self.state["ExpectedWealth"]),
+        )
+        income_to_wealth = torch.where(
+            positive_wealth,
+            self.state["ExpectedDisposableIncome"] / safe_wealth,
+            torch.zeros_like(self.state["ExpectedDisposableIncome"]),
+        )
         self.state["HouseholdBillDemand"] = self.state["ExpectedWealth"] * (
             # Baseline share
             params["WealthShareBills_Constant"]
             # Interest rate effect
             + params["WealthShareBills_InterestRate"] * self.state["InterestRate"]
             # Income-to-wealth ratio effect
-            - params["WealthShareBills_Income"]
-            * torch.where(
-                self.state["ExpectedWealth"] > 0,
-                self.state["ExpectedDisposableIncome"] / self.state["ExpectedWealth"],
-                torch.zeros_like(self.state["ExpectedDisposableIncome"]),
-            )
+            - params["WealthShareBills_Income"] * income_to_wealth
         )
 
     def household_bill_holdings(
