@@ -80,7 +80,10 @@ class Parameters:
             for k, v in data_parameters.items():
                 if k in self.data:
                     if isinstance(v.get("value"), (list, np.ndarray)):
-                        v = {**v, "value": torch.tensor(v["value"], dtype=torch.float)}
+                        v = {
+                            **v,
+                            "value": torch.tensor(v["value"], dtype=self.torch_dtype),
+                        }
                     self.data[k].update(v)
 
         # Lazily built on first call to get_constraint_resolver; any future
@@ -130,7 +133,7 @@ class Parameters:
             self.values[key]["value"] = value
         elif key in self.data:
             if isinstance(value, (list, np.ndarray)):
-                value = torch.tensor(value, dtype=torch.float)
+                value = torch.tensor(value, dtype=self.torch_dtype)
             self.data[key]["value"] = value
         elif key in self.hyper:
             self.hyper[key] = value
@@ -184,12 +187,9 @@ class Parameters:
 
         data_params = None
         if "DataParameters" in data:
-            data_params = {}
-            for k, v in data["DataParameters"].items():
-                data_params[k] = {
-                    **v,
-                    "value": torch.tensor(v["value"], dtype=torch.float),
-                }
+            # Leave values as raw lists; __init__ casts them to the loaded
+            # dtype hyperparameter, so a float64 run keeps full precision.
+            data_params = dict(data["DataParameters"])
 
         return cls(
             parameters=data["Parameters"],
@@ -266,8 +266,33 @@ class Parameters:
             "scenario_trigger": 0,
             "seed": 42,
             "device": "cpu",
+            "dtype": "float32",
             "requires_grad": False,
         }
+
+    @property
+    def torch_dtype(self) -> torch.dtype:
+        """Resolve the ``dtype`` hyperparameter string to a ``torch.dtype``.
+
+        The hyperparameter is stored as a string so it round-trips cleanly
+        through JSON/CSV serialisation and dictionary equality. Only float32
+        and float64 are supported.
+        """
+        name = self.hyper.get("dtype", "float32")
+        if name == "float32":
+            return torch.float32
+        if name == "float64":
+            return torch.float64
+        raise ValueError(f"hyper['dtype'] must be 'float32' or 'float64', got {name!r}")
+
+    @property
+    def tensor_kwargs(self) -> dict:
+        """Shared keyword arguments for constructing model tensors."""
+        return dict(
+            device=self.hyper["device"],
+            dtype=self.torch_dtype,
+            requires_grad=self.hyper["requires_grad"],
+        )
 
     def get_default_parameters(self):
         """Return the default parameters.
@@ -693,7 +718,7 @@ class Parameters:
             )
 
         df = pd.read_csv(file_path, index_col=index_col, header=header)
-        tensor = torch.tensor(df.values, dtype=torch.float).squeeze()
+        tensor = torch.tensor(df.values, dtype=self.torch_dtype).squeeze()
 
         expected_shape = self.data[name]["value"].shape
         if tensor.shape != expected_shape:
@@ -848,8 +873,11 @@ class Parameters:
         else:
             vsecs = []
 
-        # Parse info dict to generate: individual, vector, and matrix setups
-        kwargs = dict(device=self.hyper["device"], dtype=torch.float)
+        # Parse info dict to generate: individual, vector, and matrix setups.
+        # Parameter tensors take the shared dtype but not requires_grad: the
+        # vector/matrix cases assign in place below, which a grad-requiring
+        # leaf forbids, and nn.ParameterDict sets requires_grad on wrapping.
+        kwargs = dict(device=self.hyper["device"], dtype=self.torch_dtype)
         pvectors = {}
         for key, info in self.values.items():
             parts = key.split(".")
