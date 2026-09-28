@@ -64,11 +64,6 @@ class Behavior(torch.nn.Module):
                 "and cannot be constructed with differentiable=True."
             )
 
-        # Initialize the parameters. Keep the Parameters instance itself
-        # so step-time calls can always ask for a fresh resolver and
-        # constraint list. Snapshotting them at init time would freeze
-        # the view of the parameter layout at construction and make any
-        # future mutation API silently desynchronise.
         self.parameters = parameters
         self.params = parameters.to_nn_parameters()
         self.hyper = parameters.hyper
@@ -84,11 +79,8 @@ class Behavior(torch.nn.Module):
         self.differentiable = differentiable
         self.debug = debug
 
-        # Per-instance numpy RNG seeded from hyperparameter "seed". Used by
-        # subclasses that need a numpy.random.Generator without touching the
-        # global numpy state — required for parallel runs (e.g. Hessian
-        # computation across parameter perturbations).
-        self.numpy_rng: np.random.Generator = np.random.default_rng(self.hyper["seed"])
+        # Per-instance numpy RNG
+        self.numpy_rng = np.random.default_rng(self.hyper["seed"])
 
     ############################################################################
     # Simulation of the model
@@ -135,8 +127,8 @@ class Behavior(torch.nn.Module):
             # Get scenario series for this point in time
             idx = torch.where(
                 torch.arange(self.hyper["timesteps"]) == t,
-                torch.ones(1),
-                torch.zeros(1),
+                torch.ones(1, dtype=self.parameters.torch_dtype),
+                torch.zeros(1, dtype=self.parameters.torch_dtype),
             )
             scenario = {k: idx @ v for k, v in self.scenarios.items()}
 
@@ -207,7 +199,8 @@ class Behavior(torch.nn.Module):
         vsecs = self.hyper.get("vector_sectors", [])
         n = len(vsecs)
         if n > 0:
-            one, zero = torch.ones(n), torch.zeros(n)
+            one = torch.ones(n, dtype=self.parameters.torch_dtype)
+            zero = torch.zeros(n, dtype=self.parameters.torch_dtype)
             sec_vectors = {
                 s: torch.where(torch.arange(n) == i, one, zero)
                 for i, s in enumerate(vsecs)
@@ -215,7 +208,8 @@ class Behavior(torch.nn.Module):
 
             # Generate index matrices per sector pair
             pairs = [(row, col) for row in vsecs for col in vsecs]
-            one, zero = torch.ones(n, n), torch.zeros(n, n)
+            one = torch.ones(n, n, dtype=self.parameters.torch_dtype)
+            zero = torch.zeros(n, n, dtype=self.parameters.torch_dtype)
             sec_matrices = {
                 s: torch.where(torch.arange(n * n).reshape(n, n) == i, one, zero)
                 for i, s in enumerate(pairs)
@@ -319,8 +313,8 @@ class Behavior(torch.nn.Module):
             # Get scenario series for this point in time
             idx = torch.where(
                 torch.arange(self.hyper["timesteps"]) == t,
-                torch.ones(1),
-                torch.zeros(1),
+                torch.ones(1, dtype=self.parameters.torch_dtype),
+                torch.zeros(1, dtype=self.parameters.torch_dtype),
             )
             scenario = {k: idx @ v for k, v in self.scenarios.items()}
 

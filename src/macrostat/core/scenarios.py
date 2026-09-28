@@ -154,12 +154,14 @@ class Scenarios:
             elif isinstance(v, (pd.Series, pd.DataFrame)):
                 t = min(len(v), self.parameters["timesteps"] - trigger)
                 self.timeseries[scID][k][trigger : trigger + t, 0] = torch.tensor(
-                    v.values[:t]
+                    v.values[:t], dtype=self.parameters.torch_dtype
                 )
                 self.info[scID]["Index"] = v.index.to_numpy()
             else:
                 t = min(len(v), self.parameters["timesteps"] - trigger)
-                self.timeseries[scID][k][trigger : trigger + t, 0] = torch.tensor(v[:t])
+                self.timeseries[scID][k][trigger : trigger + t, 0] = torch.tensor(
+                    v[:t], dtype=self.parameters.torch_dtype
+                )
 
     @classmethod
     def from_excel(cls, excel_path: str, parameters: Parameters):
@@ -216,7 +218,11 @@ class Scenarios:
 
         vectorized = {}
         for k, v in default_values.items():
-            vectorized[k] = v * torch.ones(self.parameters.hyper["timesteps"], 1)
+            vectorized[k] = v * torch.ones(
+                self.parameters.hyper["timesteps"],
+                1,
+                dtype=self.parameters.torch_dtype,
+            )
 
         return vectorized
 
@@ -315,8 +321,15 @@ class Scenarios:
             The scenario to convert to PyTorch parameters.
         """
         self.current_scenario = scenario
+        timeseries = self.timeseries[scenario]
+        dtype = self.parameters.torch_dtype
+        if any(v.dtype != dtype for v in timeseries.values()):
+            if scenario == 0:
+                timeseries = self.get_default_scenario()
+            else:
+                timeseries = {k: v.to(dtype) for k, v in timeseries.items()}
 
-        vectors = self.vectorize_scenarios(self.timeseries[scenario])
+        vectors = self.vectorize_scenarios(timeseries)
         vscenarios = torch.nn.ParameterDict(vectors)
 
         # In general, we keep scenarios fixed, so we set requires_grad to False

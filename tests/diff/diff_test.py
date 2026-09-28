@@ -862,3 +862,33 @@ class TestCompareJacobianDicts:
         assert "fwd" in text
         assert "rev" in text
         assert "a" in text
+
+
+class TestDtypePropagation:
+    """End-to-end dtype flow through simulation and the autograd Jacobian.
+
+    LINEAR2D assembles its parameters via ``vector_sectors``, so this also
+    exercises the sector one-hot dtype path in ``Behavior``.
+    """
+
+    def _model(self, dtype):
+        model = get_model("LINEAR2D")(hyperparameters={"dtype": dtype})
+        for name, value in _LINEAR2D_DEFAULTS.items():
+            model.parameters[name] = value
+        return model
+
+    def test_float64_jacobian_and_outputs(self):
+        model = self._model("float64")
+        out = model.simulate()
+        assert all(v.dtype == torch.float64 for v in out.values())
+
+        grads = JacobianAutograd(model).compute(loss_fn=loss_fn_mse, mode="rev")
+        for g in grads.values():
+            assert g.dtype == torch.float64
+            assert not torch.isnan(g).any()
+
+    def test_float32_default_unchanged(self):
+        model = self._model("float32")
+        grads = JacobianAutograd(model).compute(loss_fn=loss_fn_mse, mode="rev")
+        for g in grads.values():
+            assert g.dtype == torch.float32
