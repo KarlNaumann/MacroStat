@@ -222,15 +222,13 @@ class ParametersMark0COVID(Parameters):
         }
 
     def get_default_hyperparameters(self):
-        import torch
-
         hyper = super().get_default_hyperparameters()
         hyper["timesteps"] = 100
         hyper["timesteps_initialization"] = 0
         hyper["N_firms"] = 1000
         hyper["seed"] = 0
         hyper["seed_init"] = 0
-        hyper["dtype"] = torch.float64
+        hyper["dtype"] = "float64"
         hyper["tanh_constant"] = 1.0e6
         hyper["sigmoid_constant"] = 1.0e4
         hyper["min_constant"] = 100.0
