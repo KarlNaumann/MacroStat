@@ -25,7 +25,7 @@ class IOPC(Model):
 
     def __init__(
         self,
-        parameters: ParametersIOPC | None = ParametersIOPC(),
+        parameters: ParametersIOPC | None = None,
         variables: VariablesIOPC | None = None,
         scenarios: ScenariosIOPC | None = None,
         *args,

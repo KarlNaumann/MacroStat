@@ -191,6 +191,14 @@ class BaseModelTest:
         assert isinstance(self.model.parameters, self.classes["parameters"])
         assert isinstance(self.model_default.parameters, self.classes["parameters"])
 
+    def test_default_parameters_not_shared(self):
+        """Test that models built without parameters each get their own copy"""
+        first = self.model_class()
+        timesteps = first.parameters.hyper["timesteps"]
+        second = self.model_class(hyperparameters={"timesteps": timesteps + 1})
+        assert first.parameters is not second.parameters
+        assert first.parameters.hyper["timesteps"] == timesteps
+
     def test_variables_initialization(self):
         """Test variables initialization: they exist and are of the correct type"""
         assert hasattr(self.model, "variables")

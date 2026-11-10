@@ -25,7 +25,7 @@ class GL06PCEX(Model):
 
     def __init__(
         self,
-        parameters: ParametersGL06PCEX | None = ParametersGL06PCEX(),
+        parameters: ParametersGL06PCEX | None = None,
         variables: VariablesGL06PCEX | None = None,
         scenarios: ScenariosGL06PCEX | None = None,
         *args,

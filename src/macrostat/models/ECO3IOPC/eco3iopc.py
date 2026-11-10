@@ -25,7 +25,7 @@ class ECO3IOPC(Model):
 
     def __init__(
         self,
-        parameters: ParametersECO3IOPC | None = ParametersECO3IOPC(),
+        parameters: ParametersECO3IOPC | None = None,
         variables: VariablesECO3IOPC | None = None,
         scenarios: ScenariosECO3IOPC | None = None,
         *args,

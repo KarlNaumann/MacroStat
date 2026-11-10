@@ -22,7 +22,7 @@ class LINEAR2D(Model):
 
     def __init__(
         self,
-        parameters: ParametersLINEAR2D | None = ParametersLINEAR2D(),
+        parameters: ParametersLINEAR2D | None = None,
         variables: VariablesLINEAR2D | None = None,
         scenarios: ScenariosLINEAR2D | None = None,
         *args,

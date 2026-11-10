@@ -25,7 +25,7 @@ class GL06SIMEX(Model):
 
     def __init__(
         self,
-        parameters: ParametersGL06SIMEX | None = ParametersGL06SIMEX(),
+        parameters: ParametersGL06SIMEX | None = None,
         variables: VariablesGL06SIMEX | None = None,
         scenarios: ScenariosGL06SIMEX | None = None,
         *args,
