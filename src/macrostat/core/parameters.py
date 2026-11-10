@@ -27,6 +27,11 @@ from macrostat.core.constraints import (
 
 logger = logging.getLogger(__name__)
 
+# Tensor inputs (data parameters, scenario timeseries) are stored at float64
+# and cast to the dtype hyperparameter when the model builds its tensors, so
+# the dtype can change after construction without losing precision.
+STORAGE_DTYPE = torch.float64
+
 
 class BoundaryError(Exception):
     """Exception raised for invalid bounds."""
@@ -82,7 +87,7 @@ class Parameters:
                     if isinstance(v.get("value"), (list, np.ndarray)):
                         v = {
                             **v,
-                            "value": torch.tensor(v["value"], dtype=self.torch_dtype),
+                            "value": torch.tensor(v["value"], dtype=STORAGE_DTYPE),
                         }
                     self.data[k].update(v)
 
@@ -133,7 +138,7 @@ class Parameters:
             self.values[key]["value"] = value
         elif key in self.data:
             if isinstance(value, (list, np.ndarray)):
-                value = torch.tensor(value, dtype=self.torch_dtype)
+                value = torch.tensor(value, dtype=STORAGE_DTYPE)
             self.data[key]["value"] = value
         elif key in self.hyper:
             self.hyper[key] = value
@@ -187,8 +192,7 @@ class Parameters:
 
         data_params = None
         if "DataParameters" in data:
-            # Leave values as raw lists; __init__ casts them to the loaded
-            # dtype hyperparameter, so a float64 run keeps full precision.
+            # Leave values as raw lists; __init__ stores them at full precision.
             data_params = dict(data["DataParameters"])
 
         return cls(
@@ -718,7 +722,7 @@ class Parameters:
             )
 
         df = pd.read_csv(file_path, index_col=index_col, header=header)
-        tensor = torch.tensor(df.values, dtype=self.torch_dtype).squeeze()
+        tensor = torch.tensor(df.values, dtype=STORAGE_DTYPE).squeeze()
 
         expected_shape = self.data[name]["value"].shape
         if tensor.shape != expected_shape:

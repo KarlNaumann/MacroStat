@@ -1217,3 +1217,21 @@ class TestDtypeHyperparameter:
         )
         assert v32.dtype == torch.float32
         assert v64.dtype == torch.float64
+
+    def test_data_parameter_dtype_raised_after_build_keeps_precision(self):
+        p = ConstrainedDataParameters(
+            data_parameters={"Vector": {"value": [0.1, 0.2, 0.3]}}
+        )
+        p.hyper["dtype"] = "float64"
+        vector = p.to_nn_parameters()["Vector"]
+        assert vector.dtype == torch.float64
+        assert vector.tolist() == [0.1, 0.2, 0.3]
+
+    def test_data_parameter_float32_matches_direct_float32(self):
+        p = ConstrainedDataParameters(
+            data_parameters={"Vector": {"value": [0.1, 0.2, 0.3]}}
+        )
+        assert torch.equal(
+            p.to_nn_parameters()["Vector"],
+            torch.tensor([0.1, 0.2, 0.3], dtype=torch.float32),
+        )

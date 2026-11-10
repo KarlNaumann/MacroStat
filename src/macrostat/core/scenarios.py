@@ -15,7 +15,7 @@ import numpy as np
 import pandas as pd
 import torch
 
-from macrostat.core.parameters import Parameters
+from macrostat.core.parameters import STORAGE_DTYPE, Parameters
 
 logger = logging.getLogger(__name__)
 
@@ -154,13 +154,13 @@ class Scenarios:
             elif isinstance(v, (pd.Series, pd.DataFrame)):
                 t = min(len(v), self.parameters["timesteps"] - trigger)
                 self.timeseries[scID][k][trigger : trigger + t, 0] = torch.tensor(
-                    v.values[:t], dtype=self.parameters.torch_dtype
+                    v.values[:t], dtype=STORAGE_DTYPE
                 )
                 self.info[scID]["Index"] = v.index.to_numpy()
             else:
                 t = min(len(v), self.parameters["timesteps"] - trigger)
                 self.timeseries[scID][k][trigger : trigger + t, 0] = torch.tensor(
-                    v[:t], dtype=self.parameters.torch_dtype
+                    v[:t], dtype=STORAGE_DTYPE
                 )
 
     @classmethod
@@ -219,9 +219,7 @@ class Scenarios:
         vectorized = {}
         for k, v in default_values.items():
             vectorized[k] = v * torch.ones(
-                self.parameters.hyper["timesteps"],
-                1,
-                dtype=self.parameters.torch_dtype,
+                self.parameters.hyper["timesteps"], 1, dtype=STORAGE_DTYPE
             )
 
         return vectorized
@@ -321,15 +319,14 @@ class Scenarios:
             The scenario to convert to PyTorch parameters.
         """
         self.current_scenario = scenario
-        timeseries = self.timeseries[scenario]
-        dtype = self.parameters.torch_dtype
-        if any(v.dtype != dtype for v in timeseries.values()):
-            if scenario == 0:
-                timeseries = self.get_default_scenario()
-            else:
-                timeseries = {k: v.to(dtype) for k, v in timeseries.items()}
 
-        vectors = self.vectorize_scenarios(timeseries)
+        # Timeseries are stored at full precision and cast to the model dtype here
+        vectors = self.vectorize_scenarios(
+            {
+                k: v.to(self.parameters.torch_dtype)
+                for k, v in self.timeseries[scenario].items()
+            }
+        )
         vscenarios = torch.nn.ParameterDict(vectors)
 
         # In general, we keep scenarios fixed, so we set requires_grad to False

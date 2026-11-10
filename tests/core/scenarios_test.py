@@ -165,7 +165,9 @@ class TestScenarios:
         s.add_scenario(test_data)
         trigger = self.params["scenario_trigger"]
         t = min(50, self.params["timesteps"] - trigger)
-        assert torch.allclose(s[1, "shock1"][trigger : trigger + t, 0], torch.ones(t))
+        assert torch.allclose(
+            s[1, "shock1"][trigger : trigger + t, 0], torch.ones(t, dtype=torch.float64)
+        )
 
     def test_add_scenario_list(self):
         """Test adding scenario with list timeseries"""
@@ -174,7 +176,9 @@ class TestScenarios:
         s.add_scenario(test_data)
         trigger = self.params["scenario_trigger"]
         t = min(50, self.params["timesteps"] - trigger)
-        assert torch.allclose(s[1, "shock1"][trigger : trigger + t, 0], torch.ones(t))
+        assert torch.allclose(
+            s[1, "shock1"][trigger : trigger + t, 0], torch.ones(t, dtype=torch.float64)
+        )
 
     def test_add_scenario_pandas_series(self):
         """Test adding scenario with pandas Series timeseries"""
@@ -183,7 +187,9 @@ class TestScenarios:
         s.add_scenario(test_data)
         trigger = self.params["scenario_trigger"]
         t = min(50, self.params["timesteps"] - trigger)
-        assert torch.allclose(s[1, "shock1"][trigger : trigger + t, 0], torch.ones(t))
+        assert torch.allclose(
+            s[1, "shock1"][trigger : trigger + t, 0], torch.ones(t, dtype=torch.float64)
+        )
         assert isinstance(s.info[1]["Index"], np.ndarray)
         assert len(s.info[1]["Index"]) == test_data["shock1"].shape[0]
         assert np.allclose(s.info[1]["Index"], torch.arange(100, 150))
@@ -218,7 +224,9 @@ class TestScenarios:
         default_scenario = s.get_default_scenario()
 
         for s in ["shock1", "shock2", "shock3"]:
-            assert torch.allclose(default_scenario[s], torch.zeros(100))
+            assert torch.allclose(
+                default_scenario[s], torch.zeros(100, dtype=torch.float64)
+            )
             assert not default_scenario[s].requires_grad
             assert default_scenario[s].shape == (100, 1)
 
@@ -252,6 +260,32 @@ class TestScenarios:
         assert params["shock1"].requires_grad
         assert not params["shock2"].requires_grad
         assert not params["shock3"].requires_grad
+
+    def test_dtype_raised_after_build_keeps_precision(self):
+        """Test that raising dtype after building gives full-precision scenarios"""
+        params = Parameters()
+        s = ScenarioTestClass(parameters=params, scenarios={"shock": {"shock1": 20.1}})
+        params.hyper["dtype"] = "float64"
+        shock = s.to_nn_parameters(1)["shock1"]
+        assert shock.dtype == torch.float64
+        assert shock[-1].item() == 20.1
+
+    def test_baseline_edit_survives_dtype_change(self):
+        """Test that in-place edits to the baseline are kept when dtype changes"""
+        params = Parameters()
+        s = ScenarioTestClass(parameters=params)
+        s.timeseries[0]["shock1"][:] = 25.0
+        params.hyper["dtype"] = "float64"
+        assert torch.all(s.to_nn_parameters(0)["shock1"] == 25.0)
+
+    def test_float32_scenarios_match_direct_float32(self):
+        """Test that float32 scenarios equal values built directly at float32"""
+        s = ScenarioTestClass(
+            parameters=Parameters(), scenarios={"shock": {"shock1": 20.1}}
+        )
+        shock = s.to_nn_parameters(1)["shock1"]
+        assert shock.dtype == torch.float32
+        assert shock[-1] == torch.tensor(20.1, dtype=torch.float32)
 
     def test_verify_scenario_info_missing_scenario_info(self):
         """Test verifying scenario info"""
