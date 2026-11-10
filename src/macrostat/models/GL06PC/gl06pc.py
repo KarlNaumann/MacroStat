@@ -25,7 +25,7 @@ class GL06PC(Model):
 
     def __init__(
         self,
-        parameters: ParametersGL06PC | None = ParametersGL06PC(),
+        parameters: ParametersGL06PC | None = None,
         variables: VariablesGL06PC | None = None,
         scenarios: ScenariosGL06PC | None = None,
         *args,

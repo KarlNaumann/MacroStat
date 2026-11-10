@@ -34,7 +34,7 @@ class GL06INSOUT(Model):
 
     def __init__(
         self,
-        parameters: ParametersGL06INSOUT | None = ParametersGL06INSOUT(),
+        parameters: ParametersGL06INSOUT | None = None,
         variables: VariablesGL06INSOUT | None = None,
         scenarios: ScenariosGL06INSOUT | None = None,
         *args,

@@ -36,7 +36,7 @@ class NK3E(Model):
 
     def __init__(
         self,
-        parameters: ParametersNK3E | None = ParametersNK3E(),
+        parameters: ParametersNK3E | None = None,
         variables: VariablesNK3E | None = None,
         scenarios: ScenariosNK3E | None = None,
         *args,

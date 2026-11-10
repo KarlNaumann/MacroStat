@@ -35,7 +35,7 @@ class GL06LP3(Model):
 
     def __init__(
         self,
-        parameters: ParametersGL06LP3 | None = ParametersGL06LP3(),
+        parameters: ParametersGL06LP3 | None = None,
         variables: VariablesGL06LP3 | None = None,
         scenarios: ScenariosGL06LP3 | None = None,
         *args,

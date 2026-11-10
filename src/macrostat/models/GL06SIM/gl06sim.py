@@ -25,7 +25,7 @@ class GL06SIM(Model):
 
     def __init__(
         self,
-        parameters: ParametersGL06SIM | None = ParametersGL06SIM(),
+        parameters: ParametersGL06SIM | None = None,
         variables: VariablesGL06SIM | None = None,
         scenarios: ScenariosGL06SIM | None = None,
         *args,
