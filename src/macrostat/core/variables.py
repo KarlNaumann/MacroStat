@@ -57,10 +57,6 @@ class Variables:
         else:
             self.parameters = Parameters()
 
-        self.tensor_kwargs = {
-            k: self.parameters[k] for k in ["device", "requires_grad"]
-        }
-
         if variable_info is None:
             self.info = self.get_default_variables()
         else:
@@ -70,6 +66,15 @@ class Variables:
         if timeseries is not None:
             self._timeseries_tensor_to_list(timeseries)
             self.gather_timeseries()
+
+    @property
+    def tensor_kwargs(self) -> dict:
+        """Device, dtype, and gradient keyword arguments for state tensors.
+
+        Resolved live from the shared parameters so a value set after the
+        object initialization is captured
+        """
+        return dict(self.parameters.tensor_kwargs)
 
     ############################################################################
     # Accounting Functions

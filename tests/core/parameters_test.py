@@ -52,6 +52,7 @@ def mock_hyperparameters():
         "scenario_trigger": 0,
         "seed": 42,
         "device": "cpu",
+        "dtype": "float32",
         "requires_grad": False,
     }
 
@@ -94,6 +95,7 @@ class MockParameters(Parameters):
             "scenario_trigger": 0,
             "seed": 42,
             "device": "cpu",
+            "dtype": "float32",
             "requires_grad": False,
         }
 
@@ -130,6 +132,7 @@ class TestParameters:
         "scenario_trigger": 0,
         "seed": 42,
         "device": "cpu",
+        "dtype": "float32",
         "requires_grad": False,
     }
 
@@ -283,6 +286,7 @@ class TestParameters:
             "scenario_trigger",
             "seed",
             "device",
+            "dtype",
             "requires_grad",
         ]
         assert set(Parameters().hyper.keys()) == set(keylist)
@@ -1165,3 +1169,69 @@ class TestConstrainedDataParameters:
         p.verify_bounds()
         p.verify_constraints()
         p.verify_parameters()
+
+
+class TestDtypeHyperparameter:
+    """Tests for the dtype hyperparameter and its resolution."""
+
+    def test_default_is_float32(self):
+        assert Parameters().hyper["dtype"] == "float32"
+        assert Parameters().torch_dtype == torch.float32
+
+    def test_torch_dtype_float64(self):
+        p = Parameters(hyperparameters={"dtype": "float64"})
+        assert p.torch_dtype == torch.float64
+
+    def test_torch_dtype_invalid_raises(self):
+        p = Parameters()
+        p.hyper["dtype"] = "float16"
+        with pytest.raises(ValueError, match="float32.*float64"):
+            _ = p.torch_dtype
+
+    def test_torch_dtype_missing_key_defaults_to_float32(self):
+        p = Parameters()
+        del p.hyper["dtype"]
+        assert p.torch_dtype == torch.float32
+
+    def test_tensor_kwargs_carries_dtype(self):
+        p = Parameters(hyperparameters={"dtype": "float64"})
+        kwargs = p.tensor_kwargs
+        assert kwargs["dtype"] == torch.float64
+        assert kwargs["device"] == p.hyper["device"]
+        assert kwargs["requires_grad"] == p.hyper["requires_grad"]
+
+    def test_parameter_vector_honours_dtype(self):
+        v32 = next(
+            iter(
+                MockParameters(hyperparameters={"dtype": "float32"})
+                .to_nn_parameters()
+                .values()
+            )
+        )
+        v64 = next(
+            iter(
+                MockParameters(hyperparameters={"dtype": "float64"})
+                .to_nn_parameters()
+                .values()
+            )
+        )
+        assert v32.dtype == torch.float32
+        assert v64.dtype == torch.float64
+
+    def test_data_parameter_dtype_raised_after_build_keeps_precision(self):
+        p = ConstrainedDataParameters(
+            data_parameters={"Vector": {"value": [0.1, 0.2, 0.3]}}
+        )
+        p.hyper["dtype"] = "float64"
+        vector = p.to_nn_parameters()["Vector"]
+        assert vector.dtype == torch.float64
+        assert vector.tolist() == [0.1, 0.2, 0.3]
+
+    def test_data_parameter_float32_matches_direct_float32(self):
+        p = ConstrainedDataParameters(
+            data_parameters={"Vector": {"value": [0.1, 0.2, 0.3]}}
+        )
+        assert torch.equal(
+            p.to_nn_parameters()["Vector"],
+            torch.tensor([0.1, 0.2, 0.3], dtype=torch.float32),
+        )

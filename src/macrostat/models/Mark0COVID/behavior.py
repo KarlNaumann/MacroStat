@@ -92,7 +92,7 @@ class BehaviorMark0COVID(Behavior):
 
     @property
     def _dtype(self) -> torch.dtype:
-        return self.hyper.get("dtype", torch.float64)
+        return self.parameters.torch_dtype
 
     # ------------------------------------------------------------------
     # Initialization

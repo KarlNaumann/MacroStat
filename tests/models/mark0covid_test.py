@@ -139,7 +139,7 @@ def test_float32_override_propagates():
             "timesteps": 10,
             "N_firms": 30,
             "seed": 0,
-            "dtype": torch.float32,
+            "dtype": "float32",
         }
     )
     out = Mark0COVID(parameters=params).simulate()
